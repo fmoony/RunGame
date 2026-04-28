@@ -98,19 +98,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+	/** Initiates slide movement -- crouches, removes ground friction, plays slide montage */
 	void StartSlide();
 
+	/** Ends slide movement -- uncrouches and restores default movement parameters */
 	void EndSlide();
 
+	/** Callback when slide montage finishes blending out -- triggers EndSlide cleanup */
 	UFUNCTION()
 	void OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	UAnimMontage* SlideMontage;
-
-	// ����ʱ�ĳ��ٶȳ���
-	//UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
-	//float SlideImpulse = 1500.0f;
 
 	bool bIsSliding;
 
@@ -120,12 +119,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	float MontagePlayRate = 1.0f;
 
-	//float SlideDuration = 2.0f; // ��������ʱ�䣬��λΪ��
-
-	// ��ʱ���������ʱ��
-	//FTimerHandle SlideTimerHandle;
-
-	// ����ԭ���ĵ���Ħ����������������ָ�
 	float DefaultGroundFriction;
 
 
@@ -137,7 +130,7 @@ public:
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-	// 响应游戏状态变化，MainMenu 时自毁
+	/** Reacts to game state changes -- self-destructs when returning to MainMenu */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 

@@ -55,10 +55,11 @@ protected:
 	FName MainMenuCameraTag = FName("MainMenuCamera");
 
 protected:
+	/** Finds the main menu camera by tag and blends the view to it */
 	void SetViewTargetToMainMenuCamera();
 
 private:
-	// 响应游戏状态变化，自行管理输入模式
+	/** Reactively manages input mode and view target based on game state changes */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 };

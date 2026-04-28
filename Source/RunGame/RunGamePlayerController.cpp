@@ -30,7 +30,9 @@ void ARunGamePlayerController::BeginPlay()
 			// add the controls to the player screen
 			MobileControlsWidget->AddToPlayerScreen(0);
 
-		} else {
+		}
+			else
+			{
 
 			UE_LOG(LogRunGame, Error, TEXT("Could not spawn mobile controls widget."));
 

@@ -18,11 +18,11 @@ class RUNGAME_API URunGameInGame : public UUserWidget
 	GENERATED_BODY()
 	
 public:
-	// 构造函数
+	/** Constructs the InGame widget and initializes bound widget references */
 	URunGameInGame(const FObjectInitializer& ObjectInitializer);
 
 protected:
-	// Native生命周期函数
+	/** Native lifecycle functions */
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
 
@@ -34,17 +34,18 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> TimerText;
 
-	// Subsystem引用
+	/** Timer subsystem reference for time display updates */
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
 
-	// 委托回调函数
+	/** Updates the score text display when player score changes */
 	UFUNCTION()
 	void OnScoreUpdated(int64 NewScore);
 
+	/** Updates the timer text display when game time changes */
 	UFUNCTION()
 	void OnTimerUpdated(float NewTime);
 
-	// 辅助函数：格式化时间显示
+	/** Formats time in seconds to a MM:SS.ms string */
 	FString FormatTimeText(float TimeSeconds) const;
 };

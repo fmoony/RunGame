@@ -25,7 +25,7 @@ public:
 	ARunGameGameState();
 
 	// ---- 游戏状态控制 ----
-
+	/** Changes the current game state and broadcasts OnGameStateChanged to all listeners */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
 	void SetGameState(ERunGameGameState NewState);
 
@@ -34,6 +34,7 @@ public:
 
 	// ---- 倒计时数据 (单一数据源) ----
 
+	/** Sets the countdown seconds value and broadcasts OnCountdownUpdated if changed */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Countdown")
 	void SetCountdownSeconds(int32 NewCountdownSeconds);
 

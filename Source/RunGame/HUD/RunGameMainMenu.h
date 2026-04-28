@@ -35,9 +35,11 @@ public:
 	TObjectPtr<UButton> QuitButton;
 
 protected:
+	/** Handles start button click event, triggers game countdown */
 	UFUNCTION()
 	void OnStartClicked();
 
+	/** Handles quit button click event, exits the application */
 	UFUNCTION()
 	void OnQuitClicked();
 	

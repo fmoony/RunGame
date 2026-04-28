@@ -42,19 +42,21 @@ protected:
 	TObjectPtr<UTextBlock> TimeText;
 
 private:
-	/** 按钮点击回调 */
+	/** Handles restart button click, starts a new game via GameMode */
 	UFUNCTION()
 	void OnRestartButtonClicked();
 
+	/** Handles main menu button click, resets game to main menu */
 	UFUNCTION()
 	void OnMainMenuButtonClicked();
 
-	/** 获取 GameMode 辅助函数 */
+	/** Retrieves the RunGame GameMode from the current world */
 	ARunGameGameMode* GetRunGameGameMode() const;
 
-	/** 获取 TimerSubsystem 辅助函数 */
+	/** Retrieves the Timer subsystem from the current world */
 	URunGameTimerSubsystem* GetTimerSubsystem() const;
 
+	/** Formats time in seconds to a MM:SS.ms string */
 	FString FormatTimeText(float TimeSeconds) const;
 };
 

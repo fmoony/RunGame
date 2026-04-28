@@ -47,34 +47,40 @@ public:
 	/** Constructor */
 	ARunGameGameMode();
 
+	/** Initiates the game countdown sequence and sets game state to CountDown */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Flow")
 	void StartGameCountDown(int32 CountdownSeconds = 3);
 
-	// 生成玩家
+	/** Spawns and possesses the player character at the chosen player start */
 	UFUNCTION()
 	void SpawnPlayer();
 
-	// 游戏计时相关函数
+	/** Deprecated -- timer now starts reactively via GameState state changes */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Game")
 	void InitializeGameTimer();
 
-	// 完全重置游戏到初始状态（回到主菜单）
+	/** Fully resets the game to initial state and returns to main menu */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Game")
 	void ResetGame();
 
-	// 重新开始游戏（绕过主菜单，直接进入倒计时）
+	/** Restarts the game directly, bypassing the main menu */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Game")
 	void StartNewGame();
 
-	// 玩家死亡处理函数 - 游戏状态转换和角色销毁
-	//（鼠标/输入模式由 Character::Die() 自行处理）
+	/** Processes player death -- broadcasts event, sets GameOver state, handles character destruction */
+	// Input mode and view target handled by Character::Die()
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Death")
-	void HandlePlayerDeath(ARunGameDeathVolume* DeathVolume, ARunGameCharacter* PlayerCharacter, bool bImmediate, float Delay);
+	void HandlePlayerDeath(
+			ARunGameDeathVolume* DeathVolume,
+			ARunGameCharacter* PlayerCharacter,
+			bool bImmediate,
+			float Delay);
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
+	/** Callback when floor subsystem finishes async loading -- spawns initial floors */
 	UFUNCTION()
 	void OnFloorSystemReadyCallback();
 };

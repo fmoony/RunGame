@@ -169,7 +169,11 @@ void ARunGameGameMode::StartNewGame()
 }
 
 // 玩家死亡处理函数实现
-void ARunGameGameMode::HandlePlayerDeath(ARunGameDeathVolume* DeathVolume, ARunGameCharacter* PlayerCharacter, bool bImmediate, float Delay)
+void ARunGameGameMode::HandlePlayerDeath(
+		ARunGameDeathVolume* DeathVolume,
+		ARunGameCharacter* PlayerCharacter,
+		bool bImmediate,
+		float Delay)
 {
 	if (!PlayerCharacter)
 	{

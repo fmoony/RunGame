@@ -11,11 +11,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Architecture
 
+### Central Types (`RunGameType.h`)
+
+- **`ERunGameGameState`**: `MainMenu, CountDown, InGame, Pause, GameOver, MAX` — drives the entire reactive state machine.
+- **`FFloorType`**: `StraightFloor, TurnFloor, UpAndDownFloor, MAX` — floor segment categories.
+
 ### Reactive State Machine (central event bus)
 
 Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause` as an interstitial).
 
-**`ARunGameGameState`** is the single source of truth. All configurable defaults (`DefaultCountdownSeconds`, `DefaultGameTotalTime`) and mutable state (`CurrentState`, `CountdownSeconds`) live here. `SetGameState()` broadcasts `OnGameStateChanged(OldState, NewState)`, which is the central event bus every system listens to.
+**`ARunGameGameState`** is the single source of truth. All configurable defaults (`DefaultCountdownSeconds`, `DefaultGameTotalTime`) and mutable state (`CurrentState`, `CountdownSeconds`) live here. `SetGameState()` broadcasts `OnGameStateChanged(OldState, NewState)`, which is the central event bus every system listens to. `SetCountdownSeconds()` broadcasts `OnCountdownUpdated(CountdownSeconds)` when the value changes.
 
 **No class directly commands another.** Each class binds to `GameState::OnGameStateChanged` in `BeginPlay` and reactively manages only its own domain:
 
@@ -26,15 +31,30 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 | `ARunGamePlayerState` | `CountDown`/`MainMenu` → clears score to 0; `InGame` → unpauses 0.1s score timer; all others → pauses score timer |
 | `ARunGameHUD` | Switches widget via `CurrentUIMap` (`TMap<ERunGameGameState, TSubclassOf<UUserWidget>>`) |
 | `ARunGameCharacter` | `MainMenu` → self-destroys |
-| `ARunGameGameMode` | Binds `SpawnPlayer` to `OnCountdownComplete`; no longer controls input modes or score |
+| `ARunGameGameMode` | Binds `SpawnPlayer` to `OnCountdownComplete`; no longer controls input modes or score. Owns `OnPlayerDeath` delegate (not on GameState). |
+
+### Key Delegates (who declares what)
+
+| Delegate | Owner | Signature |
+|---|---|---|
+| `OnGameStateChanged` | `ARunGameGameState` | `(ERunGameGameState Old, ERunGameGameState New)` |
+| `OnCountdownUpdated` | `ARunGameGameState` | `(int32 CountdownSeconds)` |
+| `OnCharacterDeath` | `ARunGameGameState` | `()` — no params |
+| `OnPlayerDeath` | `ARunGameGameMode` | `(ARunGameCharacter* PlayerCharacter)` |
+| `OnCountdownComplete` | `URunGameTimerSubsystem` | `()` — no params |
+| `OnTimeChanged` | `URunGameTimerSubsystem` | `(float NewTime)` |
+| `OnScoreChanged` | `ARunGamePlayerState` | `(int64 NewScore)` |
+| `OnFloorSystemReady` | `URunGameFloorSubsystem` | `()` — no params |
+| `OnInteractionBegin` | `ARunGameInteractiveVolume` | `(ARunGameCharacter* PlayerCharacter)` |
+| `OnInteractionEnd` | `ARunGameInteractiveVolume` | `(ARunGameCharacter* PlayerCharacter)` |
 
 ### Player Lifecycle
 
-1. **Countdown**: `GameMode::StartGameCountDown()` sets state to `CountDown`. `TimerSubsystem` reacts, reads `GameState->DefaultCountdownSeconds`, starts a 1Hz `FTimerHandle` that decrements `GameState->CountdownSeconds`.
+1. **Countdown**: `GameMode::StartGameCountDown()` sets state to `CountDown`. `TimerSubsystem` reacts, reads `GameState->DefaultCountdownSeconds`, starts a 1Hz `FTimerHandle` that decrements `GameState->CountdownSeconds` (broadcasting `OnCountdownUpdated` each tick).
 2. **Spawn**: When countdown reaches 0, `TimerSubsystem` sets state to `InGame`, broadcasts `OnCountdownComplete`. `GameMode::SpawnPlayer()` spawns `GameCharacterClass`, calls `Possess`, blends view back to character, sets `bAutoManageActiveCameraTarget = true`.
 3. **Death flow** (ordering matters):
-   - `ARunGameDeathVolume` → `GameMode::HandlePlayerDeath` → broadcasts `OnPlayerDeath`, sets state to `GameOver`.
-   - Then broadcasts `GS::OnCharacterDeath` (bound to `Character::Die` + `Controller::SetInputModeToUIOnly`).
+   - `ARunGameDeathVolume` → `GameMode::HandlePlayerDeath` → broadcasts `OnPlayerDeath` (GameMode), sets state to `GameOver`.
+   - Then broadcasts `GameState::OnCharacterDeath` (bound to `Character::Die` + `Controller::SetInputModeToUIOnly`).
    - `Character::Die()` spawns a death `ACameraActor` at the follow-camera location and blends the view to it.
    - `GameMode` calls `UnPossess()` **before** destroying the character (prevents engine auto-view-reset).
    - Character is destroyed (immediately or delayed via `FTimerHandle`).
@@ -42,7 +62,7 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 
 ### World Subsystems
 
-- **`URunGameFloorSubsystem`** — Procedural floor generation via object pooling. Async-loads floor classes from `TSoftClassPtr`, then `SpawnInitialFloors()` lays out initial straight + random floors tracking `NextSpawnTransform`. `RequestNextFloor()` / `RequestFloorAt()` serve new floors; `RecycleDistantFloors()` hides distant floors and returns them to the pool. Pool is per-type: `TMap<TSubclassOf<AActor>, TArray<AFloor*>>`. `OnFloorSystemReady` delegate signals async load completion.
+- **`URunGameFloorSubsystem`** — Procedural floor generation via object pooling. `ARunGameGameMode` holds the configuration (`StraightFloorClasses`, `TurnFloorClasses`, `PreAllocateFloorCount`) and calls `InitializeFloorSystem()` at `BeginPlay`. Async-loads floor classes from `TSoftClassPtr` arrays, then `SpawnInitialFloors()` lays out initial straight + random floors tracking `NextSpawnTransform`. `RequestNextFloor()` (80% straight / 20% turn weighted random) and `RequestFloorAt()` serve new floors; `RecycleDistantFloors()` hides distant floors and returns them to the pool. `ReturnFloor()` and `HideAllActiveFloors()` also recycle floors. Pool is per-type: `TMap<TSubclassOf<AActor>, TArray<AFloorBase*>> PooledFloorsMap`. Active floors tracked in `TArray<TObjectPtr<AFloorBase>> ActiveFloors`. `OnFloorSystemReady` delegate signals async load completion; `GameMode` binds to it for initial floor spawn.
 - **`URunGameTimerSubsystem`** — Implements `FTickableGameObject`. **Purely a timer — knows nothing about scoring.** Countdown uses `FTimerManager` at 1Hz; the forward game timer increments `TotalTimeSeconds` every `Tick`. All start/stop is driven reactively by `OnGameStateChanged`. Exposes delegates: `OnCountdownComplete`, `OnTimeChanged` (broadcasts every tick while running).
 
 ### Scoring (cubic polynomial, int64-safe)
@@ -54,7 +74,7 @@ Multiplier = 1 + minutes² + 0.5·minutes³
 ScoreToAdd = floor(10 × Multiplier)
 ```
 
-All score variables are `int64`. The timer is paused/unpaused reactively by `OnGameStateChanged`. `Tick` is disabled (`bCanEverTick = false`).
+All score variables are `int64`. The timer is paused/unpaused reactively by `OnGameStateChanged`. `Tick` is disabled (`bCanEverTick = false`). Public API: `SetScoringActive(bool)`, `AddScore(int64)`, `SetRunGameScore(int64)`, `GetRunGameScore()`. Delegate: `OnScoreChanged(int64 NewScore)`.
 
 ### Input
 
@@ -80,7 +100,7 @@ Each variant provides its own Character, GameMode, and PlayerController subclass
 
 ### Key Dependencies
 
-`RunGame.Build.cs`: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `AIModule`, `StateTreeModule`, `GameplayStateTreeModule`, `UMG`, `Slate`, `SlateCore`, `FunctionalTesting`.
+From `RunGame.Build.cs` — Public: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `AIModule`, `StateTreeModule`, `GameplayStateTreeModule`, `UMG`, `FunctionalTesting`. Private: `Slate`, `SlateCore`.
 
 ## Logging
 

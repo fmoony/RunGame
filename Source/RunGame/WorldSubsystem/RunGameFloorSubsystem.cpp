@@ -192,7 +192,10 @@ AFloorBase* URunGameFloorSubsystem::RequestNextFloor()
 	return RequestFloorAt(SelectedClass, NextSpawnTransform.GetLocation(), NextSpawnTransform.Rotator());
 }
 
-AFloorBase* URunGameFloorSubsystem::RequestFloorAt(TSubclassOf<AActor> InClass, const FVector& Location, const FRotator& Rotation)
+AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
+		TSubclassOf<AActor> InClass,
+		const FVector& Location,
+		const FRotator& Rotation)
 {
 	if (!InClass || !GetWorld())
 	{

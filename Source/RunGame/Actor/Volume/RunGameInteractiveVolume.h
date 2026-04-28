@@ -23,30 +23,37 @@ class RUNGAME_API ARunGameInteractiveVolume : public AVolume
 	GENERATED_BODY()
 
 public:
+	/** Constructs the interactive volume with a default collision box */
 	ARunGameInteractiveVolume();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Collision")
     UBoxComponent* CollisionComp;
 
-	// 核心：碰撞重叠回调（基类处理通用逻辑）
+	/** Detects actor entry into the volume and fires the player-enter event */
+	/** Detects actor entry into the volume and fires the player-enter event */
 	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
+	/** Detects actor exit from the volume and fires the player-leave event */
 	virtual void NotifyActorEndOverlap(AActor* OtherActor) override;
 
-	// 核心：虚函数，子类重写（C++ 用）
-	// 只保留 Begin，End 可选，跑酷游戏 90% 只用 Begin
+	/** BlueprintNativeEvent: called when a RunGame character enters this volume */
+	/** Default C++ implementation of OnPlayerEnter -- fires the delegate */
+	/** BlueprintNativeEvent: called when a RunGame character enters this volume */
 	UFUNCTION(BlueprintNativeEvent, Category = "RunGame|Interaction")
 	void OnPlayerEnter(ARunGameCharacter* PlayerCharacter);
 
+	/** Default C++ implementation of OnPlayerEnter -- fires the delegate */
 	virtual void OnPlayerEnter_Implementation(ARunGameCharacter* PlayerCharacter);
 
+	/** BlueprintNativeEvent: called when a RunGame character leaves this volume */
 	UFUNCTION(BlueprintNativeEvent, Category = "RunGame|Interaction")
 	void OnPlayerLeave(ARunGameCharacter* PlayerCharacter);
 	
+	/** Default C++ implementation of OnPlayerLeave -- fires the delegate */
 	virtual void OnPlayerLeave_Implementation(ARunGameCharacter* PlayerCharacter);
 
 public:
-	// 委托：蓝图绑定用
+	/** Delegate fired when a player interacts with this volume */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Interaction")
 	FOnInteractionBegin OnPlayerEnterDelegate;
 

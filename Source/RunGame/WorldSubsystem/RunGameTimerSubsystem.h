@@ -25,8 +25,10 @@ class RUNGAME_API URunGameTimerSubsystem : public UWorldSubsystem, public FTicka
 	GENERATED_BODY()
 
 public:
+	/** Constructs the timer subsystem with zeroed time and stopped state */
 	URunGameTimerSubsystem();
 
+	/** Binds to the game state's state-change event on world begin play */
 	virtual void OnWorldBeginPlay(UWorld& World) override;
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Timer")
@@ -43,6 +45,7 @@ public:
 
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	/** Stops all timers and unbinds from game state events on teardown */
 	virtual void Deinitialize() override;
 
 	virtual void Tick(float DeltaTime) override;
@@ -50,26 +53,37 @@ protected:
 	virtual bool IsTickable() const override;
 
 private:
-	// 响应式入口：由 GameState::OnGameStateChanged 触发
+	/** Reactively starts/stops timers based on the new game state */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 
-	// 内部倒计时辅助函数
+	/** Starts the 1Hz countdown timer using the configured duration */
 	void StartCountdown();
+
+	/** Stops and clears the countdown timer handle */
 	void StopCountdown();
+
+	/** Decrements countdown each tick; finishes at zero */
 	void UpdateCountdown();
+
+	/** Stops countdown, transitions to InGame, broadcasts completion */
 	void FinishCountdown();
 
-	// 内部计时辅助函数
+	/** Resets forward timer to zero and begins accumulating */
 	void StartTimer();
+
+	/** Pauses forward timer accumulation */
 	void StopTimer();
+
+	/** Accumulates delta time and broadcasts updated value */
 	void UpdateTimer(float DeltaTime);
 
+	/** Returns the RunGame game state cast from the world's game state */
 	ARunGameGameState* GetGameState() const;
 
 	FTimerHandle CountdownTimerHandle;
 
-	// 正向计时累计秒数（从 0.0 开始，每帧累加 DeltaTime）
+	/** Accumulated forward time in seconds, incremented each tick */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Timer", meta = (AllowPrivateAccess = "true"))
 	float TotalTimeSeconds;
 

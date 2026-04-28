@@ -16,9 +16,10 @@ class RUNGAME_API URunGameFloorSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
+	/** Constructs the floor subsystem with default pool and spawn settings */
 	URunGameFloorSubsystem();
 
-	// ===== 初始化 =====
+	/** Begins async loading of floor classes and pre-allocates the floor pool */
 
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void InitializeFloorSystem(
@@ -27,29 +28,30 @@ public:
 		int32 InPreAllocateCount = 10
 	);
 
-	// ===== 地板生成 =====
+	/** Spawns the initial chain of straight and random floor segments */
 
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void SpawnInitialFloors(const FTransform& StartTransform, int32 StraightCount = 5, int32 RandomCount = 15);
 
+	/** Acquires the next random floor from the pool at the tracked spawn position */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	AFloorBase* RequestNextFloor();
 
+	/** Acquires a floor of the specified class from the pool at the given location */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	AFloorBase* RequestFloorAt(TSubclassOf<AActor> InClass, const FVector& Location, const FRotator& Rotation);
 
-	// ===== 地板回收 =====
-
+	/** Returns a floor actor to the pool, hiding and deactivating it */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void ReturnFloor(AFloorBase* Floor);
 
+	/** Recycles active floors farther than MaxDistance from the player */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void RecycleDistantFloors(const FVector& PlayerLocation, float MaxDistance = 3000.0f);
 
+	/** Hides all active floors and returns them to the pool */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void HideAllActiveFloors();
-
-	// ===== 查询 =====
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|FloorSystem")
 	FTransform GetNextSpawnTransform() const { return NextSpawnTransform; }
@@ -60,33 +62,38 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RunGame|FloorSystem")
 	int32 GetPooledFloorCount() const;
 
+	/** Destroys all pooled and active floors, resetting to uninitialized state */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void ClearAllFloors();
 
-	// ===== 异步加载就绪事件 =====
-
+	/** Delegate broadcast when floor subsystem finishes async loading */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|FloorSystem")
 	FOnFloorSystemReadyDelegate OnFloorSystemReady;
 
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	/** Clears all floors and cleans up on subsystem teardown */
 	virtual void Deinitialize() override;
 
 private:
-	// ===== 内部方法 =====
+	/** Randomly selects a floor class (80% straight / 20% turn) */
 
 	TSubclassOf<AActor> RandomSelectFloorClass();
 
+	/** Pops a floor of given class from pool; returns nullptr if empty */
 	AFloorBase* AcquireFloorFromPool(TSubclassOf<AActor> InClass);
 
+	/** Spawns a new floor actor at an off-screen location */
 	AFloorBase* CreateNewFloorActor(TSubclassOf<AActor> InClass);
 
+	/** Initiates async loading of floor classes via the asset manager */
 	void StartAsyncLoad();
 
+	/** Callback when async load finishes; pre-allocates the pool */
 	UFUNCTION()
 	void OnFloorClassesLoaded();
 
-	// ===== 配置数据 =====
+	// Async-load configuration data
 
 	TArray<TSoftClassPtr<AActor>> StraightClassPtrs;
 
@@ -104,14 +111,14 @@ private:
 
 	bool bIsInitialized;
 
-	// ===== 对象池（按类型维护多子池） =====
+	// Object pool: per-type sub-pools
 
 	TMap<TSubclassOf<AActor>, TArray<AFloorBase*>> PooledFloorsMap;
 
 	UPROPERTY()
 	TArray<TObjectPtr<AFloorBase>> ActiveFloors;
 
-	// ===== 生成位置追踪 =====
+	// Tracked position for next floor spawn
 
 	FTransform NextSpawnTransform;
 };

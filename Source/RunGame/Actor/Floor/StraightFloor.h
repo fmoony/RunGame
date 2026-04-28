@@ -12,5 +12,6 @@ class RUNGAME_API AStraightFloor : public AFloorBase
 	GENERATED_BODY()
 
 public:
+	/** Constructs a straight floor segment */
 	AStraightFloor();
 };

@@ -17,9 +17,10 @@ class RUNGAME_API ARunGameDeathVolume : public ARunGameInteractiveVolume
 	GENERATED_BODY()
 
 public:
+	/** Constructs the death volume with default immediate-death settings */
 	ARunGameDeathVolume();
 
-	// 重写基类的虚函数
+	/** Triggers death when a player enters the volume, with duplicate-prevention */
 	virtual void OnPlayerEnter_Implementation(ARunGameCharacter* PlayerCharacter) override;
 
 	// 蓝图可配置属性
@@ -29,7 +30,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Death")
 	float DeathDelay;
 
-	// 辅助函数
+	/** Notifies the game mode to handle player death with configured delay settings */
 	void TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, ARunGameCharacter* PlayerCharacter);
 
 private:

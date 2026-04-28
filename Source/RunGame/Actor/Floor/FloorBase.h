@@ -46,8 +46,10 @@ protected:
 	float RecycleDelayTime;
 
 public:
+	/** Constructs the floor base actor with default components and collision */
 	AFloorBase();
 
+	/** Returns the transform for attaching the next floor piece at the given spawn point */
 	virtual FTransform GetAttachToTransform(const FVector& MyLocation);
 
 protected:
@@ -58,9 +60,11 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 
+	/** Handles box overlap events, triggering next floor spawn and delayed recycling */
 	UFUNCTION()
 	virtual void BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
+	/** Returns this floor actor to the floor subsystem's object pool */
 	virtual void ReturnToPool();
 };

@@ -27,13 +27,15 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	// 外部控制算分启停（供 GameState 状态机调用）
+	/** Enables or disables the score calculation timer */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void SetScoringActive(bool bActive);
 
+	/** Adds the given value to the player's score and broadcasts the change */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void AddScore(int64 Value);
 
+	/** Sets the player's score to an absolute value and broadcasts if changed */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void SetRunGameScore(int64 NewScore);
 
@@ -48,11 +50,11 @@ protected:
 	int64 RunGameScore;
 
 private:
-	// 0.1s 循环定时器回调
+	/** Periodic score calculation callback -- computes cubic polynomial multiplier */
 	UFUNCTION()
 	void CalculateScoreProcess();
 
-	// 响应游戏状态变化，启停算分定时器
+	/** Reactively starts or stops score calculation based on game state */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 
