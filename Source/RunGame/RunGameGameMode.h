@@ -89,6 +89,10 @@ protected:
 	/** Callback when floor subsystem finishes async loading -- spawns initial floors */
 	UFUNCTION()
 	void OnFloorSystemReadyCallback();
+
+	/** Reacts to game state changes -- spawns player when entering InGame */
+	UFUNCTION()
+	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 };
 
 

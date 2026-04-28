@@ -6,7 +6,6 @@
 #include "GameFramework/SpectatorPawn.h"
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "RunGameGameState.h"
-#include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "RunGamePlayerState.h"
 
 ARunGameGameMode::ARunGameGameMode()
@@ -21,6 +20,12 @@ ARunGameGameMode::ARunGameGameMode()
 void ARunGameGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// 绑定 GameState 状态变化 — 进入 InGame 时生成玩家
+	if (ARunGameGameState* GS = GetGameState<ARunGameGameState>())
+	{
+		GS->OnGameStateChanged.AddDynamic(this, &ARunGameGameMode::OnGameStateChangedCallback);
+	}
 
 	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
 	{
@@ -42,10 +47,9 @@ void ARunGameGameMode::BeginPlay()
 
 void ARunGameGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	// 清理倒计时事件监听
-	if (URunGameTimerSubsystem* TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>())
+	if (ARunGameGameState* GS = GetGameState<ARunGameGameState>())
 	{
-		TimerSubsystem->OnCountdownComplete.RemoveAll(this);
+		GS->OnGameStateChanged.RemoveDynamic(this, &ARunGameGameMode::OnGameStateChangedCallback);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -68,26 +72,24 @@ void ARunGameGameMode::OnFloorSystemReadyCallback()
 
 void ARunGameGameMode::StartGameCountDown(int32 CountdownSeconds /* = 3*/)
 {
-	// 输入模式由 Controller 自行监听 GameState 状态变化来管理
-
 	if (ARunGameGameState* CurrentGameState = GetGameState<ARunGameGameState>())
 	{
 		CurrentGameState->SetGameState(ERunGameGameState::CountDown);
 	}
+	// TimerSubsystem 自行监听 OnGameStateChanged 来启动倒计时
+	// SpawnPlayer 由 OnGameStateChangedCallback 在状态变为 InGame 时自行触发
+}
 
-		// 使用WorldSubsystem来处理倒计时逻辑
-	if (URunGameTimerSubsystem* TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>())
+void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
+{
+	if (OldState == NewState)
 	{
-		// 监听倒计时完成事件
-		if (TimerSubsystem->OnCountdownComplete.IsAlreadyBound(this, &ARunGameGameMode::SpawnPlayer))
-		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: SpawnPlayer is already bound to OnCountdownComplete, skipping binding."));
-		}
-		else
-		{	
-			TimerSubsystem->OnCountdownComplete.AddDynamic(this, &ARunGameGameMode::SpawnPlayer);
-		}
-		// StartCountdown removed: SetGameState(CountDown) triggers it reactively via OnGameStateChangedCallback
+		return;
+	}
+
+	if (NewState == ERunGameGameState::InGame)
+	{
+		SpawnPlayer();
 	}
 }
 

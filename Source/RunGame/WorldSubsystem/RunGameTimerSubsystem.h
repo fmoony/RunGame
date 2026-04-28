@@ -45,6 +45,7 @@ public:
 
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+
 	/** Stops all timers and unbinds from game state events on teardown */
 	virtual void Deinitialize() override;
 

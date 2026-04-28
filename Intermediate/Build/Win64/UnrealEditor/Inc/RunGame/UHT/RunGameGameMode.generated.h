@@ -18,6 +18,7 @@ PRAGMA_DISABLE_DEPRECATION_WARNINGS
 
 class ARunGameCharacter;
 class ARunGameDeathVolume;
+enum class ERunGameGameState : uint8;
 
 // ********** Begin Delegate FOnPlayerDeathDelegate ************************************************
 #define FID_RunGame_Source_RunGame_RunGameGameMode_h_11_DELEGATE \
@@ -28,6 +29,7 @@ RUNGAME_API void FOnPlayerDeathDelegate_DelegateWrapper(const FMulticastScriptDe
 
 // ********** Begin Class ARunGameGameMode *********************************************************
 #define FID_RunGame_Source_RunGame_RunGameGameMode_h_19_RPC_WRAPPERS_NO_PURE_DECLS \
+	DECLARE_FUNCTION(execOnGameStateChangedCallback); \
 	DECLARE_FUNCTION(execOnFloorSystemReadyCallback); \
 	DECLARE_FUNCTION(execHandlePlayerDeath); \
 	DECLARE_FUNCTION(execStartNewGame); \

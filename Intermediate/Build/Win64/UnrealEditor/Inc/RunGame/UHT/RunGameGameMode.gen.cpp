@@ -20,6 +20,7 @@ RUNGAME_API UClass* Z_Construct_UClass_ARunGameCharacter_NoRegister();
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameDeathVolume_NoRegister();
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameGameMode();
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameGameMode_NoRegister();
+RUNGAME_API UEnum* Z_Construct_UEnum_RunGame_ERunGameGameState();
 RUNGAME_API UFunction* Z_Construct_UDelegateFunction_RunGame_OnPlayerDeathDelegate__DelegateSignature();
 UPackage* Z_Construct_UPackage__Script_RunGame();
 // ********** End Cross Module References **********************************************************
@@ -208,6 +209,65 @@ DEFINE_FUNCTION(ARunGameGameMode::execOnFloorSystemReadyCallback)
 }
 // ********** End Class ARunGameGameMode Function OnFloorSystemReadyCallback ***********************
 
+// ********** Begin Class ARunGameGameMode Function OnGameStateChangedCallback *********************
+struct Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics
+{
+	struct RunGameGameMode_eventOnGameStateChangedCallback_Parms
+	{
+		ERunGameGameState OldState;
+		ERunGameGameState NewState;
+	};
+#if WITH_METADATA
+	static constexpr UECodeGen_Private::FMetaDataPairParam Function_MetaDataParams[] = {
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "/** Reacts to game state changes -- spawns player when entering InGame */" },
+#endif
+		{ "ModuleRelativePath", "RunGameGameMode.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "Reacts to game state changes -- spawns player when entering InGame" },
+#endif
+	};
+#endif // WITH_METADATA
+	static const UECodeGen_Private::FBytePropertyParams NewProp_OldState_Underlying;
+	static const UECodeGen_Private::FEnumPropertyParams NewProp_OldState;
+	static const UECodeGen_Private::FBytePropertyParams NewProp_NewState_Underlying;
+	static const UECodeGen_Private::FEnumPropertyParams NewProp_NewState;
+	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
+	static const UECodeGen_Private::FFunctionParams FuncParams;
+};
+const UECodeGen_Private::FBytePropertyParams Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_OldState_Underlying = { "UnderlyingType", nullptr, (EPropertyFlags)0x0000000000000000, UECodeGen_Private::EPropertyGenFlags::Byte, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, 0, nullptr, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FEnumPropertyParams Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_OldState = { "OldState", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Enum, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(RunGameGameMode_eventOnGameStateChangedCallback_Parms, OldState), Z_Construct_UEnum_RunGame_ERunGameGameState, METADATA_PARAMS(0, nullptr) }; // 1491870806
+const UECodeGen_Private::FBytePropertyParams Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_NewState_Underlying = { "UnderlyingType", nullptr, (EPropertyFlags)0x0000000000000000, UECodeGen_Private::EPropertyGenFlags::Byte, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, 0, nullptr, METADATA_PARAMS(0, nullptr) };
+const UECodeGen_Private::FEnumPropertyParams Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_NewState = { "NewState", nullptr, (EPropertyFlags)0x0010000000000080, UECodeGen_Private::EPropertyGenFlags::Enum, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(RunGameGameMode_eventOnGameStateChangedCallback_Parms, NewState), Z_Construct_UEnum_RunGame_ERunGameGameState, METADATA_PARAMS(0, nullptr) }; // 1491870806
+const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::PropPointers[] = {
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_OldState_Underlying,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_OldState,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_NewState_Underlying,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::NewProp_NewState,
+};
+static_assert(UE_ARRAY_COUNT(Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::PropPointers) < 2048);
+const UECodeGen_Private::FFunctionParams Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::FuncParams = { { (UObject*(*)())Z_Construct_UClass_ARunGameGameMode, nullptr, "OnGameStateChangedCallback", Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::PropPointers, UE_ARRAY_COUNT(Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::PropPointers), sizeof(Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::RunGameGameMode_eventOnGameStateChangedCallback_Parms), RF_Public|RF_Transient|RF_MarkAsNative, (EFunctionFlags)0x00080401, 0, 0, METADATA_PARAMS(UE_ARRAY_COUNT(Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::Function_MetaDataParams), Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::Function_MetaDataParams)},  };
+static_assert(sizeof(Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::RunGameGameMode_eventOnGameStateChangedCallback_Parms) < MAX_uint16);
+UFunction* Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback()
+{
+	static UFunction* ReturnFunction = nullptr;
+	if (!ReturnFunction)
+	{
+		UECodeGen_Private::ConstructUFunction(&ReturnFunction, Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback_Statics::FuncParams);
+	}
+	return ReturnFunction;
+}
+DEFINE_FUNCTION(ARunGameGameMode::execOnGameStateChangedCallback)
+{
+	P_GET_ENUM(ERunGameGameState,Z_Param_OldState);
+	P_GET_ENUM(ERunGameGameState,Z_Param_NewState);
+	P_FINISH;
+	P_NATIVE_BEGIN;
+	P_THIS->OnGameStateChangedCallback(ERunGameGameState(Z_Param_OldState),ERunGameGameState(Z_Param_NewState));
+	P_NATIVE_END;
+}
+// ********** End Class ARunGameGameMode Function OnGameStateChangedCallback ***********************
+
 // ********** Begin Class ARunGameGameMode Function ResetGame **************************************
 struct Z_Construct_UFunction_ARunGameGameMode_ResetGame_Statics
 {
@@ -373,6 +433,7 @@ void ARunGameGameMode::StaticRegisterNativesARunGameGameMode()
 		{ "HandlePlayerDeath", &ARunGameGameMode::execHandlePlayerDeath },
 		{ "InitializeGameTimer", &ARunGameGameMode::execInitializeGameTimer },
 		{ "OnFloorSystemReadyCallback", &ARunGameGameMode::execOnFloorSystemReadyCallback },
+		{ "OnGameStateChangedCallback", &ARunGameGameMode::execOnGameStateChangedCallback },
 		{ "ResetGame", &ARunGameGameMode::execResetGame },
 		{ "SpawnPlayer", &ARunGameGameMode::execSpawnPlayer },
 		{ "StartGameCountDown", &ARunGameGameMode::execStartGameCountDown },
@@ -507,6 +568,7 @@ struct Z_Construct_UClass_ARunGameGameMode_Statics
 		{ &Z_Construct_UFunction_ARunGameGameMode_HandlePlayerDeath, "HandlePlayerDeath" }, // 4107966430
 		{ &Z_Construct_UFunction_ARunGameGameMode_InitializeGameTimer, "InitializeGameTimer" }, // 3209263031
 		{ &Z_Construct_UFunction_ARunGameGameMode_OnFloorSystemReadyCallback, "OnFloorSystemReadyCallback" }, // 2458518703
+		{ &Z_Construct_UFunction_ARunGameGameMode_OnGameStateChangedCallback, "OnGameStateChangedCallback" }, // 1716206744
 		{ &Z_Construct_UFunction_ARunGameGameMode_ResetGame, "ResetGame" }, // 3966647415
 		{ &Z_Construct_UFunction_ARunGameGameMode_SpawnPlayer, "SpawnPlayer" }, // 3221122360
 		{ &Z_Construct_UFunction_ARunGameGameMode_StartGameCountDown, "StartGameCountDown" }, // 307963375
@@ -579,10 +641,10 @@ ARunGameGameMode::~ARunGameGameMode() {}
 struct Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_ARunGameGameMode, ARunGameGameMode::StaticClass, TEXT("ARunGameGameMode"), &Z_Registration_Info_UClass_ARunGameGameMode, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameGameMode), 1558012934U) },
+		{ Z_Construct_UClass_ARunGameGameMode, ARunGameGameMode::StaticClass, TEXT("ARunGameGameMode"), &Z_Registration_Info_UClass_ARunGameGameMode, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameGameMode), 1975507818U) },
 	};
 };
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_2046567327(TEXT("/Script/RunGame"),
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_3907683160(TEXT("/Script/RunGame"),
 	Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics::ClassInfo),
 	nullptr, 0,
 	nullptr, 0);

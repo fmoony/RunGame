@@ -31,7 +31,7 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 | `ARunGamePlayerState` | `CountDown`/`MainMenu` → clears score to 0; `InGame` → unpauses 0.1s score timer; all others → pauses score timer |
 | `ARunGameHUD` | Switches widget via `CurrentUIMap` (`TMap<ERunGameGameState, TSubclassOf<UUserWidget>>`) |
 | `ARunGameCharacter` | `MainMenu` → self-destroys |
-| `ARunGameGameMode` | Binds `SpawnPlayer` to `OnCountdownComplete`; no longer controls input modes or score. Owns `OnPlayerDeath` delegate (not on GameState). |
+| `ARunGameGameMode` | `InGame` → spawns player via `SpawnPlayer()`; orchestrates floor system init/reset; owns `OnPlayerDeath` delegate. |
 
 ### Key Delegates (who declares what)
 
