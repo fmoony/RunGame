@@ -11,6 +11,8 @@
 class USpringArmComponent;
 class UCameraComponent;
 class UInputAction;
+class UCurveFloat;
+class URunGameTimerSubsystem;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -119,7 +121,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	float MontagePlayRate = 1.0f;
 
+	/** Float curve that maps elapsed game time to max walk speed */
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
+	TObjectPtr<UCurveFloat> MaxSpeedCurve;
+
 	float DefaultGroundFriction;
+
+	float BaseMaxWalkSpeed;
+
+	UPROPERTY()
+	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
 
 
 public:

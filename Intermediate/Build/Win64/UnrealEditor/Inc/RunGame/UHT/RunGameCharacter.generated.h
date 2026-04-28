@@ -20,7 +20,7 @@ class UAnimMontage;
 enum class ERunGameGameState : uint8;
 
 // ********** Begin Class ARunGameCharacter ********************************************************
-#define FID_RunGame_Source_RunGame_RunGameCharacter_h_26_RPC_WRAPPERS_NO_PURE_DECLS \
+#define FID_RunGame_Source_RunGame_RunGameCharacter_h_28_RPC_WRAPPERS_NO_PURE_DECLS \
 	DECLARE_FUNCTION(execOnGameStateChangedCallback); \
 	DECLARE_FUNCTION(execOnSlideBlendingOut); \
 	DECLARE_FUNCTION(execDoJumpEnd); \
@@ -32,7 +32,7 @@ enum class ERunGameGameState : uint8;
 
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameCharacter_NoRegister();
 
-#define FID_RunGame_Source_RunGame_RunGameCharacter_h_26_INCLASS_NO_PURE_DECLS \
+#define FID_RunGame_Source_RunGame_RunGameCharacter_h_28_INCLASS_NO_PURE_DECLS \
 private: \
 	static void StaticRegisterNativesARunGameCharacter(); \
 	friend struct Z_Construct_UClass_ARunGameCharacter_Statics; \
@@ -43,7 +43,7 @@ public: \
 	DECLARE_SERIALIZER(ARunGameCharacter)
 
 
-#define FID_RunGame_Source_RunGame_RunGameCharacter_h_26_ENHANCED_CONSTRUCTORS \
+#define FID_RunGame_Source_RunGame_RunGameCharacter_h_28_ENHANCED_CONSTRUCTORS \
 	/** Deleted move- and copy-constructors, should never be used */ \
 	ARunGameCharacter(ARunGameCharacter&&) = delete; \
 	ARunGameCharacter(const ARunGameCharacter&) = delete; \
@@ -53,13 +53,13 @@ public: \
 	NO_API virtual ~ARunGameCharacter();
 
 
-#define FID_RunGame_Source_RunGame_RunGameCharacter_h_23_PROLOG
-#define FID_RunGame_Source_RunGame_RunGameCharacter_h_26_GENERATED_BODY \
+#define FID_RunGame_Source_RunGame_RunGameCharacter_h_25_PROLOG
+#define FID_RunGame_Source_RunGame_RunGameCharacter_h_28_GENERATED_BODY \
 PRAGMA_DISABLE_DEPRECATION_WARNINGS \
 public: \
-	FID_RunGame_Source_RunGame_RunGameCharacter_h_26_RPC_WRAPPERS_NO_PURE_DECLS \
-	FID_RunGame_Source_RunGame_RunGameCharacter_h_26_INCLASS_NO_PURE_DECLS \
-	FID_RunGame_Source_RunGame_RunGameCharacter_h_26_ENHANCED_CONSTRUCTORS \
+	FID_RunGame_Source_RunGame_RunGameCharacter_h_28_RPC_WRAPPERS_NO_PURE_DECLS \
+	FID_RunGame_Source_RunGame_RunGameCharacter_h_28_INCLASS_NO_PURE_DECLS \
+	FID_RunGame_Source_RunGame_RunGameCharacter_h_28_ENHANCED_CONSTRUCTORS \
 private: \
 PRAGMA_ENABLE_DEPRECATION_WARNINGS
 

@@ -15,10 +15,12 @@ void EmptyLinkFunctionForGeneratedCodeRunGameCharacter() {}
 ENGINE_API UClass* Z_Construct_UClass_ACharacter();
 ENGINE_API UClass* Z_Construct_UClass_UAnimMontage_NoRegister();
 ENGINE_API UClass* Z_Construct_UClass_UCameraComponent_NoRegister();
+ENGINE_API UClass* Z_Construct_UClass_UCurveFloat_NoRegister();
 ENGINE_API UClass* Z_Construct_UClass_USpringArmComponent_NoRegister();
 ENHANCEDINPUT_API UClass* Z_Construct_UClass_UInputAction_NoRegister();
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameCharacter();
 RUNGAME_API UClass* Z_Construct_UClass_ARunGameCharacter_NoRegister();
+RUNGAME_API UClass* Z_Construct_UClass_URunGameTimerSubsystem_NoRegister();
 RUNGAME_API UEnum* Z_Construct_UEnum_RunGame_ERunGameGameState();
 UPackage* Z_Construct_UPackage__Script_RunGame();
 // ********** End Cross Module References **********************************************************
@@ -494,6 +496,19 @@ struct Z_Construct_UClass_ARunGameCharacter_Statics
 		{ "Category", "RunGame|Movement" },
 		{ "ModuleRelativePath", "RunGameCharacter.h" },
 	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_MaxSpeedCurve_MetaData[] = {
+		{ "Category", "RunGame|Movement" },
+#if !UE_BUILD_SHIPPING
+		{ "Comment", "/** Float curve that maps elapsed game time to max walk speed */" },
+#endif
+		{ "ModuleRelativePath", "RunGameCharacter.h" },
+#if !UE_BUILD_SHIPPING
+		{ "ToolTip", "Float curve that maps elapsed game time to max walk speed" },
+#endif
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_TimerSubsystem_MetaData[] = {
+		{ "ModuleRelativePath", "RunGameCharacter.h" },
+	};
 #endif // WITH_METADATA
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_CameraBoom;
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_FollowCamera;
@@ -505,6 +520,8 @@ struct Z_Construct_UClass_ARunGameCharacter_Statics
 	static const UECodeGen_Private::FObjectPropertyParams NewProp_SlideMontage;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_RootMotionScale;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_MontagePlayRate;
+	static const UECodeGen_Private::FObjectPropertyParams NewProp_MaxSpeedCurve;
+	static const UECodeGen_Private::FObjectPropertyParams NewProp_TimerSubsystem;
 	static const UECodeGen_Private::FPropertyParamsBase* const PropPointers[];
 	static UObject* (*const DependentSingletons[])();
 	static constexpr FClassFunctionLinkInfo FuncInfo[] = {
@@ -532,6 +549,8 @@ const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_ARunGameCharac
 const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_SlideMontage = { "SlideMontage", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Object, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameCharacter, SlideMontage), Z_Construct_UClass_UAnimMontage_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_SlideMontage_MetaData), NewProp_SlideMontage_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_RootMotionScale = { "RootMotionScale", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameCharacter, RootMotionScale), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_RootMotionScale_MetaData), NewProp_RootMotionScale_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_MontagePlayRate = { "MontagePlayRate", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameCharacter, MontagePlayRate), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_MontagePlayRate_MetaData), NewProp_MontagePlayRate_MetaData) };
+const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_MaxSpeedCurve = { "MaxSpeedCurve", nullptr, (EPropertyFlags)0x0114000000010001, UECodeGen_Private::EPropertyGenFlags::Object | UECodeGen_Private::EPropertyGenFlags::ObjectPtr, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameCharacter, MaxSpeedCurve), Z_Construct_UClass_UCurveFloat_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_MaxSpeedCurve_MetaData), NewProp_MaxSpeedCurve_MetaData) };
+const UECodeGen_Private::FObjectPropertyParams Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_TimerSubsystem = { "TimerSubsystem", nullptr, (EPropertyFlags)0x0114000000000000, UECodeGen_Private::EPropertyGenFlags::Object | UECodeGen_Private::EPropertyGenFlags::ObjectPtr, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameCharacter, TimerSubsystem), Z_Construct_UClass_URunGameTimerSubsystem_NoRegister, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_TimerSubsystem_MetaData), NewProp_TimerSubsystem_MetaData) };
 const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_ARunGameCharacter_Statics::PropPointers[] = {
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_CameraBoom,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_FollowCamera,
@@ -543,6 +562,8 @@ const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_ARunGameC
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_SlideMontage,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_RootMotionScale,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_MontagePlayRate,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_MaxSpeedCurve,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameCharacter_Statics::NewProp_TimerSubsystem,
 };
 static_assert(UE_ARRAY_COUNT(Z_Construct_UClass_ARunGameCharacter_Statics::PropPointers) < 2048);
 UObject* (*const Z_Construct_UClass_ARunGameCharacter_Statics::DependentSingletons[])() = {
@@ -581,10 +602,10 @@ ARunGameCharacter::~ARunGameCharacter() {}
 struct Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameCharacter_h__Script_RunGame_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_ARunGameCharacter, ARunGameCharacter::StaticClass, TEXT("ARunGameCharacter"), &Z_Registration_Info_UClass_ARunGameCharacter, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameCharacter), 1419808074U) },
+		{ Z_Construct_UClass_ARunGameCharacter, ARunGameCharacter::StaticClass, TEXT("ARunGameCharacter"), &Z_Registration_Info_UClass_ARunGameCharacter, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameCharacter), 145057384U) },
 	};
 };
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameCharacter_h__Script_RunGame_2671304537(TEXT("/Script/RunGame"),
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameCharacter_h__Script_RunGame_2189918842(TEXT("/Script/RunGame"),
 	Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameCharacter_h__Script_RunGame_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameCharacter_h__Script_RunGame_Statics::ClassInfo),
 	nullptr, 0,
 	nullptr, 0);

@@ -14,6 +14,8 @@
 #include "InputActionValue.h"
 #include "RunGame.h"
 #include "RunGameGameState.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
+#include "Curves/CurveFloat.h"
 
 ARunGameCharacter::ARunGameCharacter()
 {
@@ -64,6 +66,9 @@ void ARunGameCharacter::BeginPlay()
 	Super::BeginPlay();
 
 	DefaultGroundFriction = GetCharacterMovement()->GroundFriction;
+	BaseMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+
+	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
 
 	// 绑定 GameState 状态变化，MainMenu 时自毁
 	if (ARunGameGameState* GameState = GetWorld()->GetGameState<ARunGameGameState>())
@@ -118,15 +123,21 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 
 	if (GetController() == nullptr) return;
 
+	// 通过曲线与游戏运行时间动态设置最大速度
+	if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
+	{
+		const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
+		const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
+		GetCharacterMovement()->MaxWalkSpeed = DesiredMaxSpeed;
+	}
+
 	FRotator CurrentRotation = GetController()->GetControlRotation();
 	FRotator SmoothRotation = FMath::RInterpTo(CurrentRotation, DesireRotation, DeltaSeconds, 10.f);
 	GetController()->SetControlRotation(SmoothRotation);
 
-	// 2. �������㡿��ȡ���Ե���ǰ����
-	// �������������ò�ֵ�е�ƽ���Ƕȣ������þ��Զ����ܵ��� DesireRotation��
 	const FRotator YawRotation(0, DesireRotation.Yaw, 0);
 	const FVector Desiron = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	//��ǰ��
+
 	AddMovementInput(Desiron, 1.0f);
 
 }
