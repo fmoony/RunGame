@@ -11,6 +11,8 @@
     <None Include="..\..\Source\RunGameEditor.Target.cs">
       <Filter>Source</Filter>
     </None>
+    <None Include="..\..\.gitattributes" />
+    <None Include="..\..\.gitignore" />
     <None Include="..\..\.vsconfig" />
     <None Include="..\..\CLAUDE.md" />
     <Filter Include="Config">
@@ -88,18 +90,6 @@
     <Filter Include="Source\RunGame\Actor">
       <UniqueIdentifier>{35ED94BF-0B73-3DB6-B40F-794E93C8A910}</UniqueIdentifier>
     </Filter>
-    <ClCompile Include="..\..\Source\RunGame\Actor\Floor.cpp">
-      <Filter>Source\RunGame\Actor</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\Source\RunGame\Actor\Floor.h">
-      <Filter>Source\RunGame\Actor</Filter>
-    </ClInclude>
-    <ClCompile Include="..\..\Source\RunGame\Actor\TurnBox.cpp">
-      <Filter>Source\RunGame\Actor</Filter>
-    </ClCompile>
-    <ClInclude Include="..\..\Source\RunGame\Actor\TurnBox.h">
-      <Filter>Source\RunGame\Actor</Filter>
-    </ClInclude>
     <Filter Include="Source\RunGame\Actor\Floor">
       <UniqueIdentifier>{C38C2D24-2A94-361C-A56C-385095CD241D}</UniqueIdentifier>
     </Filter>

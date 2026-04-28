@@ -252,6 +252,8 @@
     <None Include="..\..\RunGame.uproject"/>
     <None Include="..\..\Source\RunGame.Target.cs"/>
     <None Include="..\..\Source\RunGameEditor.Target.cs"/>
+    <None Include="..\..\.gitattributes"/>
+    <None Include="..\..\.gitignore"/>
     <None Include="..\..\.vsconfig"/>
     <None Include="..\..\CLAUDE.md"/>
     <None Include="..\..\Config\DefaultEditor.ini"/>
@@ -292,14 +294,6 @@
       <AdditionalIncludeDirectories>$(ClCompile_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <ClInclude Include="..\..\Source\RunGame\RunGameType.h"/>
-    <ClCompile Include="..\..\Source\RunGame\Actor\Floor.cpp">
-      <AdditionalIncludeDirectories>$(ClCompile_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
-    <ClInclude Include="..\..\Source\RunGame\Actor\Floor.h"/>
-    <ClCompile Include="..\..\Source\RunGame\Actor\TurnBox.cpp">
-      <AdditionalIncludeDirectories>$(ClCompile_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-    </ClCompile>
-    <ClInclude Include="..\..\Source\RunGame\Actor\TurnBox.h"/>
     <ClCompile Include="..\..\Source\RunGame\Actor\Floor\FloorBase.cpp">
       <AdditionalIncludeDirectories>$(ClCompile_AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
