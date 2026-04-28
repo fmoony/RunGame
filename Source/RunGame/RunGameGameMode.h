@@ -30,7 +30,13 @@ public:
 	TArray<TSoftClassPtr<AActor>> TurnFloorClasses;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Pre-Allocate Count"))
-	int32 PreAllocateFloorCount = 10;
+	int32 PreAllocateFloorCount = 20;
+
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Initial Straight Count"))
+	int32 InitialStraightFloorCount = 5;
+
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Initial Random Count"))
+	int32 InitialRandomFloorCount = 15;
 
 	// 游戏初始时间设置
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Game")

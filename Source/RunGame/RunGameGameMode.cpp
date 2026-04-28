@@ -62,7 +62,7 @@ void ARunGameGameMode::OnFloorSystemReadyCallback()
 			StartTransform = PC->GetPawn()->GetTransform();
 		}
 
-		FloorSystem->SpawnInitialFloors(StartTransform, 5, 15);
+		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
 	}
 }
 
@@ -148,6 +148,20 @@ void ARunGameGameMode::ResetGame()
 {
 	// 分数由 PlayerState 自行监听 GameState 状态变化来清除
 
+	// 回收所有活跃地板并重新生成初始地板链
+	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
+	{
+		FloorSystem->HideAllActiveFloors();
+
+		FTransform StartTransform = FTransform::Identity;
+		if (AActor* StartSpot = ChoosePlayerStart(GetWorld()->GetFirstPlayerController()))
+		{
+			StartTransform = StartSpot->GetActorTransform();
+		}
+
+		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
+	}
+
 	// 设置游戏状态为 MainMenu，触发 HUD 自动切换到主菜单 UI
 	if (ARunGameGameState* CurrentGameState = GetGameState<ARunGameGameState>())
 	{
@@ -162,6 +176,20 @@ void ARunGameGameMode::ResetGame()
 void ARunGameGameMode::StartNewGame()
 {
 	// 分数由 PlayerState 自行监听 GameState 状态变化来清除
+
+	// 回收所有活跃地板并重新生成初始地板链
+	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
+	{
+		FloorSystem->HideAllActiveFloors();
+
+		FTransform StartTransform = FTransform::Identity;
+		if (AActor* StartSpot = ChoosePlayerStart(GetWorld()->GetFirstPlayerController()))
+		{
+			StartTransform = StartSpot->GetActorTransform();
+		}
+
+		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
+	}
 
 	StartGameCountDown();
 

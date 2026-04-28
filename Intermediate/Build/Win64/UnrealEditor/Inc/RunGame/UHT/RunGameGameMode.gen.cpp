@@ -449,6 +449,16 @@ struct Z_Construct_UClass_ARunGameGameMode_Statics
 		{ "DisplayName", "Pre-Allocate Count" },
 		{ "ModuleRelativePath", "RunGameGameMode.h" },
 	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_InitialStraightFloorCount_MetaData[] = {
+		{ "Category", "RunGame|FloorSystem" },
+		{ "DisplayName", "Initial Straight Count" },
+		{ "ModuleRelativePath", "RunGameGameMode.h" },
+	};
+	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_InitialRandomFloorCount_MetaData[] = {
+		{ "Category", "RunGame|FloorSystem" },
+		{ "DisplayName", "Initial Random Count" },
+		{ "ModuleRelativePath", "RunGameGameMode.h" },
+	};
 	static constexpr UECodeGen_Private::FMetaDataPairParam NewProp_GameTotalTime_MetaData[] = {
 		{ "Category", "RunGame|Game" },
 #if !UE_BUILD_SHIPPING
@@ -486,6 +496,8 @@ struct Z_Construct_UClass_ARunGameGameMode_Statics
 	static const UECodeGen_Private::FSoftClassPropertyParams NewProp_TurnFloorClasses_Inner;
 	static const UECodeGen_Private::FArrayPropertyParams NewProp_TurnFloorClasses;
 	static const UECodeGen_Private::FIntPropertyParams NewProp_PreAllocateFloorCount;
+	static const UECodeGen_Private::FIntPropertyParams NewProp_InitialStraightFloorCount;
+	static const UECodeGen_Private::FIntPropertyParams NewProp_InitialRandomFloorCount;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_GameTotalTime;
 	static const UECodeGen_Private::FMulticastDelegatePropertyParams NewProp_OnPlayerDeath;
 	static const UECodeGen_Private::FFloatPropertyParams NewProp_PlayerDeathDelay;
@@ -512,6 +524,8 @@ const UECodeGen_Private::FArrayPropertyParams Z_Construct_UClass_ARunGameGameMod
 const UECodeGen_Private::FSoftClassPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_TurnFloorClasses_Inner = { "TurnFloorClasses", nullptr, (EPropertyFlags)0x0004000000000000, UECodeGen_Private::EPropertyGenFlags::SoftClass, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, 0, Z_Construct_UClass_AActor_NoRegister, METADATA_PARAMS(0, nullptr) };
 const UECodeGen_Private::FArrayPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_TurnFloorClasses = { "TurnFloorClasses", nullptr, (EPropertyFlags)0x0014000000010001, UECodeGen_Private::EPropertyGenFlags::Array, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, TurnFloorClasses), EArrayPropertyFlags::None, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_TurnFloorClasses_MetaData), NewProp_TurnFloorClasses_MetaData) };
 const UECodeGen_Private::FIntPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_PreAllocateFloorCount = { "PreAllocateFloorCount", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Int, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, PreAllocateFloorCount), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PreAllocateFloorCount_MetaData), NewProp_PreAllocateFloorCount_MetaData) };
+const UECodeGen_Private::FIntPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_InitialStraightFloorCount = { "InitialStraightFloorCount", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Int, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, InitialStraightFloorCount), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_InitialStraightFloorCount_MetaData), NewProp_InitialStraightFloorCount_MetaData) };
+const UECodeGen_Private::FIntPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_InitialRandomFloorCount = { "InitialRandomFloorCount", nullptr, (EPropertyFlags)0x0010000000010001, UECodeGen_Private::EPropertyGenFlags::Int, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, InitialRandomFloorCount), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_InitialRandomFloorCount_MetaData), NewProp_InitialRandomFloorCount_MetaData) };
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_GameTotalTime = { "GameTotalTime", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, GameTotalTime), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_GameTotalTime_MetaData), NewProp_GameTotalTime_MetaData) };
 const UECodeGen_Private::FMulticastDelegatePropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_OnPlayerDeath = { "OnPlayerDeath", nullptr, (EPropertyFlags)0x0010000010080000, UECodeGen_Private::EPropertyGenFlags::InlineMulticastDelegate, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, OnPlayerDeath), Z_Construct_UDelegateFunction_RunGame_OnPlayerDeathDelegate__DelegateSignature, METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_OnPlayerDeath_MetaData), NewProp_OnPlayerDeath_MetaData) }; // 1410918457
 const UECodeGen_Private::FFloatPropertyParams Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_PlayerDeathDelay = { "PlayerDeathDelay", nullptr, (EPropertyFlags)0x0010000000000005, UECodeGen_Private::EPropertyGenFlags::Float, RF_Public|RF_Transient|RF_MarkAsNative, nullptr, nullptr, 1, STRUCT_OFFSET(ARunGameGameMode, PlayerDeathDelay), METADATA_PARAMS(UE_ARRAY_COUNT(NewProp_PlayerDeathDelay_MetaData), NewProp_PlayerDeathDelay_MetaData) };
@@ -522,6 +536,8 @@ const UECodeGen_Private::FPropertyParamsBase* const Z_Construct_UClass_ARunGameG
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_TurnFloorClasses_Inner,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_TurnFloorClasses,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_PreAllocateFloorCount,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_InitialStraightFloorCount,
+	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_InitialRandomFloorCount,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_GameTotalTime,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_OnPlayerDeath,
 	(const UECodeGen_Private::FPropertyParamsBase*)&Z_Construct_UClass_ARunGameGameMode_Statics::NewProp_PlayerDeathDelay,
@@ -563,10 +579,10 @@ ARunGameGameMode::~ARunGameGameMode() {}
 struct Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics
 {
 	static constexpr FClassRegisterCompiledInInfo ClassInfo[] = {
-		{ Z_Construct_UClass_ARunGameGameMode, ARunGameGameMode::StaticClass, TEXT("ARunGameGameMode"), &Z_Registration_Info_UClass_ARunGameGameMode, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameGameMode), 319562006U) },
+		{ Z_Construct_UClass_ARunGameGameMode, ARunGameGameMode::StaticClass, TEXT("ARunGameGameMode"), &Z_Registration_Info_UClass_ARunGameGameMode, CONSTRUCT_RELOAD_VERSION_INFO(FClassReloadVersionInfo, sizeof(ARunGameGameMode), 1558012934U) },
 	};
 };
-static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_1241766356(TEXT("/Script/RunGame"),
+static FRegisterCompiledInInfo Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_2046567327(TEXT("/Script/RunGame"),
 	Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics::ClassInfo, UE_ARRAY_COUNT(Z_CompiledInDeferFile_FID_RunGame_Source_RunGame_RunGameGameMode_h__Script_RunGame_Statics::ClassInfo),
 	nullptr, 0,
 	nullptr, 0);
