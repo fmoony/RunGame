@@ -113,13 +113,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	UAnimMontage* SlideMontage;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Movement")
 	bool bIsSliding;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	float RootMotionScale = 1.0f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
-	float MontagePlayRate = 1.0f;
+	float MontagePlayRate = 0.8f;
 
 	/** Float curve that maps elapsed game time to max walk speed */
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
@@ -132,7 +133,6 @@ public:
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
 
-
 public:
 
 	/** Returns CameraBoom subobject **/
@@ -140,6 +140,8 @@ public:
 
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+
+	FORCEINLINE bool IsSliding() const { return bIsSliding; }
 
 	/** Reacts to game state changes -- self-destructs when returning to MainMenu */
 	UFUNCTION()

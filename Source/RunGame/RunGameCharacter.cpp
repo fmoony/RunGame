@@ -173,28 +173,20 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 
 		//// get right vector 
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
-		//�Ƿ���ת
 		if (bTurn)
 		{
-			//�µ���ת
 			FRotator NewRotation = FRotator(0.f, 90.f * Right, 0.f);
 
-			//�Ƕȼ��㣬��Ԫ��
 			FQuat QuatA = FQuat(DesireRotation);
 			FQuat QuatB = FQuat(NewRotation);
 			DesireRotation = FRotator(QuatA * QuatB);
 
-			//Ťת��������
 			if(UCharacterMovementComponent* MovementComponent = GetCharacterMovement())
 			{
-				//�������㡿��ת��ǰ�ٶ�����
 				FVector CurrentVelocity = MovementComponent->Velocity;
-				//�������㡿��ת��ǰ�ٶ�����
 				FVector NewVelocity = QuatB.RotateVector(CurrentVelocity);
-				//�������㡿ֱ�������µ��ٶ�����
 				MovementComponent->Velocity = NewVelocity;
 			}
-
 
 			bTurn = false;
 		}
@@ -241,8 +233,6 @@ void ARunGameCharacter::StartSlide()
 	{
 		bIsSliding = true;
 
-		Crouch();
-
 		GetCharacterMovement()->GroundFriction = 0.0f;
 
 		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
@@ -252,8 +242,16 @@ void ARunGameCharacter::StartSlide()
 
 			if (SlideMontage)
 			{
+				float FinalPlayRate = MontagePlayRate;
+				// 通过当前玩家速度与基准速度比值动态设置动画执行速度
+				if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
+				{
+					const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
+					const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
+					FinalPlayRate = MontagePlayRate * DesiredMaxSpeed / BaseMaxWalkSpeed;
+				}
 				AnimRootMotionTranslationScale = RootMotionScale;
-				AnimInstance->Montage_Play(SlideMontage, MontagePlayRate);
+				AnimInstance->Montage_Play(SlideMontage, FinalPlayRate);
 				UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide started. Playing montage: %s"), *SlideMontage->GetName());
 			}
 		}
@@ -266,7 +264,6 @@ void ARunGameCharacter::EndSlide()
 	if (bIsSliding)
 	{
 		bIsSliding = false;
-		UnCrouch();
 		AnimRootMotionTranslationScale = 1.0f;
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
 	}
