@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "RunGame",
+			"Path": "..\\Source\\RunGame.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "RunGameEditor",
+			"Path": "..\\Source\\RunGameEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}

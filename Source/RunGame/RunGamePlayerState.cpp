@@ -1,0 +1,130 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#include "RunGamePlayerState.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
+#include "RunGameGameState.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+
+ARunGamePlayerState::ARunGamePlayerState()
+{
+	RunGameScore = 0;
+	PrimaryActorTick.bCanEverTick = false;
+}
+
+void ARunGamePlayerState::BeginPlay()
+{
+	Super::BeginPlay();
+
+	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			ScoreTimerHandle,
+			this,
+			&ARunGamePlayerState::CalculateScoreProcess,
+			0.1f,
+			true
+		);
+		World->GetTimerManager().PauseTimer(ScoreTimerHandle);
+	}
+
+	// 绑定 GameState 状态变化，响应式启停算分定时器
+	if (ARunGameGameState* GameState = GetWorld()->GetGameState<ARunGameGameState>())
+	{
+		GameState->OnGameStateChanged.AddDynamic(this, &ARunGamePlayerState::OnGameStateChangedCallback);
+	}
+}
+
+void ARunGamePlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(ScoreTimerHandle);
+
+		if (ARunGameGameState* GameState = World->GetGameState<ARunGameGameState>())
+		{
+			GameState->OnGameStateChanged.RemoveDynamic(this, &ARunGamePlayerState::OnGameStateChangedCallback);
+		}
+	}
+	TimerSubsystem = nullptr;
+	Super::EndPlay(EndPlayReason);
+}
+
+void ARunGamePlayerState::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
+{
+	if (OldState == NewState)
+	{
+		return;
+	}
+
+	// 进入 CountDown 或 MainMenu 时自动清空分数
+	if (NewState == ERunGameGameState::CountDown || NewState == ERunGameGameState::MainMenu)
+	{
+		SetRunGameScore(0);
+	}
+
+	if (NewState == ERunGameGameState::InGame)
+	{
+		SetScoringActive(true);
+	}
+	else
+	{
+		SetScoringActive(false);
+	}
+}
+
+void ARunGamePlayerState::SetScoringActive(bool bActive)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	if (bActive)
+	{
+		World->GetTimerManager().UnPauseTimer(ScoreTimerHandle);
+	}
+	else
+	{
+		World->GetTimerManager().PauseTimer(ScoreTimerHandle);
+	}
+}
+
+void ARunGamePlayerState::CalculateScoreProcess()
+{
+	if (!TimerSubsystem || !TimerSubsystem->IsTimerRunning())
+	{
+		return;
+	}
+
+	const float Elapsed = TimerSubsystem->GetTotalTimeSeconds();
+	const float MinutesPassed = Elapsed / 60.0f;
+
+	// Cubic Polynomial: Multiplier = 1 + m^2 + 0.5 * m^3
+	const float Multiplier = 1.0f + FMath::Pow(MinutesPassed, 2.0f) + 0.5f * FMath::Pow(MinutesPassed, 3.0f);
+
+	const int64 ScoreToAdd = FMath::FloorToInt64(10LL * Multiplier);
+
+	AddScore(ScoreToAdd);
+}
+
+void ARunGamePlayerState::AddScore(int64 Value)
+{
+	if (Value != 0)
+	{
+		RunGameScore += Value;
+		OnScoreChanged.Broadcast(RunGameScore);
+	}
+}
+
+void ARunGamePlayerState::SetRunGameScore(int64 NewScore)
+{
+	if (RunGameScore != NewScore)
+	{
+		RunGameScore = NewScore;
+		OnScoreChanged.Broadcast(RunGameScore);
+	}
+}
