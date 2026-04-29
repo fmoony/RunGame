@@ -4,8 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+//#include "UTickableWorldSubsystem.h"
 #include "RunGameType.h"
-#include "Tickable.h"
 #include "RunGameTimerSubsystem.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCountdownCompleteDelegate);
@@ -18,15 +18,18 @@ class ARunGameGameState;
  * 倒计时：从 DefaultCountdownSeconds 倒数至 0，每秒 Tick 一次。
  * 正向计时：从 0.0 向上累计，每帧 Tick。
  * 不持有配置数据或分数逻辑，启停完全由 GameState 状态机驱动。
+ * 世界暂停时仍可正常计时。
  */
 UCLASS()
-class RUNGAME_API URunGameTimerSubsystem : public UWorldSubsystem, public FTickableGameObject
+class RUNGAME_API URunGameTimerSubsystem : public UTickableWorldSubsystem
 {
 	GENERATED_BODY()
 
 public:
 	/** Constructs the timer subsystem with zeroed time and stopped state */
 	URunGameTimerSubsystem();
+
+	virtual TStatId GetStatId() const override;
 
 	/** Binds to the game state's state-change event on world begin play */
 	virtual void OnWorldBeginPlay(UWorld& World) override;
@@ -50,8 +53,9 @@ protected:
 	virtual void Deinitialize() override;
 
 	virtual void Tick(float DeltaTime) override;
-	virtual TStatId GetStatId() const override;
-	virtual bool IsTickable() const override;
+
+	/** Allow ticking when the world is paused */
+	virtual bool IsTickableWhenPaused() const override { return true; }
 
 private:
 	/** Reactively starts/stops timers based on the new game state */
@@ -82,11 +86,17 @@ private:
 	/** Returns the RunGame game state cast from the world's game state */
 	ARunGameGameState* GetGameState() const;
 
-	FTimerHandle CountdownTimerHandle;
-
 	/** Accumulated forward time in seconds, incremented each tick */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Timer", meta = (AllowPrivateAccess = "true"))
 	float TotalTimeSeconds;
 
+	/** Whether the 1Hz countdown is currently active */
+	bool bIsCountdownActive = false;
+
+	/** Accumulates delta time to fire countdown ticks at 1Hz intervals */
+	float CountdownTickAccumulator = 0.0f;
+
 	bool bIsTimerRunning;
+
+	bool bResumingFromPause = false;
 };

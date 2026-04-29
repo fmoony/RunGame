@@ -3,6 +3,8 @@
 
 #include "RunGamePlayerController.h"
 #include "EnhancedInputSubsystems.h"
+#include "EnhancedInputComponent.h"
+#include "InputAction.h"
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
@@ -14,6 +16,7 @@
 #include "Camera/CameraActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Widgets/Input/SVirtualJoystick.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
 
 void ARunGamePlayerController::BeginPlay()
 {
@@ -53,6 +56,12 @@ void ARunGamePlayerController::BeginPlay()
 	{
 		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController BeginPlay: Failed to get GameState for state binding."));
 	}
+
+	// 绑定 TimerSubsystem 倒计时完成事件，倒计时结束后解冻引擎
+	if (URunGameTimerSubsystem* TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>())
+	{
+		TimerSubsystem->OnCountdownComplete.AddDynamic(this, &ARunGamePlayerController::OnCountdownCompleteCallback);
+	}
 }
 
 void ARunGamePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -62,6 +71,11 @@ void ARunGamePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		if (ARunGameGameState* GameState = World->GetGameState<ARunGameGameState>())
 		{
 			GameState->OnGameStateChanged.RemoveDynamic(this, &ARunGamePlayerController::OnGameStateChangedCallback);
+		}
+
+		if (URunGameTimerSubsystem* TimerSubsystem = World->GetSubsystem<URunGameTimerSubsystem>())
+		{
+			TimerSubsystem->OnCountdownComplete.RemoveDynamic(this, &ARunGamePlayerController::OnCountdownCompleteCallback);
 		}
 	}
 	Super::EndPlay(EndPlayReason);
@@ -90,6 +104,12 @@ void ARunGamePlayerController::SetupInputComponent()
 					Subsystem->AddMappingContext(CurrentContext, 0);
 				}
 			}
+		}
+
+		// Bind pause action
+		if (UEnhancedInputComponent* EnhancedInputComp = Cast<UEnhancedInputComponent>(InputComponent))
+		{
+			EnhancedInputComp->BindAction(PauseAction, ETriggerEvent::Started, this, &ARunGamePlayerController::TogglePause);
 		}
 	}
 }
@@ -172,6 +192,32 @@ void ARunGamePlayerController::SetViewTargetToMainMenuCamera()
 	}
 }
 
+void ARunGamePlayerController::TogglePause()
+{
+	ARunGameGameState* GameState = GetWorld()->GetGameState<ARunGameGameState>();
+	if (!GameState) return;
+
+	const ERunGameGameState CurrentState = GameState->GetCurrentState();
+
+	if (CurrentState == ERunGameGameState::InGame)
+	{
+		GameState->SetGameState(ERunGameGameState::Pause);
+		UGameplayStatics::SetGamePaused(GetWorld(), true);
+		UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Game paused."));
+	}
+	else if (CurrentState == ERunGameGameState::Pause)
+	{
+		GameState->SetGameState(ERunGameGameState::CountDown);
+		UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Unpausing — entering countdown."));
+	}
+}
+
+void ARunGamePlayerController::OnCountdownCompleteCallback()
+{
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Countdown complete, engine unfrozen."));
+}
+
 void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
 {
 	if (OldState == NewState)
@@ -189,8 +235,10 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 	case ERunGameGameState::CountDown:
 		bShowMouseCursor = false;
 		SetInputMode(FInputModeUIOnly());
-		if (OldState != ERunGameGameState::MainMenu)
-		SetViewTargetToMainMenuCamera();
+		if (OldState != ERunGameGameState::MainMenu && OldState != ERunGameGameState::Pause)
+		{
+			SetViewTargetToMainMenuCamera();
+		}
 		break;
 	case ERunGameGameState::InGame:
 		bShowMouseCursor = false;
@@ -198,7 +246,7 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 		break;
 	case ERunGameGameState::Pause:
 		bShowMouseCursor = true;
-		SetInputMode(FInputModeUIOnly());
+		SetInputMode(FInputModeGameOnly());
 		break;
 	case ERunGameGameState::GameOver:
 		bShowMouseCursor = true;
@@ -208,4 +256,3 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 		break;
 	}
 }
-

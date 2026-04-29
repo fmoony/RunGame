@@ -8,6 +8,7 @@
 #include "RunGamePlayerController.generated.h"
 
 class UInputMappingContext;
+class UInputAction;
 class UUserWidget;
 class ARunGameHUD;
 
@@ -21,6 +22,10 @@ class ARunGamePlayerController : public APlayerController
 	GENERATED_BODY()
 
 protected:
+	/** Pause Input Action */
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* PauseAction;
+
 	/** Input Mapping Contexts */
 	UPROPERTY(EditAnywhere, Category ="Input|Input Mappings")
 	TArray<UInputMappingContext*> DefaultMappingContexts;
@@ -46,6 +51,9 @@ protected:
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
 
+	/** Toggles pause state: InGame ↔ Pause (unpause goes through CountDown) */
+	void TogglePause();
+
 	/** Switch to UI input mode: show mouse cursor, disable character control */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Input")
 	void SetInputModeToUIOnly();
@@ -62,5 +70,8 @@ private:
 	/** Reactively manages input mode and view target based on game state changes */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
-};
 
+	/** Callback when countdown completes — unfreezes the engine after a pause-resume countdown */
+	UFUNCTION()
+	void OnCountdownCompleteCallback();
+};

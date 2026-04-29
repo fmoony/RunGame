@@ -87,9 +87,32 @@ void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ER
 		return;
 	}
 
-	if (NewState == ERunGameGameState::InGame)
+	switch (NewState)
 	{
-		SpawnPlayer();
+	case ERunGameGameState::MainMenu:
+		bResumingFromPause = false;
+		break;
+	case ERunGameGameState::InGame:
+		if (OldState == ERunGameGameState::Pause || bResumingFromPause)
+		{
+			bResumingFromPause = false;
+		}
+		else
+		{
+			SpawnPlayer();
+		}
+		break;
+	case ERunGameGameState::Pause:
+		if (OldState == ERunGameGameState::InGame)
+		{
+			bResumingFromPause = true;
+		}
+		break;
+	case ERunGameGameState::GameOver:
+		bResumingFromPause = false;
+		break;
+	default:
+		break;
 	}
 }
 
@@ -209,7 +232,7 @@ void ARunGameGameMode::HandlePlayerDeath(
 	{
 		return;
 	}
-	
+
 	// 广播玩家死亡事件
 	OnPlayerDeath.Broadcast(PlayerCharacter);
 
@@ -257,4 +280,3 @@ void ARunGameGameMode::HandlePlayerDeath(
 		UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: Player destruction scheduled with delay: %.2f seconds"), Delay);
 	}
 }
-

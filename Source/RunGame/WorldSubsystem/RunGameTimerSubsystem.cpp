@@ -10,6 +10,12 @@ URunGameTimerSubsystem::URunGameTimerSubsystem()
 	bIsTimerRunning = false;
 }
 
+TStatId URunGameTimerSubsystem::GetStatId() const
+{
+	// 使用宏快速声明一个性能统计周期，名字就叫当前的类名
+	RETURN_QUICK_DECLARE_CYCLE_STAT(URunGameTimerSubsystem, STATGROUP_Tickables);
+}
+
 void URunGameTimerSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
@@ -58,18 +64,32 @@ void URunGameTimerSubsystem::OnGameStateChangedCallback(ERunGameGameState OldSta
 	{
 	case ERunGameGameState::MainMenu:
 		StopTimer();
+		bResumingFromPause = false;
 		break;
 	case ERunGameGameState::CountDown:
 		StartCountdown();
 		break;
 	case ERunGameGameState::InGame:
-		StartTimer();
+		if (OldState == ERunGameGameState::Pause || bResumingFromPause)
+		{
+			bIsTimerRunning = true;
+			bResumingFromPause = false;
+		}
+		else
+		{
+			StartTimer();
+		}
 		break;
 	case ERunGameGameState::Pause:
 		StopTimer();
+		if (OldState == ERunGameGameState::InGame)
+		{
+			bResumingFromPause = true;
+		}
 		break;
 	case ERunGameGameState::GameOver:
 		StopTimer();
+		bResumingFromPause = false;
 		break;
 	default:
 		break;
@@ -81,16 +101,16 @@ void URunGameTimerSubsystem::OnGameStateChangedCallback(ERunGameGameState OldSta
 void URunGameTimerSubsystem::Tick(float DeltaTime)
 {
 	UpdateTimer(DeltaTime);
-}
 
-TStatId URunGameTimerSubsystem::GetStatId() const
-{
-	RETURN_QUICK_DECLARE_CYCLE_STAT(UMyLevelSubsystem, STATGROUP_Tickables);
-}
-
-bool URunGameTimerSubsystem::IsTickable() const
-{
-	return !HasAnyFlags(RF_ClassDefaultObject);
+	if (bIsCountdownActive)
+	{
+		CountdownTickAccumulator += DeltaTime;
+		while (CountdownTickAccumulator >= 1.0f)
+		{
+			CountdownTickAccumulator -= 1.0f;
+			UpdateCountdown();
+		}
+	}
 }
 
 // ---- 内部倒计时 ----
@@ -115,20 +135,16 @@ void URunGameTimerSubsystem::StartCountdown()
 
 	GameState->SetCountdownSeconds(InitialSeconds);
 
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().SetTimer(CountdownTimerHandle, this, &URunGameTimerSubsystem::UpdateCountdown, 1.0f, true);
-	}
+	bIsCountdownActive = true;
+	CountdownTickAccumulator = 0.0f;
 
 	UE_LOG(LogTemp, Warning, TEXT("RunGameTimerSubsystem: Countdown started with %d seconds"), InitialSeconds);
 }
 
 void URunGameTimerSubsystem::StopCountdown()
 {
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(CountdownTimerHandle);
-	}
+	bIsCountdownActive = false;
+	CountdownTickAccumulator = 0.0f;
 	UE_LOG(LogTemp, Warning, TEXT("RunGameTimerSubsystem: Countdown stopped"));
 }
 

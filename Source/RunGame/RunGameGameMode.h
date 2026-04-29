@@ -13,13 +13,13 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDeathDelegate, ARunGameChar
 /**
  *  Simple GameMode for a third person game
  */
-UCLASS(abstract) 
+UCLASS(abstract)
 class ARunGameGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
 public:
-		UPROPERTY(EditDefaultsOnly, Category = "Classes")
+	UPROPERTY(EditDefaultsOnly, Category = "Classes")
 	TSubclassOf<APawn> GameCharacterClass;
 
 	// 地板蓝图类配置（用于初始化 FloorSubsystem）
@@ -93,6 +93,7 @@ protected:
 	/** Reacts to game state changes -- spawns player when entering InGame */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
+
+private:
+	bool bResumingFromPause = false;
 };
-
-

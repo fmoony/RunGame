@@ -49,21 +49,17 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 	TArray<FSoftObjectPath> PathsToLoad;
 	for (const auto& SoftClass : StraightClassPtrs)
 	{
-		if (!SoftClass.IsValid())
+		if (!SoftClass.IsNull())
 		{
-			UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: Invalid StraightClass soft pointer found!"));
-			continue;
+			PathsToLoad.Add(SoftClass.ToSoftObjectPath());
 		}
-		PathsToLoad.Add(SoftClass.ToSoftObjectPath());
 	}
 	for (const auto& SoftClass : TurnClassPtrs)
 	{
-		if (!SoftClass.IsValid())
+		if (!SoftClass.IsNull())
 		{
-			UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: Invalid TurnClass soft pointer found!"));
-			continue;
+			PathsToLoad.Add(SoftClass.ToSoftObjectPath());
 		}
-		PathsToLoad.Add(SoftClass.ToSoftObjectPath());
 	}
 
 	if (PathsToLoad.Num() == 0)
