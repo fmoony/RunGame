@@ -110,6 +110,9 @@ public:
 	UFUNCTION()
 	void OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
+	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
+
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	UAnimMontage* SlideMontage;
 

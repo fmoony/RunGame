@@ -21,7 +21,7 @@ ARunGameCharacter::ARunGameCharacter()
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-		
+
 	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
@@ -46,6 +46,8 @@ ARunGameCharacter::ARunGameCharacter()
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = 400.0f;
 	CameraBoom->bUsePawnControlRotation = true;
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->CameraLagSpeed = 8.0f;
 
 	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
@@ -57,7 +59,7 @@ ARunGameCharacter::ARunGameCharacter()
 
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
+	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
@@ -94,7 +96,7 @@ void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 		{
-		
+
 		// Jumping
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
@@ -105,11 +107,11 @@ void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		// Looking
 		//EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Look);
-	
+
 		//Slide
 		EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Started, this, &ARunGameCharacter::StartSlide);
 		//EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Completed, this, &ARunGameCharacter::EndSlide);
-	
+
 	}
 	else
 	{
@@ -171,7 +173,7 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 		//// get forward vector
 		//const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 
-		//// get right vector 
+		//// get right vector
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		if (bTurn)
 		{
@@ -192,7 +194,7 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 		}
 		else
 		{
-			// add movement 
+			// add movement
 			//AddMovementInput(ForwardDirection, Forward);
 			if (!InTurnBox)
 			{
@@ -233,6 +235,8 @@ void ARunGameCharacter::StartSlide()
 	{
 		bIsSliding = true;
 
+		Crouch();
+
 		GetCharacterMovement()->GroundFriction = 0.0f;
 
 		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
@@ -264,6 +268,9 @@ void ARunGameCharacter::EndSlide()
 	if (bIsSliding)
 	{
 		bIsSliding = false;
+
+		UnCrouch();
+
 		AnimRootMotionTranslationScale = 1.0f;
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
 	}
@@ -274,11 +281,29 @@ void ARunGameCharacter::OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrup
 	if(Montage == SlideMontage)
 	{
 		EndSlide();
-		
+
 		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 		{
 			AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnSlideBlendingOut);
 		}
+	}
+}
+
+void ARunGameCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	if (CameraBoom)
+	{
+		CameraBoom->TargetOffset.Z += ScaledHalfHeightAdjust;
+	}
+}
+
+void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
+{
+	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
+	if (CameraBoom)
+	{
+		CameraBoom->TargetOffset.Z -= ScaledHalfHeightAdjust;
 	}
 }
 

@@ -361,4 +361,27 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-/Binaries/Win64
+
+# =========================
+# Unreal Engine 专属忽略项
+# =========================
+
+# 核心临时与构建目录 (直接写文件夹名，屏蔽所有平台的编译结果)
+Binaries/
+Build/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# 忽略自动生成的 VS 解决方案文件
+# (拉取代码后只需右键 .uproject 选择 Generate Visual Studio project files 即可)
+*.sln
+*.uproject.cbp
+*.uproject.custom
+*.uproject.sublime-workspace
+*.uproject.sublime-project
+*.uproject.code-workspace
+
+# 忽略按需生成的打包目录
+Archived/
+Packaged/
