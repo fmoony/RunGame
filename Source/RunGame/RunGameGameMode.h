@@ -82,6 +82,9 @@ public:
 			bool bImmediate,
 			float Delay);
 
+	/* Request from Pause UI */
+	void RequestRestartFromPause();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

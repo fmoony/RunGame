@@ -343,8 +343,22 @@ void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, E
 		return;
 	}
 
-	if (NewState == ERunGameGameState::MainMenu)
+	switch (NewState)
 	{
+	case ERunGameGameState::MainMenu:
 		Destroy();
+		break;
+	case ERunGameGameState::CountDown:
+		break;
+	case ERunGameGameState::InGame:
+		break;
+	case ERunGameGameState::Pause:
+		break;
+	case ERunGameGameState::GameOver:
+		break;
+	case ERunGameGameState::MAX:
+		break;
+	default:
+		break;
 	}
 }

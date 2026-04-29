@@ -7,6 +7,7 @@
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "RunGameGameState.h"
 #include "RunGamePlayerState.h"
+#include "Kismet/GameplayStatics.h"
 
 ARunGameGameMode::ARunGameGameMode()
 {
@@ -171,6 +172,11 @@ void ARunGameGameMode::InitializeGameTimer()
 // 重置游戏函数（完全重置到初始状态 = 回到主菜单）
 void ARunGameGameMode::ResetGame()
 {
+	if(GetWorld()->IsPaused())
+	{
+		UGameplayStatics::SetGamePaused(GetWorld(), false);
+	}
+
 	// 分数由 PlayerState 自行监听 GameState 状态变化来清除
 
 	// 回收所有活跃地板并重新生成初始地板链
@@ -200,6 +206,8 @@ void ARunGameGameMode::ResetGame()
 // 重新开始游戏（绕过主菜单，直接进入倒计时）
 void ARunGameGameMode::StartNewGame()
 {
+	bResumingFromPause = false;
+
 	// 分数由 PlayerState 自行监听 GameState 状态变化来清除
 
 	// 回收所有活跃地板并重新生成初始地板链
@@ -279,4 +287,22 @@ void ARunGameGameMode::HandlePlayerDeath(
 		);
 		UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: Player destruction scheduled with delay: %.2f seconds"), Delay);
 	}
+}
+
+void ARunGameGameMode::RequestRestartFromPause()
+{
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+
+	// 清理角色
+	if (ARunGamePlayerController* PC = Cast<ARunGamePlayerController>(GetWorld()->GetFirstPlayerController()))
+	{
+		if (APawn* CurrentPawn = PC->GetPawn())
+		{
+			CurrentPawn->Destroy();
+		}
+		PC->SetViewTargetToMainMenuCamera();
+	}
+
+	// 直接调用 StartNewGame 来重置游戏状态并进入倒计时
+	StartNewGame();
 }
