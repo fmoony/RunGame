@@ -177,6 +177,12 @@ void ARunGameGameMode::ResetGame()
 		UGameplayStatics::SetGamePaused(GetWorld(), false);
 	}
 
+	// 设置游戏状态为 MainMenu，触发 HUD 自动切换到主菜单 UI
+	if (ARunGameGameState* CurrentGameState = GetGameState<ARunGameGameState>())
+	{
+		CurrentGameState->SetGameState(ERunGameGameState::MainMenu);
+	}
+
 	// 分数由 PlayerState 自行监听 GameState 状态变化来清除
 
 	// 回收所有活跃地板并重新生成初始地板链
@@ -193,11 +199,6 @@ void ARunGameGameMode::ResetGame()
 		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
 	}
 
-	// 设置游戏状态为 MainMenu，触发 HUD 自动切换到主菜单 UI
-	if (ARunGameGameState* CurrentGameState = GetGameState<ARunGameGameState>())
-	{
-		CurrentGameState->SetGameState(ERunGameGameState::MainMenu);
-	}
 	// 输入模式由 Controller 自行监听 GameState 状态变化来管理
 
 	UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: Game reset, all data cleared, returned to MainMenu"));

@@ -323,41 +323,53 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 		}
 	}
 
+	// Broadcast to listeners (Controller handles SetInputModeToUIOnly, etc.)
+	OnCharacterDied.Broadcast(DamageType, this);
+
 	// Play death montage by damage type
 	if (UAnimMontage* const* FoundMontage = DeathMontages.Find(DamageType))
 	{
 		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 		{
+			AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 			AnimInstance->Montage_Play(*FoundMontage);
 		}
 	}
-
-	// Broadcast to listeners (Controller handles SetInputModeToUIOnly, etc.)
-	OnCharacterDied.Broadcast(DamageType, this);
-
-	// Schedule destruction
-	if (DestroyDelay <= 0.0f)
-	{
-		Destroy();
-		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed immediately"), *GetName());
-	}
 	else
 	{
-		FTimerHandle DestroyTimer;
-		GetWorld()->GetTimerManager().SetTimer(
-			DestroyTimer,
-			[this]()
-			{
-				if (IsValid(this))
+		// Schedule destruction
+		if (DestroyDelay <= 0.0f)
+		{
+			Destroy();
+			UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed immediately"), *GetName());
+		}
+		else
+		{
+			FTimerHandle DestroyTimer;
+			GetWorld()->GetTimerManager().SetTimer(
+				DestroyTimer,
+				[this]()
 				{
-					Destroy();
-					UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed after delay"), *GetName());
-				}
-			},
-			DestroyDelay,
-			false
-		);
+					if (IsValid(this))
+					{
+						Destroy();
+						UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed after delay"), *GetName());
+					}
+				},
+				DestroyDelay,
+				false
+			);
+		}
 	}
+}
+
+void ARunGameCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted)
+{
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
+	}
+	Destroy();
 }
 
 void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)

@@ -88,6 +88,9 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
 	TMap<FGameplayTag, UAnimMontage*> DeathMontages;
 
+	UFUNCTION()
+	void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+
 protected:
 
 	/** Called for movement input */
