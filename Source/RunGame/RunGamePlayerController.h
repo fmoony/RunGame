@@ -75,6 +75,4 @@ private:
 	UFUNCTION()
 	void OnCountdownCompleteCallback();
 
-	UFUNCTION()
-	void OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter);
 };

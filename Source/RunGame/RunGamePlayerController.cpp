@@ -126,7 +126,7 @@ void ARunGamePlayerController::OnPossess(APawn* InPawn)
 	}
 
 	// 绑定 Character 的死亡委托，Character 自行广播死亡后 Controller 响应切换输入模式
-	PlayerCharacter->OnCharacterDied.AddDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
+	//PlayerCharacter->OnCharacterDied.AddDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
 
 	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController OnPossess: Bound SetInputModeToUIOnly to Character death delegate."));
 }
@@ -135,7 +135,7 @@ void ARunGamePlayerController::OnUnPossess()
 {
 	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(GetPawn()))
 	{
-		PlayerCharacter->OnCharacterDied.RemoveDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
+		//PlayerCharacter->OnCharacterDied.RemoveDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
 	}
 
 	Super::OnUnPossess();
@@ -240,8 +240,3 @@ void ARunGamePlayerController::OnCountdownCompleteCallback()
 	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Countdown complete, engine unfrozen."));
 }
 
-void ARunGamePlayerController::OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)
-{
-	SetInputModeToUIOnly();
-	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Character died callback received, input mode set to UI Only."));
-}

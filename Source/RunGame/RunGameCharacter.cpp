@@ -295,19 +295,16 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 
 void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 {
-	// Stop all movement and actions before playing death animation
-	//GetCharacterMovement()->DisableMovement();
-	//GetCharacterMovement()->StopMovementImmediately();
+	// Notify GameState of game over
+	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
+	{
+		GS->SetGameState(ERunGameGameState::GameOver);
+	}
 
 	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
 	{
 		AnimInstance->StopAllMontages(0.0f);
 	}
-
-	//if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	//{
-	//	DisableInput(PC);
-	//}
 
 	// Spawn death camera before playing animation to avoid camera jitter
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
@@ -333,18 +330,6 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 		{
 			AnimInstance->Montage_Play(*FoundMontage);
 		}
-	}
-
-	// Notify GameState of game over
-	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
-	{
-		GS->SetGameState(ERunGameGameState::GameOver);
-	}
-
-	// UnPossess before destruction to prevent engine auto view reset
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		PC->UnPossess();
 	}
 
 	// Broadcast to listeners (Controller handles SetInputModeToUIOnly, etc.)
