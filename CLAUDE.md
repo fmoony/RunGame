@@ -39,25 +39,30 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 |---|---|---|
 | `OnGameStateChanged` | `ARunGameGameState` | `(ERunGameGameState Old, ERunGameGameState New)` |
 | `OnCountdownUpdated` | `ARunGameGameState` | `(int32 CountdownSeconds)` |
-| `OnCharacterDeath` | `ARunGameGameState` | `()` — no params |
-| `OnPlayerDeath` | `ARunGameGameMode` | `(ARunGameCharacter* PlayerCharacter)` |
 | `OnCountdownComplete` | `URunGameTimerSubsystem` | `()` — no params |
 | `OnTimeChanged` | `URunGameTimerSubsystem` | `(float NewTime)` |
 | `OnScoreChanged` | `ARunGamePlayerState` | `(int64 NewScore)` |
 | `OnFloorSystemReady` | `URunGameFloorSubsystem` | `()` — no params |
 | `OnInteractionBegin` | `ARunGameInteractiveVolume` | `(ARunGameCharacter* PlayerCharacter)` |
 | `OnInteractionEnd` | `ARunGameInteractiveVolume` | `(ARunGameCharacter* PlayerCharacter)` |
+| `OnHealthChanged` | `UHealthComponent` | `(float CurrentHP, float MaxHP, float Delta)` |
+| `OnDeath` | `UHealthComponent` | `(FGameplayTag DamageType, AActor* DeathCauser)` |
+| `OnCharacterDied` | `ARunGameCharacter` | `(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)` |
 
 ### Player Lifecycle
 
 1. **Countdown**: `GameMode::StartGameCountDown()` sets state to `CountDown`. `TimerSubsystem` reacts, reads `GameState->DefaultCountdownSeconds`, starts a 1Hz `FTimerHandle` that decrements `GameState->CountdownSeconds` (broadcasting `OnCountdownUpdated` each tick).
 2. **Spawn**: When countdown reaches 0, `TimerSubsystem` sets state to `InGame`, broadcasts `OnCountdownComplete`. `GameMode::SpawnPlayer()` spawns `GameCharacterClass`, calls `Possess`, blends view back to character, sets `bAutoManageActiveCameraTarget = true`.
-3. **Death flow** (ordering matters):
-   - `ARunGameDeathVolume` → `GameMode::HandlePlayerDeath` → broadcasts `OnPlayerDeath` (GameMode), sets state to `GameOver`.
-   - Then broadcasts `GameState::OnCharacterDeath` (bound to `Character::Die` + `Controller::SetInputModeToUIOnly`).
-   - `Character::Die()` spawns a death `ACameraActor` at the follow-camera location and blends the view to it.
-   - `GameMode` calls `UnPossess()` **before** destroying the character (prevents engine auto-view-reset).
-   - Character is destroyed (immediately or delayed via `FTimerHandle`).
+3. **Death flow** — fully managed by `ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)`:
+   - Two entry paths: (A) `ARunGameDeathVolume` calls `Character->Die(FGameplayTag(), DeathDelay)` directly; (B) `HealthComponent::OnDeath` → `OnHealthDepleted` → `Die(DamageType)`.
+   - `Die()` executes in this order:
+     1. `DisableMovement` + `StopMovementImmediately` + `StopAllMontages` + `DisableInput`
+     2. Spawn death `ACameraActor` at follow-camera location, blend view to it **(before animation to avoid camera jitter)**
+     3. Play death montage from `DeathMontages` map (looked up by `FGameplayTag DamageType`)
+     4. `SetGameState(GameOver)` — reactive listeners (HUD, etc.) respond automatically
+     5. `UnPossess()` — prevents engine auto-view-reset on Pawn destruction
+     6. `OnCharacterDied.Broadcast(DamageType, this)` → `Controller` reacts with `SetInputModeToUIOnly`
+     7. `Destroy()` — immediate or via `FTimerHandle` with `DestroyDelay`
 4. **Respawn**: `GameMode::StartNewGame()` → same countdown path → `SpawnPlayer()` re-possesses a new pawn and blends the view back.
 
 ### World Subsystems
@@ -78,7 +83,7 @@ All score variables are `int64`. The timer is paused/unpaused reactively by `OnG
 
 ### Input
 
-`ARunGamePlayerController` manages `EnhancedInput` mapping contexts. On possess it binds `Die` + `SetInputModeToUIOnly` to `GameState::OnCharacterDeath`. Input mode and view target are self-managed via `OnGameStateChangedCallback` (the big switch on state). `MainMenuCameraTag` (`FName`, editor-configurable) identifies the main-menu camera placed in the level via tag-based actor search.
+`ARunGamePlayerController` manages `EnhancedInput` mapping contexts. On possess it binds `SetInputModeToUIOnly` to `Character->OnCharacterDied`. Input mode and view target are self-managed via `OnGameStateChangedCallback` (the big switch on state). `MainMenuCameraTag` (`FName`, editor-configurable) identifies the main-menu camera placed in the level via tag-based actor search.
 
 ### HUD / UI
 
@@ -98,9 +103,63 @@ Three gameplay-template variants under `Source/RunGame/`:
 
 Each variant provides its own Character, GameMode, and PlayerController subclass.
 
+### Health / Damage System
+
+Does NOT use UE's built-in `TakeDamage`/`ApplyDamage`/`UDamageType`. Custom system via `IDamagable` interface + `UHealthComponent` + `UDamageDealerComponent`.
+
+**Data flow:**
+```
+DamageDealerComponent::OnOverlap
+  → OtherActor->Implements<UDamagable>()?
+    → IDamagable::Execute_OnTakeDamage(Actor, Damage, FGameplayTag DamageType, Causer)
+      → Actor::OnTakeDamage_Implementation → HealthComponent->ApplyDamage(...)
+        → CurrentHP -= Damage → broadcast OnHealthChanged / OnDeath
+```
+
+**`IDamagable`** (Blueprintable interface, `RunGame/Interfaces/`):
+- `OnTakeDamage(float, FGameplayTag, AActor*)`, `OnTakeHealing(float, AActor*)`, `OnDeath(AActor*)` — all `BlueprintNativeEvent`
+- `GetCurrentHP()`, `GetMaxHP()`, `IsDead()` — query functions, `BlueprintNativeEvent`
+
+**`UHealthComponent`** (ActorComponent, `RunGame/Actor/Component/`):
+- Properties: `MaxHP` (EditAnywhere, ClampMin=1), `CurrentHP`, `bIsDead`
+- Public API: `ApplyDamage(Damage, FGameplayTag DamageType, Causer)`, `Heal(Amount, Healer)`, `Revive(RestoreHP)`
+- Delegates: `FOnHealthChanged(CurrentHP, MaxHP, Delta)` — positive Delta=heal, negative=damage; `FOnDeath(DeathCauser)`
+- Tick disabled (`bCanEverTick = false`)
+- Does NOT inherit from `IDamagable` — the owning Actor implements the interface and forwards to this component
+
+**`UDamageDealerComponent`** (UBoxComponent, `RunGame/Actor/Component/`):
+- Trigger overlap → checks `OtherActor->Implements<UDamagable>()` → calls `IDamagable::Execute_OnTakeDamage`
+- Properties: `DamageAmount` (float), `DamageType` (FGameplayTag)
+
+**`ARunGameCharacter`** integration:
+- Implements `IDamagable`, owns `UHealthComponent*` via `CreateDefaultSubobject`
+- `BeginPlay` binds `HealthComponent->OnDeath` → `OnHealthDepleted` → `Die(DamageType)`
+- All interface `_Implementation` functions forward to `HealthComponent`
+- `Die(FGameplayTag, DestroyDelay)` is the single death entry point — handles stop → camera → montage → GameState → UnPossess → broadcast → destroy
+- `OnCharacterDied` (BlueprintAssignable) — broadcast by `Die()`, Controller binds for input mode change
+- `DeathMontages` (`TMap<FGameplayTag, UAnimMontage*>`) — maps damage type to death animation
+- Two entry paths converge: (1) HP depletion → `OnHealthDepleted`, (2) death volume → `DeathVolume` calls `Die()` directly
+- `GameMode` no longer participates in death handling; `HandlePlayerDeath` and `OnPlayerDeath` are removed
+
 ### Key Dependencies
 
-From `RunGame.Build.cs` — Public: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `AIModule`, `StateTreeModule`, `GameplayStateTreeModule`, `UMG`, `FunctionalTesting`. Private: `Slate`, `SlateCore`.
+From `RunGame.Build.cs` — Public: `Core`, `CoreUObject`, `Engine`, `InputCore`, `EnhancedInput`, `AIModule`, `StateTreeModule`, `GameplayStateTreeModule`, `UMG`, `FunctionalTesting`, `GameplayTags`. Private: `Slate`, `SlateCore`.
+
+### Include Conventions
+
+- Forward-declare classes in headers where possible; include in .cpp
+- Include paths are relative to the module root (e.g. `#include "Actor/Component/HealthComponent.h"`, `#include "Interfaces/Damagable.h"`)
+- For `FGameplayTag`, include `GameplayTagContainer.h`
+
+### Component Naming
+
+- Components live under subdirectories of their owner type: `Actor/Component/` for actor-level components
+- Prefix with their domain (e.g. `UHealthComponent` not `URunGameHealthComponent`)
+
+### Scope
+
+- Only modify `ARunGameCharacter` and non-variant classes
+- Never touch `Variant_Combat/`, `Variant_Platforming/`, `Variant_SideScrolling/`
 
 ## Logging
 

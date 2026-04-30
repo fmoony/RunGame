@@ -2,6 +2,7 @@
 
 #include "RunGameCharacter.h"
 #include "RunGamePlayerController.h"
+#include "Actor/Component/HealthComponent.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraActor.h"
@@ -54,13 +55,13 @@ ARunGameCharacter::ARunGameCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
+	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
+
 	PrimaryActorTick.bCanEverTick = true;
 	bIsSliding = false;
 
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character)
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
 
 void ARunGameCharacter::BeginPlay()
@@ -72,10 +73,14 @@ void ARunGameCharacter::BeginPlay()
 
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
 
-	// 绑定 GameState 状态变化，MainMenu 时自毁
 	if (ARunGameGameState* GameState = GetWorld()->GetGameState<ARunGameGameState>())
 	{
 		GameState->OnGameStateChanged.AddDynamic(this, &ARunGameCharacter::OnGameStateChangedCallback);
+	}
+
+	if (HealthComponent)
+	{
+		HealthComponent->OnDeath.AddDynamic(this, &ARunGameCharacter::OnHealthDepleted);
 	}
 }
 
@@ -93,7 +98,6 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 		{
 
@@ -103,7 +107,6 @@ void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Move);
-		//EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Look);
 
 		// Looking
 		//EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Look);
@@ -125,7 +128,6 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 
 	if (GetController() == nullptr) return;
 
-	// 通过曲线与游戏运行时间动态设置最大速度
 	if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
 	{
 		const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
@@ -146,19 +148,15 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 
 void ARunGameCharacter::Move(const FInputActionValue& Value)
 {
-	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// route the input
 	DoMove(MovementVector.X, MovementVector.Y);
 }
 
 void ARunGameCharacter::Look(const FInputActionValue& Value)
 {
-	// input is a Vector2D
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
-	// route the input
 	DoLook(LookAxisVector.X, LookAxisVector.Y);
 }
 
@@ -166,14 +164,9 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() != nullptr && Right != 0.0f)
 	{
-		// find out which way is forward
 		const FRotator Rotation = GetController()->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		//// get forward vector
-		//const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-
-		//// get right vector
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 		if (bTurn)
 		{
@@ -194,12 +187,8 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 		}
 		else
 		{
-			// add movement
-			//AddMovementInput(ForwardDirection, Forward);
 			if (!InTurnBox)
 			{
-				//const FRotator YawRotation(0, DesireRotation.Yaw, 0);
-				//const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 				AddMovementInput(RightDirection, Right);
 			}
 		}
@@ -211,7 +200,6 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 {
 	if (GetController() != nullptr)
 	{
-		// add yaw and pitch input to controller
 		AddControllerYawInput(Yaw);
 		AddControllerPitchInput(Pitch);
 	}
@@ -219,13 +207,11 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 
 void ARunGameCharacter::DoJumpStart()
 {
-	// signal the character to jump
 	Jump();
 }
 
 void ARunGameCharacter::DoJumpEnd()
 {
-	// signal the character to stop jumping
 	StopJumping();
 }
 
@@ -247,7 +233,6 @@ void ARunGameCharacter::StartSlide()
 			if (SlideMontage)
 			{
 				float FinalPlayRate = MontagePlayRate;
-				// 通过当前玩家速度与基准速度比值动态设置动画执行速度
 				if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
 				{
 					const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
@@ -271,6 +256,7 @@ void ARunGameCharacter::EndSlide()
 
 		UnCrouch();
 
+		GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
 		AnimRootMotionTranslationScale = 1.0f;
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
 	}
@@ -307,9 +293,23 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 	}
 }
 
-void ARunGameCharacter::Die()
+void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 {
-	// 原地生成新摄像机并绑定玩家视角
+	// Stop all movement and actions before playing death animation
+	//GetCharacterMovement()->DisableMovement();
+	//GetCharacterMovement()->StopMovementImmediately();
+
+	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+	{
+		AnimInstance->StopAllMontages(0.0f);
+	}
+
+	//if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	//{
+	//	DisableInput(PC);
+	//}
+
+	// Spawn death camera before playing animation to avoid camera jitter
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		const FVector CamLocation = FollowCamera ? FollowCamera->GetComponentLocation() : GetActorLocation();
@@ -326,14 +326,58 @@ void ARunGameCharacter::Die()
 		}
 	}
 
-	//if (CameraBoom && CameraBoom->GetAttachParent())
-	//{
-	//	CameraBoom->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
-	//}
+	// Play death montage by damage type
+	if (UAnimMontage* const* FoundMontage = DeathMontages.Find(DamageType))
+	{
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->Montage_Play(*FoundMontage);
+		}
+	}
 
-	// UnPossess 已在 GameMode::HandlePlayerDeath 中调用，无需在此处禁用输入或碰撞
+	// Notify GameState of game over
+	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
+	{
+		GS->SetGameState(ERunGameGameState::GameOver);
+	}
 
-	UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died"), *GetName());
+	// UnPossess before destruction to prevent engine auto view reset
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		PC->UnPossess();
+	}
+
+	// Broadcast to listeners (Controller handles SetInputModeToUIOnly, etc.)
+	OnCharacterDied.Broadcast(DamageType, this);
+
+	// Schedule destruction
+	if (DestroyDelay <= 0.0f)
+	{
+		Destroy();
+		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed immediately"), *GetName());
+	}
+	else
+	{
+		FTimerHandle DestroyTimer;
+		GetWorld()->GetTimerManager().SetTimer(
+			DestroyTimer,
+			[this]()
+			{
+				if (IsValid(this))
+				{
+					Destroy();
+					UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died — destroyed after delay"), *GetName());
+				}
+			},
+			DestroyDelay,
+			false
+		);
+	}
+}
+
+void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)
+{
+	Die(DamageType);
 }
 
 void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
@@ -362,3 +406,43 @@ void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, E
 		break;
 	}
 }
+
+// ~begin IDamagable interface
+
+void ARunGameCharacter::OnTakeDamage_Implementation(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
+{
+	if (HealthComponent)
+	{
+		HealthComponent->ApplyDamage(Damage, DamageType, DamageCauser);
+	}
+}
+
+void ARunGameCharacter::OnTakeHealing_Implementation(float HealAmount, AActor* Healer)
+{
+	if (HealthComponent)
+	{
+		HealthComponent->Heal(HealAmount, Healer);
+	}
+}
+
+void ARunGameCharacter::OnDeath_Implementation(AActor* DeathCauser)
+{
+	// death logic is driven by HealthComponent::OnDeath delegate, bound to OnHealthDepleted
+}
+
+float ARunGameCharacter::GetCurrentHP_Implementation() const
+{
+	return HealthComponent ? HealthComponent->GetCurrentHP() : 0.0f;
+}
+
+float ARunGameCharacter::GetMaxHP_Implementation() const
+{
+	return HealthComponent ? HealthComponent->GetMaxHP() : 0.0f;
+}
+
+bool ARunGameCharacter::IsDead_Implementation() const
+{
+	return HealthComponent ? HealthComponent->IsDead() : false;
+}
+
+// ~end IDamagable interface

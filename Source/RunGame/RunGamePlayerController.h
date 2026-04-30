@@ -74,4 +74,7 @@ private:
 	/** Callback when countdown completes — unfreezes the engine after a pause-resume countdown */
 	UFUNCTION()
 	void OnCountdownCompleteCallback();
+
+	UFUNCTION()
+	void OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter);
 };

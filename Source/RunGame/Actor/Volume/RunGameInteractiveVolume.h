@@ -31,12 +31,11 @@ protected:
     UBoxComponent* CollisionComp;
 
 	/** Detects actor entry into the volume and fires the player-enter event */
-	/** Detects actor entry into the volume and fires the player-enter event */
 	virtual void NotifyActorBeginOverlap(AActor* OtherActor) override;
+
 	/** Detects actor exit from the volume and fires the player-leave event */
 	virtual void NotifyActorEndOverlap(AActor* OtherActor) override;
 
-	/** BlueprintNativeEvent: called when a RunGame character enters this volume */
 	/** Default C++ implementation of OnPlayerEnter -- fires the delegate */
 	/** BlueprintNativeEvent: called when a RunGame character enters this volume */
 	UFUNCTION(BlueprintNativeEvent, Category = "RunGame|Interaction")

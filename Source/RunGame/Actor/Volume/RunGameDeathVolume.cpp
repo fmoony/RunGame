@@ -2,8 +2,7 @@
 
 #include "Actor/Volume/RunGameDeathVolume.h"
 #include "RunGameCharacter.h"
-#include "RunGameGameMode.h"
-#include "Kismet/GameplayStatics.h"
+#include "GameplayTagContainer.h"
 
 ARunGameDeathVolume::ARunGameDeathVolume()
 {
@@ -28,16 +27,12 @@ void ARunGameDeathVolume::OnPlayerEnter_Implementation(ARunGameCharacter* Player
 
 void ARunGameDeathVolume::TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, ARunGameCharacter* PlayerCharacter)
 {
-	// 通知GameMode玩家死亡
-	if(ARunGameGameMode* GameMode = Cast<ARunGameGameMode>(UGameplayStatics::GetGameMode(this)))
+	if (!PlayerCharacter)
 	{
-		// 通知GameMode处理玩家死亡
-		GameMode->HandlePlayerDeath(DeathVolume, PlayerCharacter, bImmediateDeath, DeathDelay);
-		bHasTriggeredDeath = false;
+		return;
 	}
-	else
-	{
-		UE_LOG(LogTemp, Error, TEXT("Failed to get GameMode in TriggerDeathEvent"));
-	}
-}
 
+	// 直接调用 Character 的 Die，死亡逻辑完全由 Character 自行处理
+	PlayerCharacter->Die(FGameplayTag(), DeathDelay);
+	bHasTriggeredDeath = false;
+}

@@ -118,41 +118,24 @@ void ARunGamePlayerController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
-	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
-	if (!GS)
+	ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(InPawn);
+	if (!PlayerCharacter)
 	{
-		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController OnPossess: Failed to get GameState."));
+		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController OnPossess: Pawn is not ARunGameCharacter."));
 		return;
 	}
 
-	GS->OnCharacterDeath.AddDynamic(this, &ARunGamePlayerController::SetInputModeToUIOnly);
+	// 绑定 Character 的死亡委托，Character 自行广播死亡后 Controller 响应切换输入模式
+	PlayerCharacter->OnCharacterDied.AddDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
 
-	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(InPawn))
-	{
-		GS->OnCharacterDeath.AddDynamic(PlayerCharacter, &ARunGameCharacter::Die);
-		UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController OnPossess: Bound Die + SetInputModeToUIOnly to GameState death delegate."));
-	}
-	else
-	{
-		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController OnPossess: Pawn is not ARunGameCharacter, cannot bind Die."));
-	}
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController OnPossess: Bound SetInputModeToUIOnly to Character death delegate."));
 }
 
 void ARunGamePlayerController::OnUnPossess()
 {
-	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
-	if (GS)
+	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(GetPawn()))
 	{
-		GS->OnCharacterDeath.RemoveDynamic(this, &ARunGamePlayerController::SetInputModeToUIOnly);
-
-		if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(GetPawn()))
-		{
-			GS->OnCharacterDeath.RemoveDynamic(PlayerCharacter, &ARunGameCharacter::Die);
-		}
-	}
-	else
-	{
-		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController OnUnPossess: Failed to get GameState."));
+		PlayerCharacter->OnCharacterDied.RemoveDynamic(this, &ARunGamePlayerController::OnCharacterDiedCallback);
 	}
 
 	Super::OnUnPossess();
@@ -212,12 +195,6 @@ void ARunGamePlayerController::TogglePause()
 	}
 }
 
-void ARunGamePlayerController::OnCountdownCompleteCallback()
-{
-	UGameplayStatics::SetGamePaused(GetWorld(), false);
-	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Countdown complete, engine unfrozen."));
-}
-
 void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
 {
 	if (OldState == NewState)
@@ -255,4 +232,16 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 	default:
 		break;
 	}
+}
+
+void ARunGamePlayerController::OnCountdownCompleteCallback()
+{
+	UGameplayStatics::SetGamePaused(GetWorld(), false);
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Countdown complete, engine unfrozen."));
+}
+
+void ARunGamePlayerController::OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)
+{
+	SetInputModeToUIOnly();
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Character died callback received, input mode set to UI Only."));
 }

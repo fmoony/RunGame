@@ -19,7 +19,8 @@ public class RunGame : ModuleRules
 			"GameplayStateTreeModule",
 			"UMG",
 			"Slate",
-			"FunctionalTesting"
+			"FunctionalTesting",
+			"GameplayTags"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });
@@ -51,4 +52,3 @@ public class RunGame : ModuleRules
 		// To include OnlineSubsystemSteam, add it to the plugins section in your uproject file with the Enabled attribute set to true
 	}
 }
-

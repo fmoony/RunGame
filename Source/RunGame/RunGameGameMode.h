@@ -5,10 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "RunGameType.h"
-#include "Actor/Volume/RunGameDeathVolume.h"
 #include "RunGameGameMode.generated.h"
-
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnPlayerDeathDelegate, ARunGameCharacter*, PlayerCharacter);
 
 /**
  *  Simple GameMode for a third person game
@@ -42,10 +39,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Game")
 	float GameTotalTime;
 
-	// 玩家死亡相关
-	UPROPERTY(BlueprintAssignable, Category = "RunGame|Death")
-	FOnPlayerDeathDelegate OnPlayerDeath;
-
 	// 玩家死亡延迟处理
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Death")
 	float PlayerDeathDelay;
@@ -72,15 +65,6 @@ public:
 	/** Restarts the game directly, bypassing the main menu */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Game")
 	void StartNewGame();
-
-	/** Processes player death -- broadcasts event, sets GameOver state, handles character destruction */
-	// Input mode and view target handled by Character::Die()
-	UFUNCTION(BlueprintCallable, Category = "RunGame|Death")
-	void HandlePlayerDeath(
-			ARunGameDeathVolume* DeathVolume,
-			ARunGameCharacter* PlayerCharacter,
-			bool bImmediate,
-			float Delay);
 
 	/* Request from Pause UI */
 	void RequestRestartFromPause();

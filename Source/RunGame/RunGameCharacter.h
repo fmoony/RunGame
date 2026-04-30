@@ -6,6 +6,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "RunGameType.h"
+#include "Interfaces/Damagable.h"
 #include "RunGameCharacter.generated.h"
 
 class USpringArmComponent;
@@ -13,17 +14,15 @@ class UCameraComponent;
 class UInputAction;
 class UCurveFloat;
 class URunGameTimerSubsystem;
+class UHealthComponent;
+class UAnimMontage;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterDiedSignature, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
 
-
-/**
- *  A simple player-controllable third person character
- *  Implements a controllable orbiting camera
- */
 UCLASS(abstract)
-class ARunGameCharacter : public ACharacter
+class ARunGameCharacter : public ACharacter, public IDamagable
 {
 	GENERATED_BODY()
 
@@ -34,7 +33,10 @@ class ARunGameCharacter : public ACharacter
 	/** Follow camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
-	
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UHealthComponent> HealthComponent;
+
 protected:
 
 	/** Jump Input Action */
@@ -59,11 +61,15 @@ protected:
 public:
 
 	/** Constructor */
-	ARunGameCharacter();	
+	ARunGameCharacter();
 
-	/** Character death cleanup — detaches camera, disables input/collision */
+	/** Broadcast when character dies. Listeners (Controller, GameMode, etc.) react accordingly */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|Death")
+	FOnCharacterDiedSignature OnCharacterDied;
+
+	/** Stops movement, spawns death camera, plays death animation, then self-destructs */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Death")
-	void Die();
+	void Die(FGameplayTag DamageType, float DestroyDelay = 3.0f);
 
 protected:
 	virtual void BeginPlay() override;
@@ -73,6 +79,14 @@ protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	// Called when HealthComponent reaches 0 HP
+	UFUNCTION()
+	void OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser);
+
+	/** Map damage type to corresponding death montage */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
+	TMap<FGameplayTag, UAnimMontage*> DeathMontages;
 
 protected:
 
@@ -154,5 +168,15 @@ public:
 	bool InTurnBox;
 
 	FRotator DesireRotation;
-};
 
+	// ~begin IDamagable interface
+
+	virtual void OnTakeDamage_Implementation(float Damage, FGameplayTag DamageType, AActor* DamageCauser) override;
+	virtual void OnTakeHealing_Implementation(float HealAmount, AActor* Healer) override;
+	virtual void OnDeath_Implementation(AActor* DeathCauser) override;
+	virtual float GetCurrentHP_Implementation() const override;
+	virtual float GetMaxHP_Implementation() const override;
+	virtual bool IsDead_Implementation() const override;
+
+	// ~end IDamagable interface
+};

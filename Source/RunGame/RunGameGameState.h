@@ -7,7 +7,6 @@
 #include "RunGameType.h"
 #include "RunGameGameState.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCharacterDeathDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnGameStateChangedSignature, ERunGameGameState, OldGameState, ERunGameGameState, NewGameState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCountdownUpdatedSignature, int32, CountdownSeconds);
 
@@ -57,9 +56,6 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Events")
 	FOnCountdownUpdatedSignature OnCountdownUpdated;
-
-	UPROPERTY(BlueprintAssignable, Category = "RunGame|Death")
-	FOnCharacterDeathDelegate OnCharacterDeath;
 
 private:
 	UPROPERTY(VisibleAnywhere, Category = "RunGame|State")
