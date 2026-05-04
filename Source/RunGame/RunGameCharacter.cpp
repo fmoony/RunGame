@@ -82,6 +82,7 @@ void ARunGameCharacter::BeginPlay()
 	if (HealthComponent)
 	{
 		HealthComponent->OnDeath.AddDynamic(this, &ARunGameCharacter::OnHealthDepleted);
+		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHitReaction);
 	}
 }
 
@@ -369,15 +370,15 @@ void ARunGameCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bI
 	{
 		AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 	}
-	//³¹µ×Çå¿Õ²¢½ûÓÃÒÆ¶¯×é¼þ
-	GetCharacterMovement()->StopMovementImmediately(); // É²Í£µ±Ç°µÄËùÓÐ¹ßÐÔºÍËÙ¶È
-	GetCharacterMovement()->DisableMovement();         // ½ûÓÃÎïÀí¼ÆËã
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ²ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½ï¿½
+	GetCharacterMovement()->StopMovementImmediately(); // É²Í£ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½Ð¹ï¿½ï¿½Ôºï¿½ï¿½Ù¶ï¿½
+	GetCharacterMovement()->DisableMovement();         // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
-	//¶³½á¶¯»­Íø¸ñÌå
+	//ï¿½ï¿½ï¿½á¶¯ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	if (USkeletalMeshComponent* SkelMesh = GetMesh())
 	{
-		SkelMesh->bPauseAnims = true;          // ÔÝÍ£¶¯»­²¥·Å£¨¶¨¸ñÔÚµ±Ç°Ö¡£©
-		SkelMesh->bNoSkeletonUpdate = true;    // ³¹µ×¹Ø±Õ¹Ç÷À¸üÐÂ£¨¼«´ó½ÚÊ¡ CPU ÐÔÄÜ£©
+		SkelMesh->bPauseAnims = true;          // ï¿½ï¿½Í£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½Ç°Ö¡ï¿½ï¿½
+		SkelMesh->bNoSkeletonUpdate = true;    // ï¿½ï¿½ï¿½×¹Ø±Õ¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¡ CPU ï¿½ï¿½ï¿½Ü£ï¿½
 	}
 	StartDissolve();
 }
@@ -426,6 +427,23 @@ void ARunGameCharacter::TickDissolve()
 		GetWorld()->GetTimerManager().ClearTimer(DissolveTimerHandle);
 		Destroy();
 	}
+}
+
+void ARunGameCharacter::OnHitReaction(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
+{
+	if (HitReactionMontages.IsEmpty())
+	{
+		return;
+	}
+
+	UAnimMontage** Found = HitReactionMontages.Find(DamageType);
+	UAnimMontage* Montage = Found ? *Found : nullptr;
+	if (!Montage)
+	{
+		return;
+	}
+
+	PlayAnimMontage(Montage);
 }
 
 void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)

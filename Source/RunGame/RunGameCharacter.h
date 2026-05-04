@@ -91,6 +91,16 @@ protected:
 	UFUNCTION()
 	void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
+	// Hit reaction
+
+	/** Called when HealthComponent takes damage without dying — plays hit reaction animation */
+	UFUNCTION()
+	void OnHitReaction(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
+
+	/** Map damage type to corresponding hit reaction montage */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Hit")
+	TMap<FGameplayTag, UAnimMontage*> HitReactionMontages;
+
 	/** Duration of the material dissolve effect in seconds */
 	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
 	float DissolveDuration = 2.0f;
@@ -200,4 +210,6 @@ public:
 	virtual bool IsDead_Implementation() const override;
 
 	// ~end IDamagable interface
+
+	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 };

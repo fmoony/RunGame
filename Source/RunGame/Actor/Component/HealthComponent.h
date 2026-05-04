@@ -8,6 +8,7 @@
 #include "HealthComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentHP, float, MaxHP, float, Delta);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDamageTaken, float, Damage, FGameplayTag, DamageType, AActor*, DamageCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, FGameplayTag, DamageType, AActor*, DeathCauser);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -30,6 +31,10 @@ public:
 	/** Broadcast when HP changes — positive Delta = healing, negative = damage */
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
 	FOnHealthChanged OnHealthChanged;
+
+	/** Broadcast when damage is applied and HP is still above 0 — for hit reactions. Mutually exclusive with OnDeath */
+	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
+	FOnDamageTaken OnDamageTaken;
 
 	/** Broadcast when HP reaches 0 */
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")

@@ -6,8 +6,10 @@
 #include "Blueprint/UserWidget.h"
 #include "RunGameInGame.generated.h"
 
+class UProgressBar;
 class URunGameTimerSubsystem;
 class UTextBlock;
+class UHealthComponent;
 
 /**
  * 游戏中UI - 显示实时分数和计时
@@ -34,9 +36,16 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UTextBlock> TimerText;
 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UProgressBar> HealthBar;
+
 	/** Timer subsystem reference for time display updates */
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
+
+	/** Cached HealthComponent reference for delegate unbinding */
+	UPROPERTY()
+	TObjectPtr<UHealthComponent> CachedHealthComponent;
 
 	/** Updates the score text display when player score changes */
 	UFUNCTION()
@@ -45,6 +54,10 @@ private:
 	/** Updates the timer text display when game time changes */
 	UFUNCTION()
 	void OnTimerUpdated(float NewTime);
+
+	/** Updates the health bar display when player health changes */
+	UFUNCTION()
+	void OnHealthUpdated(float CurrentHP, float MaxHP, float Delta);
 
 	/** Formats time in seconds to a MM:SS.ms string */
 	FString FormatTimeText(float TimeSeconds) const;

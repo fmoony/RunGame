@@ -37,6 +37,10 @@ void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor
 		bIsDead = true;
 		OnDeath.Broadcast(DamageType, DamageCauser);
 	}
+	else
+	{
+		OnDamageTaken.Broadcast(Damage, DamageType, DamageCauser);
+	}
 }
 
 void UHealthComponent::Heal(float Amount, AActor* Healer)

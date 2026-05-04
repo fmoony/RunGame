@@ -1,16 +1,21 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "HUD/RunGameInGame.h"
-#include "WorldSubsystem/RunGameTimerSubsystem.h"
-#include "RunGamePlayerState.h"
+#include "Actor/Component/HealthComponent.h"
+#include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "GameFramework/PlayerController.h"
+#include "RunGameCharacter.h"
+#include "RunGamePlayerState.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
 
 URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 	, ScoreText(nullptr)
 	, TimerText(nullptr)
+	, HealthBar(nullptr)
 	, TimerSubsystem(nullptr)
+	, CachedHealthComponent(nullptr)
 {
 }
 
@@ -45,6 +50,20 @@ void URunGameInGame::NativeConstruct()
 		TimerText->SetText(FText::FromString(TEXT("Time: 0.000s")));
 	}
 
+	// 绑定HealthComponent委托
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (ARunGameCharacter* Character = Cast<ARunGameCharacter>(PC->GetPawn()))
+		{
+			if (UHealthComponent* HealthComp = Character->GetHealthComponent())
+			{
+				CachedHealthComponent = HealthComp;
+				HealthComp->OnHealthChanged.AddDynamic(this, &URunGameInGame::OnHealthUpdated);
+				OnHealthUpdated(HealthComp->GetCurrentHP(), HealthComp->GetMaxHP(), 0.0f);
+			}
+		}
+	}
+
 	// 绑定委托回调
 	if (TimerSubsystem)
 	{
@@ -57,7 +76,7 @@ void URunGameInGame::NativeConstruct()
 			if (ARunGamePlayerState* PlayerState = Cast<ARunGamePlayerState>(PC->GetPlayerState<APlayerState>()))
 			{
 				PlayerState->OnScoreChanged.AddDynamic(this, &URunGameInGame::OnScoreUpdated);
-			
+
 				// 立即更新UI显示当前值
 				OnScoreUpdated(PlayerState->GetRunGameScore());
 			}
@@ -83,6 +102,13 @@ void URunGameInGame::NativeConstruct()
 
 void URunGameInGame::NativeDestruct()
 {
+	// 解绑HealthComponent委托
+	if (CachedHealthComponent)
+	{
+		CachedHealthComponent->OnHealthChanged.RemoveDynamic(this, &URunGameInGame::OnHealthUpdated);
+		CachedHealthComponent = nullptr;
+	}
+
 	// 解绑委托回调，防止内存泄漏
 	if (TimerSubsystem)
 	{
@@ -122,6 +148,14 @@ void URunGameInGame::OnTimerUpdated(float NewTime)
 		FString TimeString = FString::Printf(TEXT("Time: %s"), *FormatTimeText(NewTime));
 		TimerText->SetText(FText::FromString(TimeString));
 		//UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Time updated to %f seconds"), NewTime);
+	}
+}
+
+void URunGameInGame::OnHealthUpdated(float CurrentHP, float MaxHP, float Delta)
+{
+	if (HealthBar)
+	{
+		HealthBar->SetPercent(MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f);
 	}
 }
 
