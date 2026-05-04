@@ -91,6 +91,24 @@ protected:
 	UFUNCTION()
 	void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
+	/** Duration of the material dissolve effect in seconds */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
+	float DissolveDuration = 2.0f;
+
+	/** Name of the scalar material parameter to animate during dissolve */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
+	FName DissolveParameterName = "DissolveAmount";
+
+	/** Creates dynamic material instances and starts the dissolve timer */
+	void StartDissolve();
+
+	/** Called each tick during dissolve to update material parameter */
+	void TickDissolve();
+
+	FTimerHandle DissolveTimerHandle;
+	float DissolveElapsed = 0.0f;
+	TArray<UMaterialInstanceDynamic*> DissolveMaterials;
+
 protected:
 
 	/** Called for movement input */

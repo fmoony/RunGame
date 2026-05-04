@@ -17,6 +17,7 @@
 #include "RunGameGameState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Curves/CurveFloat.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 ARunGameCharacter::ARunGameCharacter()
 {
@@ -88,6 +89,8 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
+		World->GetTimerManager().ClearTimer(DissolveTimerHandle);
+
 		if (ARunGameGameState* GameState = World->GetGameState<ARunGameGameState>())
 		{
 			GameState->OnGameStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnGameStateChangedCallback);
@@ -337,11 +340,9 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 	}
 	else
 	{
-		// Schedule destruction
 		if (DestroyDelay <= 0.0f)
 		{
-			Destroy();
-			UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died â€” destroyed immediately"), *GetName());
+			StartDissolve();
 		}
 		else
 		{
@@ -352,8 +353,7 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 				{
 					if (IsValid(this))
 					{
-						Destroy();
-						UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Character %s died â€” destroyed after delay"), *GetName());
+						StartDissolve();
 					}
 				},
 				DestroyDelay,
@@ -369,7 +369,63 @@ void ARunGameCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bI
 	{
 		AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 	}
-	Destroy();
+	//³¹µ×Çå¿Õ²¢½ûÓÃÒÆ¶¯×é¼þ
+	GetCharacterMovement()->StopMovementImmediately(); // É²Í£µ±Ç°µÄËùÓÐ¹ßÐÔºÍËÙ¶È
+	GetCharacterMovement()->DisableMovement();         // ½ûÓÃÎïÀí¼ÆËã
+
+	//¶³½á¶¯»­Íø¸ñÌå
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->bPauseAnims = true;          // ÔÝÍ£¶¯»­²¥·Å£¨¶¨¸ñÔÚµ±Ç°Ö¡£©
+		SkelMesh->bNoSkeletonUpdate = true;    // ³¹µ×¹Ø±Õ¹Ç÷À¸üÐÂ£¨¼«´ó½ÚÊ¡ CPU ÐÔÄÜ£©
+	}
+	StartDissolve();
+}
+
+void ARunGameCharacter::StartDissolve()
+{
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	const int32 NumMaterials = GetMesh()->GetNumMaterials();
+	for (int32 i = 0; i < NumMaterials; ++i)
+	{
+		if (UMaterialInterface* Mat = GetMesh()->GetMaterial(i))
+		{
+			UMaterialInstanceDynamic* DMI = UMaterialInstanceDynamic::Create(Mat, this);
+			DissolveMaterials.Add(DMI);
+			GetMesh()->SetMaterial(i, DMI);
+		}
+	}
+
+	DissolveElapsed = 0.0f;
+	GetWorld()->GetTimerManager().SetTimer(
+		DissolveTimerHandle,
+		this,
+		&ARunGameCharacter::TickDissolve,
+		0.033f,
+		true
+	);
+}
+
+void ARunGameCharacter::TickDissolve()
+{
+	DissolveElapsed += 0.033f;
+	const float Alpha = FMath::Clamp(DissolveElapsed / DissolveDuration, 0.0f, 1.0f);
+
+	for (UMaterialInstanceDynamic* DMI : DissolveMaterials)
+	{
+		if (DMI)
+		{
+			DMI->SetScalarParameterValue(DissolveParameterName, Alpha);
+		}
+	}
+
+	if (Alpha >= 1.0f)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(DissolveTimerHandle);
+		Destroy();
+	}
 }
 
 void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)
