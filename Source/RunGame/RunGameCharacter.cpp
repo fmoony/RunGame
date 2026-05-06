@@ -371,6 +371,14 @@ void ARunGameCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bI
 		AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 	}
 
+	GetCharacterMovement()->StopMovementImmediately(); 
+
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->bPauseAnims = true;
+		SkelMesh->bNoSkeletonUpdate = true;
+	}
+
 	StartDissolve();
 }
 
