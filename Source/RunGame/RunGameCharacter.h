@@ -67,9 +67,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Death")
 	FOnCharacterDiedSignature OnCharacterDied;
 
-	/** Stops movement, spawns death camera, plays death animation, then self-destructs */
+	/** Stops movement, spawns death camera, plays death animation, dissolves, then self-destructs */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Death")
-	void Die(FGameplayTag DamageType, float DestroyDelay = 3.0f);
+	void Die(FGameplayTag DamageType, float DestroyDelay = 3.0f, AActor* DeathCauser = nullptr);
 
 protected:
 	virtual void BeginPlay() override;

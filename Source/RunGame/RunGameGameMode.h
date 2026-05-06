@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "RunGameType.h"
+#include "DataAssets/FloorConfigData.h"
 #include "RunGameGameMode.generated.h"
 
 /**
@@ -19,21 +20,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Classes")
 	TSubclassOf<APawn> GameCharacterClass;
 
-	// 地板蓝图类配置（用于初始化 FloorSubsystem）
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Straight Floor Classes"))
-	TArray<TSoftClassPtr<AActor>> StraightFloorClasses;
-
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Turn Floor Classes"))
-	TArray<TSoftClassPtr<AActor>> TurnFloorClasses;
-
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Pre-Allocate Count"))
-	int32 PreAllocateFloorCount = 20;
-
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Initial Straight Count"))
-	int32 InitialStraightFloorCount = 5;
-
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Initial Random Count"))
-	int32 InitialRandomFloorCount = 15;
+	// 地板配置数据资产（数据驱动的生成配置）
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|FloorSystem", meta = (DisplayName = "Floor Config"))
+	TObjectPtr<UFloorConfigData> FloorConfig;
 
 	// 游戏初始时间设置
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Game")

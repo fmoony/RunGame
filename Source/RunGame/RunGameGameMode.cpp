@@ -30,14 +30,14 @@ void ARunGameGameMode::BeginPlay()
 
 	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
 	{
-		if (StraightFloorClasses.Num() > 0)
+		if (FloorConfig)
 		{
-			FloorSystem->InitializeFloorSystem(StraightFloorClasses, TurnFloorClasses, PreAllocateFloorCount);
+			FloorSystem->InitializeFloorSystem(FloorConfig);
 			FloorSystem->OnFloorSystemReady.AddDynamic(this, &ARunGameGameMode::OnFloorSystemReadyCallback);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: StraightFloorClasses is empty. Skipping floor initialization."));
+			UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: FloorConfig is not set. Skipping floor initialization."));
 		}
 	}
 	else
@@ -67,7 +67,7 @@ void ARunGameGameMode::OnFloorSystemReadyCallback()
 			StartTransform = PC->GetPawn()->GetTransform();
 		}
 
-		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
+		FloorSystem->SpawnInitialFloors(StartTransform);
 	}
 }
 
@@ -196,7 +196,7 @@ void ARunGameGameMode::ResetGame()
 			StartTransform = StartSpot->GetActorTransform();
 		}
 
-		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
+		FloorSystem->SpawnInitialFloors(StartTransform);
 	}
 
 	// 输入模式由 Controller 自行监听 GameState 状态变化来管理
@@ -222,7 +222,7 @@ void ARunGameGameMode::StartNewGame()
 			StartTransform = StartSpot->GetActorTransform();
 		}
 
-		FloorSystem->SpawnInitialFloors(StartTransform, InitialStraightFloorCount, InitialRandomFloorCount);
+		FloorSystem->SpawnInitialFloors(StartTransform);
 	}
 
 	StartGameCountDown();

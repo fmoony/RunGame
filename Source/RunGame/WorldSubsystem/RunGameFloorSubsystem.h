@@ -1,5 +1,3 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #pragma once
 
 #include "CoreMinimal.h"
@@ -7,8 +5,18 @@
 #include "RunGameFloorSubsystem.generated.h"
 
 class AFloorBase;
+class UFloorConfigData;
+struct FFloorClassEntry;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFloorSystemReadyDelegate);
+
+/** Internal entry holding a loaded floor class with its config metadata */
+struct FLoadedFloorEntry
+{
+	TSubclassOf<AActor> LoadedClass;
+	float SpawnWeight;
+	int32 InitialGuaranteedCount;
+};
 
 UCLASS()
 class RUNGAME_API URunGameFloorSubsystem : public UWorldSubsystem
@@ -16,22 +24,16 @@ class RUNGAME_API URunGameFloorSubsystem : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	/** Constructs the floor subsystem with default pool and spawn settings */
+	/** Constructs the floor subsystem */
 	URunGameFloorSubsystem();
 
-	/** Begins async loading of floor classes and pre-allocates the floor pool */
-
+	/** Initializes the floor system using a data-driven configuration asset */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
-	void InitializeFloorSystem(
-		const TArray<TSoftClassPtr<AActor>>& InStraightClasses,
-		const TArray<TSoftClassPtr<AActor>>& InTurnClasses,
-		int32 InPreAllocateCount = 10
-	);
+	void InitializeFloorSystem(UFloorConfigData* InConfig);
 
-	/** Spawns the initial chain of straight and random floor segments */
-
+	/** Spawns the initial chain of floor segments using config-driven counts */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
-	void SpawnInitialFloors(const FTransform& StartTransform, int32 StraightCount = 5, int32 RandomCount = 15);
+	void SpawnInitialFloors(const FTransform& StartTransform);
 
 	/** Acquires the next random floor from the pool at the tracked spawn position */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
@@ -45,9 +47,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void ReturnFloor(AFloorBase* Floor);
 
-	/** Recycles active floors farther than MaxDistance from the player */
+	/** Recycles active floors farther than MaxDistance from the player. Pass 0 to use config value */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
-	void RecycleDistantFloors(const FVector& PlayerLocation, float MaxDistance = 3000.0f);
+	void RecycleDistantFloors(const FVector& PlayerLocation, float MaxDistance = 0.0f);
 
 	/** Hides all active floors and returns them to the pool */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
@@ -66,24 +68,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void ClearAllFloors();
 
+	/** Returns the current floor configuration data asset */
+	UFUNCTION(BlueprintPure, Category = "RunGame|FloorSystem")
+	UFloorConfigData* GetFloorConfig() const { return FloorConfig; }
+
 	/** Delegate broadcast when floor subsystem finishes async loading */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|FloorSystem")
 	FOnFloorSystemReadyDelegate OnFloorSystemReady;
 
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-	/** Clears all floors and cleans up on subsystem teardown */
 	virtual void Deinitialize() override;
 
 private:
-	/** Randomly selects a floor class (80% straight / 20% turn) */
-
-	TSubclassOf<AActor> RandomSelectFloorClass();
+	/** Randomly selects a floor class using weighted probability from config */
+	TSubclassOf<AActor> WeightedRandomSelectFloorClass();
 
 	/** Pops a floor of given class from pool; returns nullptr if empty */
 	AFloorBase* AcquireFloorFromPool(TSubclassOf<AActor> InClass);
 
-	/** Spawns a new floor actor at an off-screen location */
+	/** Spawns a new floor actor at the pool hide location */
 	AFloorBase* CreateNewFloorActor(TSubclassOf<AActor> InClass);
 
 	/** Initiates async loading of floor classes via the asset manager */
@@ -93,32 +97,26 @@ private:
 	UFUNCTION()
 	void OnFloorClassesLoaded();
 
-	// Async-load configuration data
-
-	TArray<TSoftClassPtr<AActor>> StraightClassPtrs;
-
-	TArray<TSoftClassPtr<AActor>> TurnClassPtrs;
+	// Config
 
 	UPROPERTY()
-	TArray<TSubclassOf<AActor>> LoadedStraightClasses;
+	TObjectPtr<UFloorConfigData> FloorConfig;
 
-	UPROPERTY()
-	TArray<TSubclassOf<AActor>> LoadedTurnClasses;
+	// Async-load: pending entries copied from config for load tracking
+	TArray<FFloorClassEntry> PendingFloorEntries;
 
-	int32 PreAllocateCount;
+	// Loaded floor classes with spawn metadata
+	TArray<FLoadedFloorEntry> LoadedFloorEntries;
 
 	bool bIsLoading;
-
 	bool bIsInitialized;
 
 	// Object pool: per-type sub-pools
-
 	TMap<TSubclassOf<AActor>, TArray<AFloorBase*>> PooledFloorsMap;
 
 	UPROPERTY()
 	TArray<TObjectPtr<AFloorBase>> ActiveFloors;
 
 	// Tracked position for next floor spawn
-
 	FTransform NextSpawnTransform;
 };

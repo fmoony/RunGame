@@ -1,12 +1,12 @@
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "Actor/Floor/FloorBase.h"
+#include "DataAssets/FloorConfigData.h"
 #include "Engine/World.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 
 URunGameFloorSubsystem::URunGameFloorSubsystem()
-	: PreAllocateCount(10)
-	, bIsLoading(false)
+	: bIsLoading(false)
 	, bIsInitialized(false)
 {
 }
@@ -26,20 +26,22 @@ void URunGameFloorSubsystem::Deinitialize()
 
 // ===== 初始化（异步加载） =====
 
-void URunGameFloorSubsystem::InitializeFloorSystem(
-	const TArray<TSoftClassPtr<AActor>>& InStraightClasses,
-	const TArray<TSoftClassPtr<AActor>>& InTurnClasses,
-	int32 InPreAllocateCount)
+void URunGameFloorSubsystem::InitializeFloorSystem(UFloorConfigData* InConfig)
 {
+	if (!InConfig)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: InitializeFloorSystem called with null config!"));
+		return;
+	}
+
 	if (bIsInitialized)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Already initialized, skipping."));
 		return;
 	}
 
-	StraightClassPtrs = InStraightClasses;
-	TurnClassPtrs = InTurnClasses;
-	PreAllocateCount = FMath::Max(1, InPreAllocateCount);
+	FloorConfig = InConfig;
+	PendingFloorEntries = InConfig->FloorClasses;
 
 	StartAsyncLoad();
 }
@@ -47,18 +49,11 @@ void URunGameFloorSubsystem::InitializeFloorSystem(
 void URunGameFloorSubsystem::StartAsyncLoad()
 {
 	TArray<FSoftObjectPath> PathsToLoad;
-	for (const auto& SoftClass : StraightClassPtrs)
+	for (const FFloorClassEntry& Entry : PendingFloorEntries)
 	{
-		if (!SoftClass.IsNull())
+		if (!Entry.FloorClass.IsNull())
 		{
-			PathsToLoad.Add(SoftClass.ToSoftObjectPath());
-		}
-	}
-	for (const auto& SoftClass : TurnClassPtrs)
-	{
-		if (!SoftClass.IsNull())
-		{
-			PathsToLoad.Add(SoftClass.ToSoftObjectPath());
+			PathsToLoad.Add(Entry.FloorClass.ToSoftObjectPath());
 		}
 	}
 
@@ -76,26 +71,17 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 	Streamable.RequestAsyncLoad(PathsToLoad,
 		FStreamableDelegate::CreateWeakLambda(this, [this]()
 		{
-			LoadedStraightClasses.Empty();
-			for (const auto& SoftClass : StraightClassPtrs)
+			LoadedFloorEntries.Empty();
+			for (const FFloorClassEntry& Entry : PendingFloorEntries)
 			{
-				if (TSubclassOf<AActor> Loaded = SoftClass.Get())
+				if (TSubclassOf<AActor> Loaded = Entry.FloorClass.Get())
 				{
-					LoadedStraightClasses.Add(Loaded);
+					LoadedFloorEntries.Add({Loaded, Entry.SpawnWeight, Entry.InitialGuaranteedCount});
 				}
 			}
 
-			LoadedTurnClasses.Empty();
-			for (const auto& SoftClass : TurnClassPtrs)
-			{
-				if (TSubclassOf<AActor> Loaded = SoftClass.Get())
-				{
-					LoadedTurnClasses.Add(Loaded);
-				}
-			}
-
-			UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Loaded %d straight + %d turn floor classes"),
-				LoadedStraightClasses.Num(), LoadedTurnClasses.Num());
+			UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Loaded %d floor classes"),
+				LoadedFloorEntries.Num());
 
 			OnFloorClassesLoaded();
 		})
@@ -106,14 +92,17 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 {
 	bIsLoading = false;
 
-	for (int32 i = 0; i < PreAllocateCount; ++i)
+	const int32 AllocateCount = FloorConfig ? FloorConfig->PreAllocateCount : 1;
+	const FVector HideLoc = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
+
+	for (int32 i = 0; i < AllocateCount; ++i)
 	{
-		TSubclassOf<AActor> RandomClass = RandomSelectFloorClass();
+		TSubclassOf<AActor> RandomClass = WeightedRandomSelectFloorClass();
 		if (RandomClass)
 		{
 			if (AFloorBase* NewFloor = CreateNewFloorActor(RandomClass))
 			{
-				NewFloor->SetActorLocation(FVector(0.0f, 0.0f, -100000.0f));
+				NewFloor->SetActorLocation(HideLoc);
 				NewFloor->SetActorHiddenInGame(true);
 				NewFloor->SetActorEnableCollision(false);
 				PooledFloorsMap.FindOrAdd(RandomClass).Add(NewFloor);
@@ -131,7 +120,7 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 
 // ===== 地板生成 =====
 
-void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform, int32 StraightCount, int32 RandomCount)
+void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform)
 {
 	if (!bIsInitialized)
 	{
@@ -145,29 +134,43 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 		return;
 	}
 
+	if (!FloorConfig)
+	{
+		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No FloorConfig available!"));
+		return;
+	}
+
 	NextSpawnTransform = StartTransform;
 	FVector InLocation = NextSpawnTransform.GetLocation();
-	InLocation.Y += 200.0f;
-	InLocation.Z -= 200.0f;
-	InLocation.X -= 200.0f;
+	InLocation += FloorConfig->SpawnStartOffset;
 	NextSpawnTransform.SetLocation(InLocation);
 
 	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Spawning initial floors from location: %s"), *InLocation.ToString());
 
-	for (int32 i = 0; i < StraightCount; ++i)
+	// Spawn guaranteed-count floors first (in entry order)
+	for (const FLoadedFloorEntry& Entry : LoadedFloorEntries)
 	{
-		if (LoadedStraightClasses.Num() > 0)
+		for (int32 i = 0; i < Entry.InitialGuaranteedCount; ++i)
 		{
-			RequestFloorAt(LoadedStraightClasses[0], NextSpawnTransform.GetLocation(), NextSpawnTransform.Rotator());
+			RequestFloorAt(Entry.LoadedClass, NextSpawnTransform.GetLocation(), NextSpawnTransform.Rotator());
 		}
 	}
 
-	for (int32 i = 0; i < RandomCount; ++i)
+	// Spawn random floors
+	for (int32 i = 0; i < FloorConfig->InitialRandomFloorCount; ++i)
 	{
 		RequestNextFloor();
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Initial floor chain generated: %d floors"), StraightCount + RandomCount);
+	const int32 TotalGuaranteed = [this]()
+	{
+		int32 Sum = 0;
+		for (const FLoadedFloorEntry& E : LoadedFloorEntries) { Sum += E.InitialGuaranteedCount; }
+		return Sum;
+	}();
+
+	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Initial floor chain generated: %d guaranteed + %d random = %d floors"),
+		TotalGuaranteed, FloorConfig->InitialRandomFloorCount, TotalGuaranteed + FloorConfig->InitialRandomFloorCount);
 }
 
 AFloorBase* URunGameFloorSubsystem::RequestNextFloor()
@@ -178,7 +181,7 @@ AFloorBase* URunGameFloorSubsystem::RequestNextFloor()
 		return nullptr;
 	}
 
-	TSubclassOf<AActor> SelectedClass = RandomSelectFloorClass();
+	TSubclassOf<AActor> SelectedClass = WeightedRandomSelectFloorClass();
 	if (!SelectedClass)
 	{
 		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No floor classes available!"));
@@ -210,7 +213,7 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 
 	Floor->SetActorLocation(Location);
 	Floor->SetActorRotation(Rotation);
-	Floor->SetActorScale3D(FVector(10.0f));
+	Floor->SetActorScale3D(FloorConfig ? FloorConfig->FloorScale : FVector(10.0f));
 	Floor->SetActorHiddenInGame(false);
 	Floor->SetActorEnableCollision(true);
 	Floor->UpdateComponentTransforms();
@@ -233,7 +236,8 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 
 	ActiveFloors.Remove(Floor);
 
-	Floor->SetActorLocation(FVector(0.0f, 0.0f, -100000.0f));
+	const FVector HideLoc = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
+	Floor->SetActorLocation(HideLoc);
 	Floor->SetActorHiddenInGame(true);
 	Floor->SetActorEnableCollision(false);
 
@@ -253,6 +257,11 @@ void URunGameFloorSubsystem::HideAllActiveFloors()
 
 void URunGameFloorSubsystem::RecycleDistantFloors(const FVector& PlayerLocation, float MaxDistance)
 {
+	if (MaxDistance <= 0.0f)
+	{
+		MaxDistance = FloorConfig ? FloorConfig->RecycleMaxDistance : 3000.0f;
+	}
+
 	TArray<AFloorBase*> ToRecycle;
 	for (AFloorBase* Floor : ActiveFloors)
 	{
@@ -316,32 +325,38 @@ int32 URunGameFloorSubsystem::GetPooledFloorCount() const
 
 // ===== 内部方法 =====
 
-TSubclassOf<AActor> URunGameFloorSubsystem::RandomSelectFloorClass()
+TSubclassOf<AActor> URunGameFloorSubsystem::WeightedRandomSelectFloorClass()
 {
-	if (FMath::RandRange(1, 100) <= 80)
+	if (LoadedFloorEntries.Num() == 0)
 	{
-		if (LoadedStraightClasses.Num() > 0)
-		{
-			int32 Index = FMath::RandRange(0, LoadedStraightClasses.Num() - 1);
-			return LoadedStraightClasses[Index];
-		}
+		return nullptr;
 	}
-	else
+
+	float TotalWeight = 0.0f;
+	for (const FLoadedFloorEntry& Entry : LoadedFloorEntries)
 	{
-		if (LoadedTurnClasses.Num() > 0)
+		TotalWeight += FMath::Max(0.0f, Entry.SpawnWeight);
+	}
+
+	if (TotalWeight <= 0.0f)
+	{
+		// All weights are zero: fall back to uniform random
+		const int32 Index = FMath::RandRange(0, LoadedFloorEntries.Num() - 1);
+		return LoadedFloorEntries[Index].LoadedClass;
+	}
+
+	float Random = FMath::FRandRange(0.0f, TotalWeight);
+	float Accumulated = 0.0f;
+	for (const FLoadedFloorEntry& Entry : LoadedFloorEntries)
+	{
+		Accumulated += FMath::Max(0.0f, Entry.SpawnWeight);
+		if (Random <= Accumulated)
 		{
-			int32 Index = FMath::RandRange(0, LoadedTurnClasses.Num() - 1);
-			return LoadedTurnClasses[Index];
+			return Entry.LoadedClass;
 		}
 	}
 
-	if (LoadedStraightClasses.Num() > 0)
-	{
-		int32 Index = FMath::RandRange(0, LoadedStraightClasses.Num() - 1);
-		return LoadedStraightClasses[Index];
-	}
-
-	return nullptr;
+	return LoadedFloorEntries.Last().LoadedClass;
 }
 
 AFloorBase* URunGameFloorSubsystem::AcquireFloorFromPool(TSubclassOf<AActor> InClass)
@@ -369,7 +384,7 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 	FActorSpawnParameters SpawnParams;
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-	FVector OffScreenLocation = FVector(0.0f, 0.0f, -100000.0f);
+	const FVector OffScreenLocation = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
 	AFloorBase* NewFloor = GetWorld()->SpawnActor<AFloorBase>(InClass, OffScreenLocation, FRotator::ZeroRotator, SpawnParams);
 
 	if (!NewFloor)

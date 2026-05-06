@@ -250,8 +250,6 @@ void ARunGameCharacter::StartSlide()
 		}
 	}
 }
-
-
 void ARunGameCharacter::EndSlide()
 {
 	if (bIsSliding)
@@ -297,7 +295,7 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 	}
 }
 
-void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
+void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor* DeathCauser)
 {
 	// Notify GameState of game over
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
@@ -330,37 +328,39 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay)
 	// Broadcast to listeners (Controller handles SetInputModeToUIOnly, etc.)
 	OnCharacterDied.Broadcast(DamageType, this);
 
-	// Play death montage by damage type
-	if (UAnimMontage* const* FoundMontage = DeathMontages.Find(DamageType))
+	UAnimMontage** FoundMontage = DeathMontages.Find(DamageType);
+	UAnimMontage* DeathMontage = FoundMontage ? *FoundMontage : nullptr;
+
+	UE_LOG(LogRunGame, Warning, TEXT("Die: DamageType=%s, DeathMontage=%s, AnimInstance=%s"),
+		*DamageType.ToString(),
+		*GetNameSafe(DeathMontage),
+		*GetNameSafe(GetMesh()->GetAnimInstance()));
+
+	// Disable movement
+	GetCharacterMovement()->SetMovementMode(MOVE_None);
+	GetCharacterMovement()->DisableMovement();
+
+	if (DeathMontage && GetMesh()->GetAnimInstance())
 	{
-		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-		{
-			AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
-			AnimInstance->Montage_Play(*FoundMontage);
-		}
+		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+		AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
+		AnimInstance->Montage_Play(DeathMontage);
 	}
 	else
 	{
-		if (DestroyDelay <= 0.0f)
-		{
-			StartDissolve();
-		}
-		else
-		{
-			FTimerHandle DestroyTimer;
-			GetWorld()->GetTimerManager().SetTimer(
-				DestroyTimer,
-				[this]()
+		FTimerHandle DissolveDelayHandle;
+		GetWorld()->GetTimerManager().SetTimer(
+			DissolveDelayHandle,
+			[this]()
+			{
+				if (IsValid(this))
 				{
-					if (IsValid(this))
-					{
-						StartDissolve();
-					}
-				},
-				DestroyDelay,
-				false
-			);
-		}
+					StartDissolve();
+				}
+			},
+			DestroyDelay,
+			false
+		);
 	}
 }
 
@@ -370,23 +370,13 @@ void ARunGameCharacter::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bI
 	{
 		AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 	}
-	//������ղ������ƶ����
-	GetCharacterMovement()->StopMovementImmediately(); // ɲͣ��ǰ�����й��Ժ��ٶ�
-	GetCharacterMovement()->DisableMovement();         // �����������
 
-	//���ᶯ��������
-	if (USkeletalMeshComponent* SkelMesh = GetMesh())
-	{
-		SkelMesh->bPauseAnims = true;          // ��ͣ�������ţ������ڵ�ǰ֡��
-		SkelMesh->bNoSkeletonUpdate = true;    // ���׹رչ������£������ʡ CPU ���ܣ�
-	}
 	StartDissolve();
 }
 
 void ARunGameCharacter::StartDissolve()
 {
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	const int32 NumMaterials = GetMesh()->GetNumMaterials();
 	for (int32 i = 0; i < NumMaterials; ++i)
@@ -448,7 +438,7 @@ void ARunGameCharacter::OnHitReaction(float Damage, FGameplayTag DamageType, AAc
 
 void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)
 {
-	Die(DamageType);
+	Die(DamageType, 3.0f, DeathCauser);
 }
 
 void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)

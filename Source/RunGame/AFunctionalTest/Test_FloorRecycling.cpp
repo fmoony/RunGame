@@ -1,6 +1,7 @@
 #include "Test_FloorRecycling.h"
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "Actor/Floor/FloorBase.h"
+#include "DataAssets/FloorConfigData.h"
 #include "Engine/World.h"
 
 ATest_FloorRecycling::ATest_FloorRecycling()
@@ -18,18 +19,18 @@ void ATest_FloorRecycling::StartTest()
 		return;
 	}
 
-	if (StraightFloorClasses.Num() == 0 && TurnFloorClasses.Num() == 0)
+	if (!TestFloorConfig)
 	{
 		FinishTest(EFunctionalTestResult::Failed,
-			TEXT("No floor classes configured. Set StraightFloorClasses or TurnFloorClasses on the test actor."));
+			TEXT("TestFloorConfig is not set. Assign a UFloorConfigData asset to the test actor."));
 		return;
 	}
 
-	LogStep(ELogVerbosity::Log,FString::Printf(TEXT("Initializing floor system with %d straight + %d turn classes, pre-allocate: %d"),
-		StraightFloorClasses.Num(), TurnFloorClasses.Num(), PreAllocateCount));
+	LogStep(ELogVerbosity::Log, FString::Printf(TEXT("Initializing floor system with config: %d classes, pre-allocate: %d"),
+		TestFloorConfig->FloorClasses.Num(), TestFloorConfig->PreAllocateCount));
 
 	FloorSubsystem->OnFloorSystemReady.AddDynamic(this, &ATest_FloorRecycling::OnFloorSystemReadyCallback);
-	FloorSubsystem->InitializeFloorSystem(StraightFloorClasses, TurnFloorClasses, PreAllocateCount);
+	FloorSubsystem->InitializeFloorSystem(TestFloorConfig);
 }
 
 void ATest_FloorRecycling::OnFloorSystemReadyCallback()
@@ -55,18 +56,24 @@ void ATest_FloorRecycling::ExecuteFloorRecyclingTest()
 	LogStep(ELogVerbosity::Log,FString::Printf(TEXT("Pre-allocation complete: %d floors in pool"), PooledBefore));
 	AssertTrue(PooledBefore > 0, TEXT("Pool should contain pre-allocated floors"));
 
-	// Step 2: Spawn initial floor chain
-	LogStep(ELogVerbosity::Log,FString::Printf(TEXT("Spawning initial floors: %d straight + %d random"),
-		InitialStraightCount, InitialRandomCount));
+	// Step 2: Spawn initial floor chain using config-driven counts
+	LogStep(ELogVerbosity::Log, TEXT("Spawning initial floors from config"));
 
-	FloorSubsystem->SpawnInitialFloors(FTransform::Identity, InitialStraightCount, InitialRandomCount);
+	// Compute expected active count from config
+	int32 ExpectedActive = 0;
+	for (const FFloorClassEntry& Entry : TestFloorConfig->FloorClasses)
+	{
+		ExpectedActive += Entry.InitialGuaranteedCount;
+	}
+	ExpectedActive += TestFloorConfig->InitialRandomFloorCount;
 
-	const int32 ExpectedActive = InitialStraightCount + InitialRandomCount;
+	FloorSubsystem->SpawnInitialFloors(FTransform::Identity);
+
 	const int32 ActualActive = FloorSubsystem->GetActiveFloorCount();
 
-	LogStep(ELogVerbosity::Log,FString::Printf(TEXT("Active floors: %d (expected %d)"), ActualActive, ExpectedActive));
+	LogStep(ELogVerbosity::Log, FString::Printf(TEXT("Active floors: %d (expected %d)"), ActualActive, ExpectedActive));
 	AssertEqual_Int(ActualActive, ExpectedActive,
-		TEXT("Active floor count should match initial spawn request"));
+		TEXT("Active floor count should match config-driven initial spawn"));
 
 	// Step 3: Verify next spawn transform was advanced
 	const FTransform NextTransform = FloorSubsystem->GetNextSpawnTransform();
