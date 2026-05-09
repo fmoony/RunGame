@@ -4,7 +4,6 @@
 #include "Components/BoxComponent.h"
 #include "Components/ArrowComponent.h"
 #include "RunGameCharacter.h"
-#include "WorldSubsystem/RunGameFloorSubsystem.h"
 
 AFloorBase::AFloorBase()
 {
@@ -61,38 +60,32 @@ void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 		return;
 	}
 
-	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
+	OnPlayerEntered.Broadcast(this);
+
+	if (MyTimeHandle.IsValid())
 	{
-		FloorSystem->RequestNextFloor();
-
-		if (MyTimeHandle.IsValid())
-		{
-			UE_LOG(LogTemp, Error, TEXT("FloorBase: Overlap occurred while recycle timer is active, clearing existing timer."));
-			GetWorldTimerManager().ClearTimer(MyTimeHandle);
-		}
-
-		FTimerDelegate Delegate;
-		Delegate.BindLambda([FloorSystem, this]()
-		{
-			if (IsValid(this))
-			{
-				FloorSystem->ReturnFloor(this);
-				UE_LOG(LogTemp, Warning, TEXT("FloorBase: Returned to pool after delay"));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("FloorBase: Attempted to return to pool but floor is no longer valid!"));
-			}
-		});
-
-		GetWorldTimerManager().SetTimer(MyTimeHandle, Delegate, RecycleDelayTime, false);
+		UE_LOG(LogTemp, Error, TEXT("FloorBase: Overlap occurred while recycle timer is active, clearing existing timer."));
+		GetWorldTimerManager().ClearTimer(MyTimeHandle);
 	}
+
+	FTimerDelegate Delegate;
+	Delegate.BindLambda([this]()
+	{
+		if (IsValid(this))
+		{
+			OnRecycleRequested.Broadcast(this);
+			UE_LOG(LogTemp, Warning, TEXT("FloorBase: Recycled after delay"));
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("FloorBase: Attempted to recycle but floor is no longer valid!"));
+		}
+	});
+
+	GetWorldTimerManager().SetTimer(MyTimeHandle, Delegate, RecycleDelayTime, false);
 }
 
 void AFloorBase::ReturnToPool()
 {
-	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
-	{
-		FloorSystem->ReturnFloor(this);
-	}
+	OnRecycleRequested.Broadcast(this);
 }

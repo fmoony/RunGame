@@ -12,6 +12,9 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UArrowComponent;
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorPlayerEnteredSignature, AFloorBase*, Floor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorRecycleRequestedSignature, AFloorBase*, Floor);
+
 UCLASS()
 class RUNGAME_API AFloorBase : public AActor
 {
@@ -60,11 +63,19 @@ protected:
 public:
 	virtual void Tick(float DeltaTime) override;
 
-	/** Handles box overlap events, triggering next floor spawn and delayed recycling */
+	/** Broadcast when the player enters this floor's box trigger */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
+	FOnFloorPlayerEnteredSignature OnPlayerEntered;
+
+	/** Broadcast when the recycle delay timer expires and the floor is ready to return to pool */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
+	FOnFloorRecycleRequestedSignature OnRecycleRequested;
+
+	/** Handles box overlap events, broadcasting OnPlayerEntered and starting the recycle timer */
 	UFUNCTION()
 	virtual void BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
-	/** Returns this floor actor to the floor subsystem's object pool */
+	/** Broadcasts OnRecycleRequested to notify listeners this floor is ready for recycling */
 	virtual void ReturnToPool();
 };

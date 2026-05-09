@@ -218,6 +218,8 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 	Floor->SetActorEnableCollision(true);
 	Floor->UpdateComponentTransforms();
 
+	BindFloorDelegates(Floor);
+
 	NextSpawnTransform = Floor->GetAttachToTransform(Location);
 
 	ActiveFloors.Add(Floor);
@@ -235,6 +237,7 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 	}
 
 	ActiveFloors.Remove(Floor);
+	UnbindFloorDelegates(Floor);
 
 	const FVector HideLoc = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
 	Floor->SetActorLocation(HideLoc);
@@ -393,4 +396,36 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 	}
 
 	return NewFloor;
+}
+
+void URunGameFloorSubsystem::BindFloorDelegates(AFloorBase* Floor)
+{
+	if (!Floor)
+	{
+		return;
+	}
+
+	Floor->OnPlayerEntered.AddDynamic(this, &URunGameFloorSubsystem::OnFloorPlayerEntered);
+	Floor->OnRecycleRequested.AddDynamic(this, &URunGameFloorSubsystem::OnFloorRecycleRequested);
+}
+
+void URunGameFloorSubsystem::UnbindFloorDelegates(AFloorBase* Floor)
+{
+	if (!Floor)
+	{
+		return;
+	}
+
+	Floor->OnPlayerEntered.RemoveDynamic(this, &URunGameFloorSubsystem::OnFloorPlayerEntered);
+	Floor->OnRecycleRequested.RemoveDynamic(this, &URunGameFloorSubsystem::OnFloorRecycleRequested);
+}
+
+void URunGameFloorSubsystem::OnFloorPlayerEntered(AFloorBase* Floor)
+{
+	RequestNextFloor();
+}
+
+void URunGameFloorSubsystem::OnFloorRecycleRequested(AFloorBase* Floor)
+{
+	ReturnFloor(Floor);
 }

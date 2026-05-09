@@ -90,6 +90,20 @@ private:
 	/** Spawns a new floor actor at the pool hide location */
 	AFloorBase* CreateNewFloorActor(TSubclassOf<AActor> InClass);
 
+	/** Binds to a floor's delegates when it becomes active */
+	void BindFloorDelegates(AFloorBase* Floor);
+
+	/** Unbinds from a floor's delegates before returning it to the pool */
+	void UnbindFloorDelegates(AFloorBase* Floor);
+
+	/** Called when a floor's box trigger is overlapped by the player */
+	UFUNCTION()
+	void OnFloorPlayerEntered(AFloorBase* Floor);
+
+	/** Called when a floor's recycle timer expires */
+	UFUNCTION()
+	void OnFloorRecycleRequested(AFloorBase* Floor);
+
 	/** Initiates async loading of floor classes via the asset manager */
 	void StartAsyncLoad();
 
