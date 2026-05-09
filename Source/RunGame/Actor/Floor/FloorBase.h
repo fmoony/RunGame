@@ -46,7 +46,7 @@ protected:
 	FFloorType FloorType;
 
 	UPROPERTY(EditDefaultsOnly, Category = "FloorRecycleTime")
-	float RecycleDelayTime;
+	float RecycleDelayTime = 2.0f;
 
 public:
 	/** Constructs the floor base actor with default components and collision */

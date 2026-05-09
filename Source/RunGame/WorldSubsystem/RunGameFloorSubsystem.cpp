@@ -24,7 +24,7 @@ void URunGameFloorSubsystem::Deinitialize()
 	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Deinitialized and all floors cleared"));
 }
 
-// ===== 初始化（异步加载） =====
+// ===== 初始化（异步加载）=====
 
 void URunGameFloorSubsystem::InitializeFloorSystem(UFloorConfigData* InConfig)
 {
@@ -93,8 +93,6 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 	bIsLoading = false;
 
 	const int32 AllocateCount = FloorConfig ? FloorConfig->PreAllocateCount : 1;
-	const FVector HideLoc = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
-
 	for (int32 i = 0; i < AllocateCount; ++i)
 	{
 		TSubclassOf<AActor> RandomClass = WeightedRandomSelectFloorClass();
@@ -102,7 +100,6 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 		{
 			if (AFloorBase* NewFloor = CreateNewFloorActor(RandomClass))
 			{
-				NewFloor->SetActorLocation(HideLoc);
 				NewFloor->SetActorHiddenInGame(true);
 				NewFloor->SetActorEnableCollision(false);
 				PooledFloorsMap.FindOrAdd(RandomClass).Add(NewFloor);
@@ -236,11 +233,9 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 		return;
 	}
 
-	ActiveFloors.Remove(Floor);
+	ActiveFloors.RemoveSwap(Floor);
 	UnbindFloorDelegates(Floor);
 
-	const FVector HideLoc = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
-	Floor->SetActorLocation(HideLoc);
 	Floor->SetActorHiddenInGame(true);
 	Floor->SetActorEnableCollision(false);
 
@@ -266,9 +261,15 @@ void URunGameFloorSubsystem::RecycleDistantFloors(const FVector& PlayerLocation,
 	}
 
 	TArray<AFloorBase*> ToRecycle;
+	const float MaxDistSq = MaxDistance * MaxDistance;
 	for (AFloorBase* Floor : ActiveFloors)
 	{
-		if (Floor && FVector::Dist(Floor->GetActorLocation(), PlayerLocation) > MaxDistance)
+		if (!Floor)
+		{
+			continue;
+		}
+
+		if (FVector::DistSquared(Floor->GetActorLocation(), PlayerLocation) > MaxDistSq)
 		{
 			ToRecycle.Add(Floor);
 		}

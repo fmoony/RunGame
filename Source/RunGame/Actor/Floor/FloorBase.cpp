@@ -28,7 +28,6 @@ AFloorBase::AFloorBase()
 	SpawnPointRight->SetupAttachment(ScenceComponent);
 	SpawnPointLeft->SetupAttachment(ScenceComponent);
 
-	RecycleDelayTime = 2.2f;
 }
 
 FTransform AFloorBase::GetAttachToTransform(const FVector& MyLocation)
