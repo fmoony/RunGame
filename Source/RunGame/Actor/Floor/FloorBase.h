@@ -11,6 +11,8 @@ class USceneComponent;
 class UBoxComponent;
 class UStaticMeshComponent;
 class UArrowComponent;
+class UCoinSpawnerComponent;
+class USplineComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorPlayerEnteredSignature, AFloorBase*, Floor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorRecycleRequestedSignature, AFloorBase*, Floor);
@@ -42,6 +44,10 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "C_J", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UArrowComponent> SpawnPointLeft;
 
+	/** Spline path for coin placement, editable in editor */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Coins")
+	TObjectPtr<USplineComponent> CoinPathSpline;
+
 	UPROPERTY(EditDefaultsOnly, Category = "FloorType")
 	FFloorType FloorType;
 
@@ -70,6 +76,10 @@ public:
 	/** Broadcast when the recycle delay timer expires and the floor is ready to return to pool */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
 	FOnFloorRecycleRequestedSignature OnRecycleRequested;
+
+	/** Coin spawner component. CoinClass == nullptr means no coins on this floor */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Coins")
+	TObjectPtr<UCoinSpawnerComponent> CoinSpawnerComponent;
 
 	/** Handles box overlap events, broadcasting OnPlayerEntered and starting the recycle timer */
 	UFUNCTION()

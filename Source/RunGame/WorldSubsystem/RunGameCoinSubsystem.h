@@ -1,0 +1,64 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Subsystems/WorldSubsystem.h"
+#include "RunGameCoinSubsystem.generated.h"
+
+class ACoin;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCoinSubsystemReadySignature);
+
+UCLASS()
+class RUNGAME_API URunGameCoinSubsystem : public UWorldSubsystem
+{
+	GENERATED_BODY()
+
+public:
+	URunGameCoinSubsystem();
+
+	/** Pre-allocates a batch of hidden coins into the pool */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem")
+	void PreAllocateCoins(TSubclassOf<ACoin> CoinClass, int32 Count);
+
+	/** Pops a coin from pool (LIFO) or spawns a new one */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem")
+	ACoin* AcquireCoin(TSubclassOf<ACoin> CoinClass);
+
+	/** Returns a coin to the pool (LIFO push); coin is hidden in place */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem")
+	void ReturnCoin(ACoin* Coin);
+
+	/** Destroys all pooled and active coins */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem")
+	void ClearAllCoins();
+
+	UFUNCTION(BlueprintPure, Category = "RunGame|CoinSystem")
+	int32 GetPooledCoinCount() const;
+
+	UFUNCTION(BlueprintPure, Category = "RunGame|CoinSystem")
+	int32 GetActiveCoinCount() const;
+
+	/** Broadcast when PreAllocateCoins finishes */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|CoinSystem")
+	FOnCoinSubsystemReadySignature OnCoinSubsystemReady;
+
+protected:
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
+
+private:
+	/** Pops last coin from per-class sub-pool; returns nullptr if empty */
+	ACoin* AcquireCoinFromPool(TSubclassOf<ACoin> CoinClass);
+
+	/** Spawns a new coin actor (hidden, at origin) */
+	ACoin* CreateNewCoin(TSubclassOf<ACoin> CoinClass);
+
+	/** Per-class sub-pools of inactive coins, used as LIFO stacks */
+	TMap<TSubclassOf<ACoin>, TArray<ACoin*>> PooledCoinsMap;
+
+	/** All currently active coins in the world */
+	UPROPERTY()
+	TArray<TObjectPtr<ACoin>> ActiveCoins;
+};

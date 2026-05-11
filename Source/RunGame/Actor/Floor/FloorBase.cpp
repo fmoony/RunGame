@@ -3,6 +3,8 @@
 #include "Actor/Floor/FloorBase.h"
 #include "Components/BoxComponent.h"
 #include "Components/ArrowComponent.h"
+#include "Components/SplineComponent.h"
+#include "Actor/Component/CoinSpawnerComponent.h"
 #include "RunGameCharacter.h"
 
 AFloorBase::AFloorBase()
@@ -27,6 +29,12 @@ AFloorBase::AFloorBase()
 	SpawnPointMiddle->SetupAttachment(ScenceComponent);
 	SpawnPointRight->SetupAttachment(ScenceComponent);
 	SpawnPointLeft->SetupAttachment(ScenceComponent);
+
+	CoinSpawnerComponent = CreateDefaultSubobject<UCoinSpawnerComponent>(TEXT("CoinSpawner"));
+
+	CoinPathSpline = CreateDefaultSubobject<USplineComponent>(TEXT("CoinPathSpline"));
+	CoinPathSpline->SetupAttachment(ScenceComponent);
+	CoinPathSpline->SetHiddenInGame(true);
 
 }
 
