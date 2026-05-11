@@ -3,6 +3,7 @@
 #include "WorldSubsystem/RunGameCoinSubsystem.h"
 #include "Actor/Collectible/Coin.h"
 #include "Engine/World.h"
+#include "RunGame.h"
 
 URunGameCoinSubsystem::URunGameCoinSubsystem()
 {
@@ -11,13 +12,13 @@ URunGameCoinSubsystem::URunGameCoinSubsystem()
 void URunGameCoinSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	UE_LOG(LogRunGame, Log, TEXT("RunGameCoinSubsystem: Initialized"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameCoinSubsystem: Initialized"));
 }
 
 void URunGameCoinSubsystem::Deinitialize()
 {
 	ClearAllCoins();
-	UE_LOG(LogRunGame, Log, TEXT("RunGameCoinSubsystem: Deinitialized"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameCoinSubsystem: Deinitialized"));
 	Super::Deinitialize();
 }
 
@@ -43,7 +44,7 @@ void URunGameCoinSubsystem::PreAllocateCoins(TSubclassOf<ACoin> CoinClass, int32
 		}
 	}
 
-	UE_LOG(LogRunGame, Log, TEXT("RunGameCoinSubsystem: Pre-allocated %d coins of class %s"),
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameCoinSubsystem: Pre-allocated %d coins of class %s"),
 		Count, *GetNameSafe(CoinClass));
 
 	OnCoinSubsystemReady.Broadcast();
@@ -136,7 +137,7 @@ void URunGameCoinSubsystem::ClearAllCoins()
 	}
 	ActiveCoins.Empty();
 
-	UE_LOG(LogRunGame, Log, TEXT("RunGameCoinSubsystem: All coins cleared"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameCoinSubsystem: All coins cleared"));
 }
 
 int32 URunGameCoinSubsystem::GetPooledCoinCount() const

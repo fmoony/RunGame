@@ -14,10 +14,14 @@ ACollectibleBase::ACollectibleBase()
 
 	MeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(MeshComponent);
+	MeshComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
 
 	CollisionComponent = CreateDefaultSubobject<USphereComponent>(TEXT("Collision"));
 	CollisionComponent->SetupAttachment(RootComponent);
-	CollisionComponent->SetCollisionProfileName(TEXT("OverlapAllDynamic"));
+	CollisionComponent->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComponent->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComponent->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 	CollisionComponent->SetGenerateOverlapEvents(true);
 
 	bIsCollected = false;
@@ -50,7 +54,7 @@ void ACollectibleBase::Tick(float DeltaTime)
 void ACollectibleBase::ActivateCollectible(const FTransform& SpawnTransform)
 {
 	bIsCollected = false;
-	SetActorTransform(SpawnTransform);
+	SetActorLocation(SpawnTransform.GetLocation());
 	InitialLocation = SpawnTransform.GetLocation();
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);

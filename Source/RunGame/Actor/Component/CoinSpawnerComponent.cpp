@@ -5,6 +5,7 @@
 #include "WorldSubsystem/RunGameCoinSubsystem.h"
 #include "Components/SplineComponent.h"
 #include "Engine/World.h"
+#include "RunGame.h"
 
 UCoinSpawnerComponent::UCoinSpawnerComponent()
 {
