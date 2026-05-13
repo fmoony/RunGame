@@ -76,7 +76,12 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 			{
 				if (TSubclassOf<AActor> Loaded = Entry.FloorClass.Get())
 				{
-					LoadedFloorEntries.Add({Loaded, Entry.SpawnWeight, Entry.InitialGuaranteedCount});
+					FLoadedFloorEntry LoadedEntry;
+					LoadedEntry.LoadedClass = Loaded;
+					LoadedEntry.SpawnWeight = Entry.SpawnWeight;
+					LoadedEntry.InitialGuaranteedCount = Entry.InitialGuaranteedCount;
+					LoadedEntry.bEnableCoinSpawn = Entry.bEnableCoinSpawn;
+					LoadedFloorEntries.Add(LoadedEntry);
 				}
 			}
 
@@ -223,7 +228,8 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 
 	if (UCoinSpawnerComponent* Spawner = Floor->CoinSpawnerComponent)
 	{
-		if (FloorConfig)
+		const FLoadedFloorEntry* Entry = FindLoadedEntry(InClass);
+		if (Entry && Entry->bEnableCoinSpawn && FloorConfig)
 		{
 			Spawner->ApplyConfig(FloorConfig->GlobalCoinConfig);
 			Spawner->SpawnCoins();
@@ -342,6 +348,18 @@ int32 URunGameFloorSubsystem::GetPooledFloorCount() const
 }
 
 // ===== 内部方法 =====
+
+const FLoadedFloorEntry* URunGameFloorSubsystem::FindLoadedEntry(TSubclassOf<AActor> InClass) const
+{
+	for (const FLoadedFloorEntry& Entry : LoadedFloorEntries)
+	{
+		if (Entry.LoadedClass == InClass)
+		{
+			return &Entry;
+		}
+	}
+	return nullptr;
+}
 
 TSubclassOf<AActor> URunGameFloorSubsystem::WeightedRandomSelectFloorClass()
 {

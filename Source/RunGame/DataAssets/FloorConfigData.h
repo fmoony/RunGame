@@ -19,6 +19,10 @@ struct FFloorClassEntry
 
 	UPROPERTY(EditDefaultsOnly, Category = "FloorClass")
 	int32 InitialGuaranteedCount = 0;
+
+	/** Whether coins spawn on this floor class */
+	UPROPERTY(EditDefaultsOnly, Category = "FloorClass")
+	bool bEnableCoinSpawn = true;
 };
 
 UCLASS(BlueprintType)

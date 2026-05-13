@@ -34,7 +34,7 @@ void UCoinSpawnerComponent::ApplyConfig(const FCoinSpawnConfig& Config)
 
 void UCoinSpawnerComponent::SpawnCoins()
 {
-	if (!CoinClass)
+	if (!bEnableCoinSpawn || !CoinClass)
 	{
 		return;
 	}

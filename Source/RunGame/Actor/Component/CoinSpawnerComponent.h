@@ -109,6 +109,8 @@ protected:
 
 	float CoinSpacing = 80.0f;
 
+	bool bEnableCoinSpawn = true;
+
 private:
 	/** Computes world-space transforms: spline first, enum fallback, multi-row */
 	TArray<FTransform> CalculateCoinTransforms() const;

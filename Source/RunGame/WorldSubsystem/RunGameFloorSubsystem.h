@@ -16,6 +16,7 @@ struct FLoadedFloorEntry
 	TSubclassOf<AActor> LoadedClass;
 	float SpawnWeight;
 	int32 InitialGuaranteedCount;
+	bool bEnableCoinSpawn = true;
 };
 
 UCLASS()
@@ -81,6 +82,9 @@ protected:
 	virtual void Deinitialize() override;
 
 private:
+	/** Finds the loaded entry matching the given class */
+	const FLoadedFloorEntry* FindLoadedEntry(TSubclassOf<AActor> InClass) const;
+
 	/** Randomly selects a floor class using weighted probability from config */
 	TSubclassOf<AActor> WeightedRandomSelectFloorClass();
 
