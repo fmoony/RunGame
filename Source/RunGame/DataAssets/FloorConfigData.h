@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
 #include "RunGameType.h"
+#include "Actor/Component/CoinSpawnerComponent.h"
 #include "FloorConfigData.generated.h"
 
 USTRUCT(BlueprintType)
@@ -49,4 +50,8 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, Category = "Floor|Recycle")
 	float FloorRecycleDelay = 2.2f;
+
+	/** Shared coin spawn configuration applied to all floor classes */
+	UPROPERTY(EditDefaultsOnly, Category = "Floor|Coin")
+	FCoinSpawnConfig GlobalCoinConfig;
 };

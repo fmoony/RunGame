@@ -7,6 +7,7 @@
 #include "CoinSpawnerComponent.generated.h"
 
 class ACoin;
+class USplineComponent;
 
 /** Fallback pattern when spline has no points */
 UENUM()
@@ -18,6 +19,54 @@ enum class ECoinSpawnPattern : uint8
 	MAX,
 };
 
+/** Per-floor-class coin spawn configuration, driven by data asset */
+USTRUCT(BlueprintType)
+struct FCoinSpawnConfig
+{
+	GENERATED_BODY()
+
+	/** Coin class to spawn. nullptr = no coins */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin")
+	TSubclassOf<ACoin> CoinClass;
+
+	/** Coins per row */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin")
+	int32 CoinCount = 3;
+
+	/** Number of parallel rows (left/center/right lanes) */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin")
+	int32 RowCount = 1;
+
+	/** Lateral spacing between rows in world units */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin")
+	float RowSpacing = 100.0f;
+
+	/** Probability each non-center row spawns (0-1, 1 = always all rows) */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float RowSpawnChance = 1.0f;
+
+	/** Fallback pattern when spline is empty */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	ECoinSpawnPattern SpawnPattern = ECoinSpawnPattern::StraightLine;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	FVector StartOffset = FVector(0.0f, 0.0f, 100.0f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	FVector LineDirection = FVector(100.0f, 0.0f, 0.0f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	FVector EndOffset = FVector(200.0f, 100.0f, 0.0f);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	float ParabolaHeight = 200.0f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	float CoinSpacing = 80.0f;
+
+	bool HasValidCoinClass() const;
+};
+
 UCLASS(ClassGroup = (RunGame), meta = (BlueprintSpawnableComponent))
 class RUNGAME_API UCoinSpawnerComponent : public UActorComponent
 {
@@ -25,6 +74,9 @@ class RUNGAME_API UCoinSpawnerComponent : public UActorComponent
 
 public:
 	UCoinSpawnerComponent();
+
+	/** Applies coin spawn configuration from the data asset */
+	void ApplyConfig(const FCoinSpawnConfig& Config);
 
 	/** Acquires coins from subsystem and places them on this floor */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Coin")
@@ -34,44 +86,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Coin")
 	void DespawnCoins();
 
-	bool HasValidCoinClass() const { return CoinClass != nullptr; }
-
 protected:
-	/** Coin class to spawn. nullptr = no coins on this floor */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin")
 	TSubclassOf<ACoin> CoinClass;
 
-	/** Number of coins to spawn */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin", meta = (ClampMin = "1"))
 	int32 CoinCount = 3;
 
-	/** Fallback pattern when spline is empty */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
+	int32 RowCount = 1;
+
+	float RowSpacing = 100.0f;
+
+	float RowSpawnChance = 1.0f;
+
 	ECoinSpawnPattern SpawnPattern = ECoinSpawnPattern::StraightLine;
 
-	/** Spacing between coins in world units (line patterns only) */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
-	float CoinSpacing = 80.0f;
-
-	/** Peak height of parabolic arc above midpoint (Parabolic only) */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
-	float ParabolaHeight = 200.0f;
-
-	/** Local-space start offset relative to floor origin */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
 	FVector StartOffset = FVector(0.0f, 0.0f, 100.0f);
 
-	/** Local-space direction vector for line patterns */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
 	FVector LineDirection = FVector(100.0f, 0.0f, 0.0f);
 
-	/** Local-space end offset for parabolic pattern */
-	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
 	FVector EndOffset = FVector(200.0f, 100.0f, 0.0f);
 
+	float ParabolaHeight = 200.0f;
+
+	float CoinSpacing = 80.0f;
+
 private:
-	/** Computes world-space transforms: spline first, enum fallback */
+	/** Computes world-space transforms: spline first, enum fallback, multi-row */
 	TArray<FTransform> CalculateCoinTransforms() const;
+
+	/** Applies row offset perpendicular to the given local direction */
+	void ApplyRowOffset(FVector& InOutWorldPos, const FVector& PerpendicularWorldDir, int32 RowIndex) const;
+
+	/** Computes world-space transforms along the spline for one row */
+	TArray<FTransform> CalculateSplineTransforms() const;
 
 	void CalculateStraightLine(TArray<FTransform>& OutTransforms) const;
 	void CalculateDiagonalLine(TArray<FTransform>& OutTransforms) const;

@@ -1,7 +1,6 @@
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "Actor/Floor/FloorBase.h"
 #include "Actor/Component/CoinSpawnerComponent.h"
-#include "DataAssets/FloorConfigData.h"
 #include "Engine/World.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
@@ -224,8 +223,9 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 
 	if (UCoinSpawnerComponent* Spawner = Floor->CoinSpawnerComponent)
 	{
-		if (Spawner->HasValidCoinClass())
+		if (FloorConfig)
 		{
+			Spawner->ApplyConfig(FloorConfig->GlobalCoinConfig);
 			Spawner->SpawnCoins();
 		}
 	}

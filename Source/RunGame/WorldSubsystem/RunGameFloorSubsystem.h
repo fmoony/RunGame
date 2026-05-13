@@ -2,10 +2,10 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "DataAssets/FloorConfigData.h"
 #include "RunGameFloorSubsystem.generated.h"
 
 class AFloorBase;
-class UFloorConfigData;
 struct FFloorClassEntry;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFloorSystemReadyDelegate);
