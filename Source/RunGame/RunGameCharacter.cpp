@@ -336,12 +336,12 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor*
 		*GetNameSafe(DeathMontage),
 		*GetNameSafe(GetMesh()->GetAnimInstance()));
 
-	// Disable movement
-	GetCharacterMovement()->SetMovementMode(MOVE_None);
-	GetCharacterMovement()->DisableMovement();
-
 	if (DeathMontage && GetMesh()->GetAnimInstance())
 	{
+		// Disable movement
+		GetCharacterMovement()->SetMovementMode(MOVE_None);
+		GetCharacterMovement()->DisableMovement();
+
 		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
 		AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnDeathMontageBlendingOut);
 		AnimInstance->Montage_Play(DeathMontage);
