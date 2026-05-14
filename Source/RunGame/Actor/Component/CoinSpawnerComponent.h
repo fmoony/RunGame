@@ -75,6 +75,10 @@ class RUNGAME_API UCoinSpawnerComponent : public UActorComponent
 public:
 	UCoinSpawnerComponent();
 
+protected:
+	virtual void BeginPlay() override;
+
+public:
 	/** Applies coin spawn configuration from the data asset */
 	void ApplyConfig(const FCoinSpawnConfig& Config);
 
@@ -128,4 +132,8 @@ private:
 	/** Coins currently managed by this component */
 	UPROPERTY()
 	TArray<TObjectPtr<ACoin>> SpawnedCoins;
+
+	/** Cached spline from owner, populated in BeginPlay */
+	UPROPERTY()
+	TObjectPtr<USplineComponent> CachedSpline;
 };

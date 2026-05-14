@@ -17,6 +17,14 @@ UCoinSpawnerComponent::UCoinSpawnerComponent()
 	PrimaryComponentTick.bCanEverTick = false;
 }
 
+void UCoinSpawnerComponent::BeginPlay()
+{
+	Super::BeginPlay();
+
+	const AActor* Owner = GetOwner();
+	CachedSpline = Owner ? Owner->GetComponentByClass<USplineComponent>() : nullptr;
+}
+
 void UCoinSpawnerComponent::ApplyConfig(const FCoinSpawnConfig& Config)
 {
 	CoinClass = Config.CoinClass;
@@ -114,14 +122,12 @@ TArray<FTransform> UCoinSpawnerComponent::CalculateSplineTransforms() const
 {
 	TArray<FTransform> OutTransforms;
 
-	const AActor* Owner = GetOwner();
-	const USplineComponent* Spline = Owner ? Owner->GetComponentByClass<USplineComponent>() : nullptr;
-	if (!Spline)
+	if (!CachedSpline)
 	{
 		return OutTransforms;
 	}
 
-	const float TotalLength = Spline->GetSplineLength();
+	const float TotalLength = CachedSpline->GetSplineLength();
 	if (TotalLength <= 0.0f)
 	{
 		return OutTransforms;
@@ -140,8 +146,8 @@ TArray<FTransform> UCoinSpawnerComponent::CalculateSplineTransforms() const
 		for (int32 i = 0; i < CoinCount; ++i)
 		{
 			const float Distance = TotalLength * static_cast<float>(i) / static_cast<float>(Steps);
-			FVector WorldPos = Spline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
-			const FVector RightDir = Spline->GetRightVectorAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
+			FVector WorldPos = CachedSpline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
+			const FVector RightDir = CachedSpline->GetRightVectorAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::World);
 			ApplyRowOffset(WorldPos, RightDir, Row);
 			OutTransforms.Add(FTransform(WorldPos));
 		}
@@ -152,10 +158,7 @@ TArray<FTransform> UCoinSpawnerComponent::CalculateSplineTransforms() const
 
 TArray<FTransform> UCoinSpawnerComponent::CalculateCoinTransforms() const
 {
-	// Spline mode — handles all shapes including multi-row
-	const AActor* Owner = GetOwner();
-	const USplineComponent* Spline = Owner ? Owner->GetComponentByClass<USplineComponent>() : nullptr;
-	if (Spline && Spline->GetNumberOfSplinePoints() > 0)
+	if (CachedSpline && CachedSpline->GetNumberOfSplinePoints() > 0)
 	{
 		return CalculateSplineTransforms();
 	}
