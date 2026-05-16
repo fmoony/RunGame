@@ -86,5 +86,6 @@ protected:
 	/** Called when player picks up this collectible. Base: VFX, SFX, hide. Override for game logic */
 	UFUNCTION(BlueprintNativeEvent, Category = "Collectible")
 	void OnCollected(ARunGameCharacter* CollectingCharacter);
+
 	virtual void OnCollected_Implementation(ARunGameCharacter* CollectingCharacter);
 };
