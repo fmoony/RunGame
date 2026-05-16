@@ -3,6 +3,8 @@
 #include "RunGameCharacter.h"
 #include "RunGamePlayerController.h"
 #include "Actor/Component/HealthComponent.h"
+#include "Actor/Component/SkillComponent.h"
+#include "Skill/RunGameSkillConfigData.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Camera/CameraActor.h"
@@ -58,6 +60,8 @@ ARunGameCharacter::ARunGameCharacter()
 
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 
+	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
+
 	PrimaryActorTick.bCanEverTick = true;
 	bIsSliding = false;
 
@@ -83,6 +87,11 @@ void ARunGameCharacter::BeginPlay()
 	{
 		HealthComponent->OnDeath.AddDynamic(this, &ARunGameCharacter::OnHealthDepleted);
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHitReaction);
+	}
+
+	if (SkillComponent)
+	{
+		SkillComponent->OnSkillExecuted.AddDynamic(this, &ARunGameCharacter::HandleSkillExecuted);
 	}
 }
 
@@ -118,6 +127,27 @@ void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		//Slide
 		EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Started, this, &ARunGameCharacter::StartSlide);
 		//EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Completed, this, &ARunGameCharacter::EndSlide);
+
+		// Dynamic skill input bindings from SkillConfig data asset
+		if (SkillComponent)
+		{
+			if (USkillConfigData* Config = SkillComponent->SkillConfig)
+			{
+				for (const FSkillDefinition& SkillDef : Config->Skills)
+				{
+					if (SkillDef.InputAction && SkillDef.SkillTag.IsValid())
+					{
+						EnhancedInputComponent->BindAction(
+							SkillDef.InputAction,
+							ETriggerEvent::Started,
+							this,
+							&ARunGameCharacter::ActivateSkillByTag,
+							SkillDef.SkillTag
+						);
+					}
+				}
+			}
+		}
 
 	}
 	else
@@ -473,6 +503,32 @@ void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, E
 		break;
 	default:
 		break;
+	}
+}
+
+void ARunGameCharacter::ActivateSkillByTag(FGameplayTag SkillTag)
+{
+	if (SkillComponent)
+	{
+		SkillComponent->TryActivateSkill(SkillTag);
+	}
+}
+
+void ARunGameCharacter::HandleSkillExecuted(FGameplayTag SkillTag)
+{
+	// Play montage if one is mapped for this skill tag
+	if (UAnimMontage** FoundMontage = SkillMontages.Find(SkillTag))
+	{
+		PlayAnimMontage(*FoundMontage);
+	}
+
+	// Apply forward impulse if one is mapped for this skill tag
+	if (float* Impulse = SkillImpulseStrengths.Find(SkillTag))
+	{
+		if (UCharacterMovementComponent* MovementComp = GetCharacterMovement())
+		{
+			MovementComp->AddImpulse(GetActorForwardVector() * (*Impulse), true);
+		}
 	}
 }
 

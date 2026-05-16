@@ -2,8 +2,12 @@
 
 #include "HUD/RunGameInGame.h"
 #include "Actor/Component/HealthComponent.h"
+#include "Actor/Component/SkillComponent.h"
+#include "Components/HorizontalBox.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "HUD/RunGameSkillSlot.h"
+#include "Skill/RunGameSkillConfigData.h"
 #include "GameFramework/PlayerController.h"
 #include "RunGameCharacter.h"
 #include "RunGamePlayerState.h"
@@ -14,6 +18,9 @@ URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	, ScoreText(nullptr)
 	, TimerText(nullptr)
 	, HealthBar(nullptr)
+	, SkillBarContainer(nullptr)
+	, SkillSlotClass(nullptr)
+	, CachedSkillComponent(nullptr)
 	, TimerSubsystem(nullptr)
 	, CachedHealthComponent(nullptr)
 {
@@ -36,7 +43,7 @@ void URunGameInGame::NativeConstruct()
 	}
 	else
 	{
-		// 初始化分数显示
+		// 初始化分数显�?
 		ScoreText->SetText(FText::FromString(TEXT("Score: 000000000")));
 	}
 
@@ -46,7 +53,7 @@ void URunGameInGame::NativeConstruct()
 	}
 	else
 	{
-		// 初始化计时显示
+		// 初始化计时显�?
 		TimerText->SetText(FText::FromString(TEXT("Time: 0.000s")));
 	}
 
@@ -70,14 +77,14 @@ void URunGameInGame::NativeConstruct()
 		// 绑定时间变更委托
 		TimerSubsystem->OnTimeChanged.AddDynamic(this, &URunGameInGame::OnTimerUpdated);
 
-		// 获取PlayerState并绑定分数变更委托
+		// 获取PlayerState并绑定分数变更委�?
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			if (ARunGamePlayerState* PlayerState = Cast<ARunGamePlayerState>(PC->GetPlayerState<APlayerState>()))
 			{
 				PlayerState->OnScoreChanged.AddDynamic(this, &URunGameInGame::OnScoreUpdated);
 
-				// 立即更新UI显示当前值
+				// 立即更新UI显示当前�?
 				OnScoreUpdated(PlayerState->GetRunGameScore());
 			}
 			else
@@ -98,6 +105,40 @@ void URunGameInGame::NativeConstruct()
 	{
 		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
 	}
+
+	// Skill bar setup
+	if (SkillSlotClass && SkillBarContainer)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (ARunGameCharacter* Character = Cast<ARunGameCharacter>(PC->GetPawn()))
+			{
+				if (USkillComponent* SkillComp = Character->GetSkillComponent())
+				{
+					CachedSkillComponent = SkillComp;
+
+					if (USkillConfigData* Config = SkillComp->SkillConfig)
+					{
+						for (const FSkillDefinition& SkillDef : Config->Skills)
+						{
+							if (!SkillDef.SkillTag.IsValid())
+							{
+								continue;
+							}
+
+							URunGameSkillSlot* SkillSlot = CreateWidget<URunGameSkillSlot>(this, SkillSlotClass);
+							if (SkillSlot)
+							{
+								SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
+								SkillBarContainer->AddChild(SkillSlot);
+								SkillSlots.Add(SkillSlot);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void URunGameInGame::NativeDestruct()
@@ -109,12 +150,12 @@ void URunGameInGame::NativeDestruct()
 		CachedHealthComponent = nullptr;
 	}
 
-	// 解绑委托回调，防止内存泄漏
+	// 解绑委托回调，防止内存泄�?
 	if (TimerSubsystem)
 	{
 		TimerSubsystem->OnTimeChanged.RemoveDynamic(this, &URunGameInGame::OnTimerUpdated);
 	
-		// 解绑PlayerState的分数委托
+		// 解绑PlayerState的分数委�?
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			if (ARunGamePlayerState* PlayerState = Cast<ARunGamePlayerState>(PC->GetPlayerState<APlayerState>()))
@@ -125,6 +166,9 @@ void URunGameInGame::NativeDestruct()
 
 		UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Successfully unbound from TimerSubsystem events"));
 	}
+
+	SkillSlots.Empty();
+	CachedSkillComponent = nullptr;
 
 	Super::NativeDestruct();
 }

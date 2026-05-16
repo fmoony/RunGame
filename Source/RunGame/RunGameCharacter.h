@@ -15,6 +15,7 @@ class UInputAction;
 class UCurveFloat;
 class URunGameTimerSubsystem;
 class UHealthComponent;
+class USkillComponent;
 class UAnimMontage;
 struct FInputActionValue;
 
@@ -36,6 +37,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UHealthComponent> HealthComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkillComponent> SkillComponent;
 
 protected:
 
@@ -100,6 +104,14 @@ protected:
 	/** Map damage type to corresponding hit reaction montage */
 	UPROPERTY(EditAnywhere, Category = "RunGame|Hit")
 	TMap<FGameplayTag, UAnimMontage*> HitReactionMontages;
+
+	/** Map skill tag to montage played when the skill is executed */
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Skills")
+	TMap<FGameplayTag, UAnimMontage*> SkillMontages;
+
+	/** Map skill tag to forward impulse strength applied on execution */
+	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Skills")
+	TMap<FGameplayTag, float> SkillImpulseStrengths;
 
 	/** Duration of the material dissolve effect in seconds */
 	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
@@ -212,4 +224,14 @@ public:
 	// ~end IDamagable interface
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	FORCEINLINE USkillComponent* GetSkillComponent() const { return SkillComponent; }
+
+	/** Activate a skill by tag — called from dynamically-bound Enhanced Input */
+	UFUNCTION(BlueprintCallable, Category = "Skills")
+	void ActivateSkillByTag(FGameplayTag SkillTag);
+
+	/** Reacts to SkillComponent::OnSkillExecuted — routes to execution data maps */
+	UFUNCTION()
+	void HandleSkillExecuted(FGameplayTag SkillTag);
 };
