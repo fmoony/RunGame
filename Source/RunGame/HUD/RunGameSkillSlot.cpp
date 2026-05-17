@@ -8,6 +8,7 @@
 #include "Engine/StreamableManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Skill/RunGameSkillConfigData.h"
+#include "RunGame.h"
 
 URunGameSkillSlot::URunGameSkillSlot(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -66,6 +67,11 @@ void URunGameSkillSlot::SetupSlot(const FSkillDefinition& SkillDef, FGameplayTag
 
 void URunGameSkillSlot::NativeDestruct()
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CooldownDisplayTimer);
+	}
+
 	if (USkillComponent* Comp = CachedSkillComponent.Get())
 	{
 		Comp->OnSkillActivated.RemoveDynamic(this, &URunGameSkillSlot::OnSkillActivated_Callback);
@@ -91,11 +97,25 @@ void URunGameSkillSlot::OnSkillActivated_Callback(FGameplayTag ActivatedTag, flo
 		return;
 	}
 
-	if (CooldownMID && CooldownOverlay)
+	if (!CooldownMID || !CooldownOverlay)
 	{
-		CooldownMID->SetScalarParameterValue(CooldownStartTimeParamName, GetWorld()->GetTimeSeconds());
-		CooldownMID->SetScalarParameterValue(CooldownDurationParamName, CooldownDuration);
-		CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
+		return;
+	}
+
+	CachedCooldownDuration = CooldownDuration;
+
+	CooldownMID->SetScalarParameterValue(CooldownPercentParamName, 1.0f);
+	CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			CooldownDisplayTimer,
+			this,
+			&URunGameSkillSlot::UpdateCooldownDisplay,
+			0.05f,
+			true
+		);
 	}
 }
 
@@ -106,9 +126,43 @@ void URunGameSkillSlot::OnSkillReady_Callback(FGameplayTag ReadyTag)
 		return;
 	}
 
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(CooldownDisplayTimer);
+	}
+
 	if (CooldownOverlay)
 	{
 		CooldownOverlay->SetVisibility(ESlateVisibility::Hidden);
+	}
+}
+
+void URunGameSkillSlot::UpdateCooldownDisplay()
+{
+	USkillComponent* Comp = CachedSkillComponent.Get();
+	if (!Comp || !CooldownMID)
+	{
+		return;
+	}
+
+	const float Remaining = Comp->GetCooldownRemaining(SkillTag);
+	const float Percent = CachedCooldownDuration > 0.0f
+		? FMath::Clamp(Remaining / CachedCooldownDuration, 0.0f, 1.0f)
+		: 0.0f;
+
+	CooldownMID->SetScalarParameterValue(CooldownPercentParamName, Percent);
+
+	if (Percent <= 0.0f)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(CooldownDisplayTimer);
+		}
+
+		if (CooldownOverlay)
+		{
+			CooldownOverlay->SetVisibility(ESlateVisibility::Hidden);
+		}
 	}
 }
 

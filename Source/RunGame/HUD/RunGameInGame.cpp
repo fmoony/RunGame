@@ -123,6 +123,7 @@ void URunGameInGame::NativeConstruct()
 						{
 							if (!SkillDef.SkillTag.IsValid())
 							{
+								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
 								continue;
 							}
 
@@ -132,12 +133,39 @@ void URunGameInGame::NativeConstruct()
 								SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
 								SkillBarContainer->AddChild(SkillSlot);
 								SkillSlots.Add(SkillSlot);
+								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
+							}
+							else
+							{
+								UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
 							}
 						}
+
+						UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
+					}
+					else
+					{
+						UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
 					}
 				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get SkillComponent for skill bar setup"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerPawn for skill bar setup"));
 			}
 		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerController for skill bar setup"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
 	}
 }
 

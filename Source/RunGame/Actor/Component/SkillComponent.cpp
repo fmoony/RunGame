@@ -4,6 +4,7 @@
 #include "Skill/RunGameSkillConfigData.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "RunGame.h"
 
 USkillComponent::USkillComponent()
 	: SkillConfig(nullptr)
@@ -59,18 +60,21 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 {
 	if (!SkillConfig)
 	{
+		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: SkillConfig is not set on %s"), *GetNameSafe(this));
 		return false;
 	}
 
 	FSkillRuntimeState* State = SkillStates.Find(SkillTag);
 	if (!State || State->bOnCooldown)
 	{
+		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: Skill '%s' is not ready (either not found or on cooldown)"), *SkillTag.ToString());
 		return false;
 	}
 
 	const FSkillDefinition* SkillDef = SkillConfig->FindSkillByTag(SkillTag);
 	if (!SkillDef)
 	{
+		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: Skill definition for tag '%s' not found in SkillConfig"), *SkillTag.ToString());
 		return false;
 	}
 
@@ -99,6 +103,8 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		State->bOnCooldown = false;
 		OnSkillReady.Broadcast(SkillTag);
 	}
+
+	UE_LOG(LogRunGame, Warning, TEXT("USkillComponent: Activated skill '%s' with cooldown %.2f seconds"), *SkillTag.ToString(), CooldownDuration);
 
 	return true;
 }

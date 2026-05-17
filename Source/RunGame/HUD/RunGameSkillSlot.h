@@ -46,13 +46,9 @@ protected:
 	UPROPERTY(EditDefaultsOnly, Category = "Skill Slot")
 	TObjectPtr<UMaterialInterface> CooldownBaseMaterial;
 
-	/** Scalar parameter name for activation timestamp (e.g. "CooldownStartTime") */
+	/** Scalar parameter name for cooldown fill percent (1.0 = full cooldown, 0.0 = ready). Passed directly to MID */
 	UPROPERTY(EditDefaultsOnly, Category = "Skill Slot")
-	FName CooldownStartTimeParamName = "CooldownStartTime";
-
-	/** Scalar parameter name for cooldown duration (e.g. "CooldownDuration") */
-	UPROPERTY(EditDefaultsOnly, Category = "Skill Slot")
-	FName CooldownDurationParamName = "CooldownDuration";
+	FName CooldownPercentParamName = "CooldownPercent";
 
 private:
 	FGameplayTag SkillTag;
@@ -70,6 +66,14 @@ private:
 	UFUNCTION()
 	void OnSkillReady_Callback(FGameplayTag ReadyTag);
 
+	/** Per-slot timer callback — reads GetCooldownRemaining from component, writes to MID. Runs at 0.05s */
+	UFUNCTION()
+	void UpdateCooldownDisplay();
+
 	/** Called when the soft-referenced icon texture finishes async loading */
 	void OnIconLoaded();
+
+	FTimerHandle CooldownDisplayTimer;
+
+	float CachedCooldownDuration = 0.0f;
 };
