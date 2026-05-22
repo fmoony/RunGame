@@ -8,6 +8,7 @@
 #include "RunGameSkillConfigData.generated.h"
 
 class UInputAction;
+class USkillExecutionBase;
 
 /**
  * Defines a single skill: its identity, visuals, cooldown, and input binding.
@@ -40,6 +41,10 @@ struct RUNGAME_API FSkillDefinition
 	/** Energy cost to activate this skill. Checked against CurrentEnergy in TryActivateSkill */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill")
 	float EnergyCost = 100.0f;
+
+	/** Skill execution behavior. If set, CanExecute + Execute are called during activation */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Execution")
+	TSubclassOf<USkillExecutionBase> ExecutionClass;
 
 	/** Input action bound dynamically by the character in SetupPlayerInputComponent */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Input")

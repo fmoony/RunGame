@@ -2,6 +2,7 @@
 
 #include "Actor/Component/SkillComponent.h"
 #include "Skill/RunGameSkillConfigData.h"
+#include "Skill/RunGameSkillExecution.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "GameFramework/PlayerState.h"
@@ -103,6 +104,23 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		return false;
 	}
 
+	// Instantiate execution class and check CanExecute constraints
+	AActor* const Owner = GetOwner();
+	USkillExecutionBase* ExecObj = nullptr;
+	if (SkillDef->ExecutionClass)
+	{
+		ExecObj = NewObject<USkillExecutionBase>(GetTransientPackage(), SkillDef->ExecutionClass);
+		if (!ExecObj->CanExecute(Owner, SkillTag))
+		{
+			UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: Skill '%s' blocked by CanExecute constraint"), *SkillTag.ToString());
+			return false;
+		}
+	}
+	else
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill: Skill '%s' has no ExecutionClass set — nothing will happen on activation"), *SkillTag.ToString());
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -122,8 +140,13 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	// Consume energy
 	CurrentEnergy -= SkillDef->EnergyCost;
 
+	// Execute the skill effect via ExecutionClass
+	if (ExecObj)
+	{
+		ExecObj->Execute(Owner, SkillTag);
+	}
+
 	OnSkillActivated.Broadcast(SkillTag, CooldownDuration);
-	OnSkillExecuted.Broadcast(SkillTag);
 	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 
 	// Handle zero-cooldown skills: fire OnSkillReady immediately after activation

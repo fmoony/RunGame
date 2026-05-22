@@ -89,10 +89,6 @@ void ARunGameCharacter::BeginPlay()
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHitReaction);
 	}
 
-	if (SkillComponent)
-	{
-		SkillComponent->OnSkillExecuted.AddDynamic(this, &ARunGameCharacter::HandleSkillExecuted);
-	}
 }
 
 void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -511,24 +507,6 @@ void ARunGameCharacter::ActivateSkillByTag(FGameplayTag SkillTag)
 	if (SkillComponent)
 	{
 		SkillComponent->TryActivateSkill(SkillTag);
-	}
-}
-
-void ARunGameCharacter::HandleSkillExecuted(FGameplayTag SkillTag)
-{
-	// Play montage if one is mapped for this skill tag
-	if (UAnimMontage** FoundMontage = SkillMontages.Find(SkillTag))
-	{
-		PlayAnimMontage(*FoundMontage);
-	}
-
-	// Apply forward impulse if one is mapped for this skill tag
-	if (float* Impulse = SkillImpulseStrengths.Find(SkillTag))
-	{
-		if (UCharacterMovementComponent* MovementComp = GetCharacterMovement())
-		{
-			MovementComp->AddImpulse(GetActorForwardVector() * (*Impulse), true);
-		}
 	}
 }
 

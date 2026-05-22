@@ -105,14 +105,6 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "RunGame|Hit")
 	TMap<FGameplayTag, UAnimMontage*> HitReactionMontages;
 
-	/** Map skill tag to montage played when the skill is executed */
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Skills")
-	TMap<FGameplayTag, UAnimMontage*> SkillMontages;
-
-	/** Map skill tag to forward impulse strength applied on execution */
-	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Skills")
-	TMap<FGameplayTag, float> SkillImpulseStrengths;
-
 	/** Duration of the material dissolve effect in seconds */
 	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
 	float DissolveDuration = 2.0f;
@@ -231,7 +223,4 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
-	/** Reacts to SkillComponent::OnSkillExecuted — routes to execution data maps */
-	UFUNCTION()
-	void HandleSkillExecuted(FGameplayTag SkillTag);
 };

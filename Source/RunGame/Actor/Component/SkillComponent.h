@@ -34,11 +34,11 @@ public:
 	float MaxEnergy = 100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
-	float BaseEnergyRegenPerSecond = 10.0f;
+	float BaseEnergyRegenPerSecond = 1.0f;
 
 	/** Bonus regen per score point. Final regen = (Base + Score * Multiplier + Modifier) * RegenMultiplier */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
-	float ScoreRegenMultiplier = 0.01f;
+	float ScoreRegenMultiplier = 0.001f;
 
 	// -- Delegates --
 
