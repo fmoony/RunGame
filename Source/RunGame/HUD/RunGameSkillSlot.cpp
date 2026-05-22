@@ -60,8 +60,14 @@ void URunGameSkillSlot::SetupSlot(const FSkillDefinition& SkillDef, FGameplayTag
 	// Bind to SkillComponent delegates
 	if (USkillComponent* Comp = CachedSkillComponent.Get())
 	{
+		RequiredEnergy = SkillDef.EnergyCost;
+
 		Comp->OnSkillActivated.AddDynamic(this, &URunGameSkillSlot::OnSkillActivated_Callback);
 		Comp->OnSkillReady.AddDynamic(this, &URunGameSkillSlot::OnSkillReady_Callback);
+		Comp->OnEnergyChanged.AddDynamic(this, &URunGameSkillSlot::OnEnergyChanged_Callback);
+
+		// Apply initial energy state
+		UpdateEnergyAvailability(Comp->GetCurrentEnergy());
 	}
 }
 
@@ -76,6 +82,7 @@ void URunGameSkillSlot::NativeDestruct()
 	{
 		Comp->OnSkillActivated.RemoveDynamic(this, &URunGameSkillSlot::OnSkillActivated_Callback);
 		Comp->OnSkillReady.RemoveDynamic(this, &URunGameSkillSlot::OnSkillReady_Callback);
+		Comp->OnEnergyChanged.RemoveDynamic(this, &URunGameSkillSlot::OnEnergyChanged_Callback);
 	}
 
 	if (IconLoadHandle.IsValid())
@@ -175,6 +182,39 @@ void URunGameSkillSlot::OnIconLoaded()
 		if (UTexture2D* LoadedTex = PendingIcon.Get())
 		{
 			SkillIcon->SetBrushFromTexture(LoadedTex);
+		}
+	}
+}
+
+void URunGameSkillSlot::OnEnergyChanged_Callback(float CurrentEnergy, float MaxEnergy)
+{
+	UpdateEnergyAvailability(CurrentEnergy);
+}
+
+void URunGameSkillSlot::UpdateEnergyAvailability(float CurrentEnergy)
+{
+	if (CurrentEnergy >= RequiredEnergy)
+	{
+		// Energy sufficient — normal appearance
+		if (SkillIcon)
+		{
+			SkillIcon->SetColorAndOpacity(FLinearColor::White);
+		}
+		if (KeyHintText)
+		{
+			KeyHintText->SetColorAndOpacity(FLinearColor::White);
+		}
+	}
+	else
+	{
+		// Energy insufficient — gray out
+		if (SkillIcon)
+		{
+			SkillIcon->SetColorAndOpacity(FLinearColor(0.3f, 0.3f, 0.3f, 1.0f));
+		}
+		if (KeyHintText)
+		{
+			KeyHintText->SetColorAndOpacity(FLinearColor(0.3f, 0.3f, 0.3f, 1.0f));
 		}
 	}
 }

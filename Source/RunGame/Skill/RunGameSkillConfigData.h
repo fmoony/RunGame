@@ -37,6 +37,10 @@ struct RUNGAME_API FSkillDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill")
 	float CooldownSeconds = 5.0f;
 
+	/** Energy cost to activate this skill. Checked against CurrentEnergy in TryActivateSkill */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill")
+	float EnergyCost = 100.0f;
+
 	/** Input action bound dynamically by the character in SetupPlayerInputComponent */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Input")
 	TObjectPtr<UInputAction> InputAction;

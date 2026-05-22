@@ -8,10 +8,13 @@
 #include "Skill/RunGameSkillConfigData.h"
 #include "SkillComponent.generated.h"
 
+class ARunGamePlayerState;
+
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSkillActivatedSignature, FGameplayTag, SkillTag, float, CooldownDuration);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillReadySignature, FGameplayTag, SkillTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillExecutedSignature, FGameplayTag, SkillTag);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnergyChangedSignature, float, CurrentEnergy, float, MaxEnergy);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API USkillComponent : public UActorComponent
@@ -25,6 +28,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill")
 	TObjectPtr<USkillConfigData> SkillConfig;
 
+	// -- Energy configuration --
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
+	float MaxEnergy = 100.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
+	float BaseEnergyRegenPerSecond = 10.0f;
+
+	/** Bonus regen per score point. Final regen = (Base + Score * Multiplier + Modifier) * RegenMultiplier */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
+	float ScoreRegenMultiplier = 0.01f;
+
+	// -- Delegates --
+
 	/** Broadcast when a skill is activated — UI binds to drive MID cooldown parameters */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnSkillActivatedSignature OnSkillActivated;
@@ -36,6 +53,10 @@ public:
 	/** Broadcast when a skill is executed — Character binds to implement skill behavior */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnSkillExecutedSignature OnSkillExecuted;
+
+	/** Broadcast when energy changes — UI binds to update energy bar and skill slot availability */
+	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
+	FOnEnergyChangedSignature OnEnergyChanged;
 
 	/** Attempt to activate a skill by tag. Returns true on success */
 	UFUNCTION(BlueprintCallable, Category = "Skill")
@@ -53,9 +74,29 @@ public:
 
 	/** Get skill definition by tag. Returns default-constructed struct with invalid tag if not found */
 	UFUNCTION(BlueprintPure, Category = "Skill")
-	FSkillDefinition GetSkillDefinitionByTag(FGameplayTag SkillTag) const;
+	FSkillDefinition GetSkillDefinitionByTag(FGameplayTag SkillTag) const;	
 
 	TArray<FGameplayTag> GetSkillTags() const;
+
+	// -- Energy API --
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
+	float GetCurrentEnergy() const { return CurrentEnergy; }
+
+	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
+	bool HasEnoughEnergy(FGameplayTag SkillTag) const;
+
+	/** Scene prop interface — instantly adds energy (clamped to MaxEnergy) */
+	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
+	void AddEnergy(float Amount);
+
+	/** Scene prop interface — adds/subtracts a flat regen rate bonus */
+	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
+	void AddEnergyRegenModifier(float Delta);
+
+	/** Scene prop interface — multiplies total regen rate (1.0 = normal) */
+	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
+	void SetEnergyRegenMultiplier(float Mult);
 
 protected:
 	virtual void BeginPlay() override;
@@ -73,4 +114,24 @@ private:
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
+
+	// -- Energy runtime state --
+
+	float CurrentEnergy = 100.0f;
+
+	/** Flat additive bonus from scene props (can be negative) */
+	float EnergyRegenModifier = 0.0f;
+
+	/** Global multiplier from scene props (1.0 = normal) */
+	float EnergyRegenMultiplier = 1.0f;
+
+	FTimerHandle EnergyRegenTimer;
+
+	/** Cached reference to owning player's PlayerState for score-based regen acceleration */
+	UPROPERTY()
+	TObjectPtr<ARunGamePlayerState> CachedPlayerState;
+
+	void StartEnergyRegen();
+	void StopEnergyRegen();
+	void TickEnergyRegen();
 };

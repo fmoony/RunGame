@@ -4,6 +4,8 @@
 #include "Skill/RunGameSkillConfigData.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
+#include "GameFramework/PlayerState.h"
+#include "RunGamePlayerState.h"
 #include "RunGame.h"
 
 USkillComponent::USkillComponent()
@@ -17,6 +19,20 @@ void USkillComponent::BeginPlay()
 	Super::BeginPlay();
 
 	InitializeFromConfig();
+
+	// Cache PlayerState for score-based energy regen acceleration
+	if (AActor* Owner = GetOwner())
+	{
+		if (APlayerController* PC = Cast<APlayerController>(Owner->GetInstigatorController()))
+		{
+			CachedPlayerState = PC->GetPlayerState<ARunGamePlayerState>();
+		}
+	}
+
+	StartEnergyRegen();
+
+	// Broadcast initial energy state so UI initializes correctly
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 }
 
 void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -33,7 +49,9 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 
+	StopEnergyRegen();
 	SkillStates.Empty();
+	CachedPlayerState = nullptr;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -78,6 +96,13 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		return false;
 	}
 
+	// Check energy
+	if (CurrentEnergy < SkillDef->EnergyCost)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: Skill '%s' requires %.1f energy but only %.1f available"), *SkillTag.ToString(), SkillDef->EnergyCost, CurrentEnergy);
+		return false;
+	}
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{
@@ -94,8 +119,12 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		World->GetTimerManager().SetTimer(State->CooldownTimer, TimerDel, CooldownDuration, false);
 	}
 
+	// Consume energy
+	CurrentEnergy -= SkillDef->EnergyCost;
+
 	OnSkillActivated.Broadcast(SkillTag, CooldownDuration);
 	OnSkillExecuted.Broadcast(SkillTag);
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 
 	// Handle zero-cooldown skills: fire OnSkillReady immediately after activation
 	if (CooldownDuration <= 0.0f)
@@ -171,4 +200,78 @@ TArray<FGameplayTag> USkillComponent::GetSkillTags() const
 		}
 	}
 	return Tags;
+}
+
+// -- Energy methods --
+
+bool USkillComponent::HasEnoughEnergy(FGameplayTag SkillTag) const
+{
+	if (!SkillConfig)
+	{
+		return false;
+	}
+
+	const FSkillDefinition* SkillDef = SkillConfig->FindSkillByTag(SkillTag);
+	if (!SkillDef)
+	{
+		return false;
+	}
+
+	return CurrentEnergy >= SkillDef->EnergyCost;
+}
+
+void USkillComponent::AddEnergy(float Amount)
+{
+	CurrentEnergy = FMath::Min(MaxEnergy, CurrentEnergy + Amount);
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
+}
+
+void USkillComponent::AddEnergyRegenModifier(float Delta)
+{
+	EnergyRegenModifier += Delta;
+}
+
+void USkillComponent::SetEnergyRegenMultiplier(float Mult)
+{
+	EnergyRegenMultiplier = Mult;
+}
+
+void USkillComponent::StartEnergyRegen()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(
+			EnergyRegenTimer,
+			this,
+			&USkillComponent::TickEnergyRegen,
+			0.1f,
+			true
+		);
+	}
+}
+
+void USkillComponent::StopEnergyRegen()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(EnergyRegenTimer);
+	}
+}
+
+void USkillComponent::TickEnergyRegen()
+{
+	if (CurrentEnergy >= MaxEnergy)
+	{
+		return;
+	}
+
+	float ScoreBonus = 0.0f;
+	if (CachedPlayerState)
+	{
+		ScoreBonus = static_cast<float>(CachedPlayerState->GetRunGameScore()) * ScoreRegenMultiplier;
+	}
+
+	const float RegenAmount = (BaseEnergyRegenPerSecond + ScoreBonus + EnergyRegenModifier) * EnergyRegenMultiplier * 0.1f;
+	CurrentEnergy = FMath::Min(MaxEnergy, CurrentEnergy + RegenAmount);
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 }

@@ -18,6 +18,7 @@ URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	, ScoreText(nullptr)
 	, TimerText(nullptr)
 	, HealthBar(nullptr)
+	, EnergyBar(nullptr)
 	, SkillBarContainer(nullptr)
 	, SkillSlotClass(nullptr)
 	, CachedSkillComponent(nullptr)
@@ -43,7 +44,7 @@ void URunGameInGame::NativeConstruct()
 	}
 	else
 	{
-		// 初始化分数显�?
+		// 初始化分数显示
 		ScoreText->SetText(FText::FromString(TEXT("Score: 000000000")));
 	}
 
@@ -53,7 +54,7 @@ void URunGameInGame::NativeConstruct()
 	}
 	else
 	{
-		// 初始化计时显�?
+		// 初始化计时显示
 		TimerText->SetText(FText::FromString(TEXT("Time: 0.000s")));
 	}
 
@@ -77,14 +78,14 @@ void URunGameInGame::NativeConstruct()
 		// 绑定时间变更委托
 		TimerSubsystem->OnTimeChanged.AddDynamic(this, &URunGameInGame::OnTimerUpdated);
 
-		// 获取PlayerState并绑定分数变更委�?
+		// 获取PlayerState并绑定分数变更委托
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			if (ARunGamePlayerState* PlayerState = Cast<ARunGamePlayerState>(PC->GetPlayerState<APlayerState>()))
 			{
 				PlayerState->OnScoreChanged.AddDynamic(this, &URunGameInGame::OnScoreUpdated);
 
-				// 立即更新UI显示当前�?
+				// 立即更新UI显示当前值
 				OnScoreUpdated(PlayerState->GetRunGameScore());
 			}
 			else
@@ -116,6 +117,8 @@ void URunGameInGame::NativeConstruct()
 				if (USkillComponent* SkillComp = Character->GetSkillComponent())
 				{
 					CachedSkillComponent = SkillComp;
+					SkillComp->OnEnergyChanged.AddDynamic(this, &URunGameInGame::OnEnergyUpdated);
+					OnEnergyUpdated(SkillComp->GetCurrentEnergy(), SkillComp->MaxEnergy);
 
 					if (USkillConfigData* Config = SkillComp->SkillConfig)
 					{
@@ -178,12 +181,12 @@ void URunGameInGame::NativeDestruct()
 		CachedHealthComponent = nullptr;
 	}
 
-	// 解绑委托回调，防止内存泄�?
+	// 解绑委托回调，防止内存泄漏
 	if (TimerSubsystem)
 	{
 		TimerSubsystem->OnTimeChanged.RemoveDynamic(this, &URunGameInGame::OnTimerUpdated);
-	
-		// 解绑PlayerState的分数委�?
+
+		// 解绑PlayerState的分数委托
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
 			if (ARunGamePlayerState* PlayerState = Cast<ARunGamePlayerState>(PC->GetPlayerState<APlayerState>()))
@@ -193,6 +196,12 @@ void URunGameInGame::NativeDestruct()
 		}
 
 		UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Successfully unbound from TimerSubsystem events"));
+	}
+
+	// 解绑能量委托
+	if (CachedSkillComponent)
+	{
+		CachedSkillComponent->OnEnergyChanged.RemoveDynamic(this, &URunGameInGame::OnEnergyUpdated);
 	}
 
 	SkillSlots.Empty();
@@ -228,6 +237,14 @@ void URunGameInGame::OnHealthUpdated(float CurrentHP, float MaxHP, float Delta)
 	if (HealthBar)
 	{
 		HealthBar->SetPercent(MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f);
+	}
+}
+
+void URunGameInGame::OnEnergyUpdated(float CurrentEnergy, float MaxEnergy)
+{
+	if (EnergyBar)
+	{
+		EnergyBar->SetPercent(MaxEnergy > 0.0f ? CurrentEnergy / MaxEnergy : 0.0f);
 	}
 }
 

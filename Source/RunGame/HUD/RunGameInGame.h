@@ -43,6 +43,9 @@ private:
 	TObjectPtr<UProgressBar> HealthBar;
 
 	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UProgressBar> EnergyBar;
+
+	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UHorizontalBox> SkillBarContainer;
 
 	/** Widget class used for each skill slot — assign in Blueprint */
@@ -76,6 +79,10 @@ private:
 	/** Updates the health bar display when player health changes */
 	UFUNCTION()
 	void OnHealthUpdated(float CurrentHP, float MaxHP, float Delta);
+
+	/** Updates the energy bar display when skill energy changes */
+	UFUNCTION()
+	void OnEnergyUpdated(float CurrentEnergy, float MaxEnergy);
 
 	/** Formats time in seconds to a MM:SS.ms string */
 	FString FormatTimeText(float TimeSeconds) const;

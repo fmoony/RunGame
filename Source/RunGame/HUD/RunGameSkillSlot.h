@@ -66,9 +66,14 @@ private:
 	UFUNCTION()
 	void OnSkillReady_Callback(FGameplayTag ReadyTag);
 
+	UFUNCTION()
+	void OnEnergyChanged_Callback(float CurrentEnergy, float MaxEnergy);
+
 	/** Per-slot timer callback — reads GetCooldownRemaining from component, writes to MID. Runs at 0.05s */
 	UFUNCTION()
 	void UpdateCooldownDisplay();
+
+	void UpdateEnergyAvailability(float CurrentEnergy);
 
 	/** Called when the soft-referenced icon texture finishes async loading */
 	void OnIconLoaded();
@@ -76,4 +81,7 @@ private:
 	FTimerHandle CooldownDisplayTimer;
 
 	float CachedCooldownDuration = 0.0f;
+
+	/** Energy cost of this skill — used for energy availability check */
+	float RequiredEnergy = 0.0f;
 };
