@@ -15,6 +15,7 @@ class UInputAction;
 class UCurveFloat;
 class URunGameTimerSubsystem;
 class UHealthComponent;
+class USkillComponent;
 class UAnimMontage;
 struct FInputActionValue;
 
@@ -36,6 +37,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UHealthComponent> HealthComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USkillComponent> SkillComponent;
 
 protected:
 
@@ -212,4 +216,11 @@ public:
 	// ~end IDamagable interface
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
+
+	FORCEINLINE USkillComponent* GetSkillComponent() const { return SkillComponent; }
+
+	/** Activate a skill by tag — called from dynamically-bound Enhanced Input */
+	UFUNCTION(BlueprintCallable, Category = "Skills")
+	void ActivateSkillByTag(FGameplayTag SkillTag);
+
 };

@@ -6,8 +6,11 @@
 #include "Blueprint/UserWidget.h"
 #include "RunGameInGame.generated.h"
 
+class UHorizontalBox;
 class UProgressBar;
 class URunGameTimerSubsystem;
+class URunGameSkillSlot;
+class USkillComponent;
 class UTextBlock;
 class UHealthComponent;
 
@@ -39,6 +42,24 @@ private:
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UProgressBar> HealthBar;
 
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UProgressBar> EnergyBar;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UHorizontalBox> SkillBarContainer;
+
+	/** Widget class used for each skill slot — assign in Blueprint */
+	UPROPERTY(EditDefaultsOnly, Category = "Skill Bar")
+	TSubclassOf<URunGameSkillSlot> SkillSlotClass;
+
+	/** Dynamically created skill slot widgets */
+	UPROPERTY()
+	TArray<TObjectPtr<URunGameSkillSlot>> SkillSlots;
+
+	/** Cached SkillComponent reference for cleanup */
+	UPROPERTY()
+	TObjectPtr<USkillComponent> CachedSkillComponent;
+
 	/** Timer subsystem reference for time display updates */
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
@@ -58,6 +79,10 @@ private:
 	/** Updates the health bar display when player health changes */
 	UFUNCTION()
 	void OnHealthUpdated(float CurrentHP, float MaxHP, float Delta);
+
+	/** Updates the energy bar display when skill energy changes */
+	UFUNCTION()
+	void OnEnergyUpdated(float CurrentEnergy, float MaxEnergy);
 
 	/** Formats time in seconds to a MM:SS.ms string */
 	FString FormatTimeText(float TimeSeconds) const;

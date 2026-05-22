@@ -2,8 +2,12 @@
 
 #include "HUD/RunGameInGame.h"
 #include "Actor/Component/HealthComponent.h"
+#include "Actor/Component/SkillComponent.h"
+#include "Components/HorizontalBox.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
+#include "HUD/RunGameSkillSlot.h"
+#include "Skill/RunGameSkillConfigData.h"
 #include "GameFramework/PlayerController.h"
 #include "RunGameCharacter.h"
 #include "RunGamePlayerState.h"
@@ -14,6 +18,10 @@ URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	, ScoreText(nullptr)
 	, TimerText(nullptr)
 	, HealthBar(nullptr)
+	, EnergyBar(nullptr)
+	, SkillBarContainer(nullptr)
+	, SkillSlotClass(nullptr)
+	, CachedSkillComponent(nullptr)
 	, TimerSubsystem(nullptr)
 	, CachedHealthComponent(nullptr)
 {
@@ -98,6 +106,70 @@ void URunGameInGame::NativeConstruct()
 	{
 		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
 	}
+
+	// Skill bar setup
+	if (SkillSlotClass && SkillBarContainer)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (ARunGameCharacter* Character = Cast<ARunGameCharacter>(PC->GetPawn()))
+			{
+				if (USkillComponent* SkillComp = Character->GetSkillComponent())
+				{
+					CachedSkillComponent = SkillComp;
+					SkillComp->OnEnergyChanged.AddDynamic(this, &URunGameInGame::OnEnergyUpdated);
+					OnEnergyUpdated(SkillComp->GetCurrentEnergy(), SkillComp->MaxEnergy);
+
+					if (USkillConfigData* Config = SkillComp->SkillConfig)
+					{
+						for (const FSkillDefinition& SkillDef : Config->Skills)
+						{
+							if (!SkillDef.SkillTag.IsValid())
+							{
+								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
+								continue;
+							}
+
+							URunGameSkillSlot* SkillSlot = CreateWidget<URunGameSkillSlot>(this, SkillSlotClass);
+							if (SkillSlot)
+							{
+								SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
+								SkillBarContainer->AddChild(SkillSlot);
+								SkillSlots.Add(SkillSlot);
+								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
+							}
+							else
+							{
+								UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
+							}
+						}
+
+						UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
+					}
+					else
+					{
+						UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
+					}
+				}
+				else
+				{
+					UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get SkillComponent for skill bar setup"));
+				}
+			}
+			else
+			{
+				UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerPawn for skill bar setup"));
+			}
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerController for skill bar setup"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
+	}
 }
 
 void URunGameInGame::NativeDestruct()
@@ -113,7 +185,7 @@ void URunGameInGame::NativeDestruct()
 	if (TimerSubsystem)
 	{
 		TimerSubsystem->OnTimeChanged.RemoveDynamic(this, &URunGameInGame::OnTimerUpdated);
-	
+
 		// 解绑PlayerState的分数委托
 		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 		{
@@ -125,6 +197,15 @@ void URunGameInGame::NativeDestruct()
 
 		UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Successfully unbound from TimerSubsystem events"));
 	}
+
+	// 解绑能量委托
+	if (CachedSkillComponent)
+	{
+		CachedSkillComponent->OnEnergyChanged.RemoveDynamic(this, &URunGameInGame::OnEnergyUpdated);
+	}
+
+	SkillSlots.Empty();
+	CachedSkillComponent = nullptr;
 
 	Super::NativeDestruct();
 }
@@ -156,6 +237,14 @@ void URunGameInGame::OnHealthUpdated(float CurrentHP, float MaxHP, float Delta)
 	if (HealthBar)
 	{
 		HealthBar->SetPercent(MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f);
+	}
+}
+
+void URunGameInGame::OnEnergyUpdated(float CurrentEnergy, float MaxEnergy)
+{
+	if (EnergyBar)
+	{
+		EnergyBar->SetPercent(MaxEnergy > 0.0f ? CurrentEnergy / MaxEnergy : 0.0f);
 	}
 }
 
