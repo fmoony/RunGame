@@ -4,6 +4,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimMontage.h"
+#include "RunGameCharacter.h"
+#include "Actor/Component/HealthComponent.h"
 
 void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
 {
@@ -23,6 +25,57 @@ void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Insti
 		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
 		{
 			MoveComp->AddImpulse(Character->GetActorForwardVector() * ImpulseStrength, true);
+		}
+	}
+}
+
+void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
+{
+	ACharacter* Character = Cast<ACharacter>(Instigator);
+	if (!Character)
+	{
+		return;
+	}
+
+	// Speed boost
+	if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+	{
+		OriginalMaxWalkSpeed = MoveComp->MaxWalkSpeed;
+		MoveComp->MaxWalkSpeed = OriginalMaxWalkSpeed * SpeedMultiplier;
+	}
+
+	// Invincibility
+	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Character))
+	{
+		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
+		{
+			HealthComp->SetInvincible(true);
+		}
+	}
+
+	// Schedule revert after Duration
+	if (UWorld* World = Instigator->GetWorld())
+	{
+		FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertEffect, Instigator);
+		World->GetTimerManager().SetTimer(RevertTimer, RevertDel, Duration, false);
+	}
+}
+
+void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
+{
+	if (ACharacter* Character = Cast<ACharacter>(Instigator))
+	{
+		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
+		{
+			MoveComp->MaxWalkSpeed = OriginalMaxWalkSpeed;
+		}
+	}
+
+	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
+	{
+		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
+		{
+			HealthComp->SetInvincible(false);
 		}
 	}
 }
