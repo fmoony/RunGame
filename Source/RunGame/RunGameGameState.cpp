@@ -1,33 +1,88 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
 #include "RunGameGameState.h"
+#include "WorldSubsystem/State/GameFlowRuntimeState.h"
+#include "RunGame.h"
 
 ARunGameGameState::ARunGameGameState()
 {
-	CurrentState = ERunGameGameState::MainMenu;
+}
+
+void ARunGameGameState::BeginPlay()
+{
+	Super::BeginPlay();
+
+	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	{
+		// 同步配置默认值到 RS
+		RS->DefaultCountdownSeconds = DefaultCountdownSeconds;
+		RS->DefaultGameTotalTime = DefaultGameTotalTime;
+
+		// 绑定转发器：RS 广播 → 重播自己的委托
+		RS->OnGameStateChanged.AddDynamic(this, &ARunGameGameState::OnRS_GameStateChanged);
+		RS->OnCountdownUpdated.AddDynamic(this, &ARunGameGameState::OnRS_CountdownUpdated);
+		RS->OnCountdownComplete.AddDynamic(this, &ARunGameGameState::OnRS_CountdownComplete);
+	}
+}
+
+void ARunGameGameState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	{
+		RS->OnGameStateChanged.RemoveDynamic(this, &ARunGameGameState::OnRS_GameStateChanged);
+		RS->OnCountdownUpdated.RemoveDynamic(this, &ARunGameGameState::OnRS_CountdownUpdated);
+		RS->OnCountdownComplete.RemoveDynamic(this, &ARunGameGameState::OnRS_CountdownComplete);
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ARunGameGameState::SetGameState(ERunGameGameState NewState)
 {
-	if (CurrentState == NewState)
+	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
 	{
-		return;
+		RS->SetGameState(NewState);
 	}
+}
 
-	ERunGameGameState OldState = CurrentState;
-	CurrentState = NewState;
-
-	OnGameStateChanged.Broadcast(OldState, CurrentState);
-
-	UE_LOG(LogTemp, Warning, TEXT("RunGameGameState: Game State Changed from %d to %d"), (int32)OldState, (int32)NewState);
+ERunGameGameState ARunGameGameState::GetCurrentState() const
+{
+	if (const UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	{
+		return RS->GetGameState();
+	}
+	return ERunGameGameState::MainMenu;
 }
 
 void ARunGameGameState::SetCountdownSeconds(int32 NewCountdownSeconds)
 {
-	if (CountdownSeconds != NewCountdownSeconds)
+	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
 	{
-		CountdownSeconds = NewCountdownSeconds;
-		OnCountdownUpdated.Broadcast(CountdownSeconds);
-		UE_LOG(LogTemp, Warning, TEXT("RunGameGameState: Countdown Seconds Updated: %d"), CountdownSeconds);
+		RS->SetCountdownSeconds(NewCountdownSeconds);
 	}
+}
+
+int32 ARunGameGameState::GetCountdownSeconds() const
+{
+	if (const UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	{
+		return RS->GetCountdownSeconds();
+	}
+	return 0;
+}
+
+// ---- RS 转发器 ----
+
+void ARunGameGameState::OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
+{
+	OnGameStateChanged.Broadcast(OldState, NewState);
+}
+
+void ARunGameGameState::OnRS_CountdownUpdated(int32 CountdownSeconds)
+{
+	OnCountdownUpdated.Broadcast(CountdownSeconds);
+}
+
+void ARunGameGameState::OnRS_CountdownComplete()
+{
+	// GameState 本身不持 OnCountdownComplete 委托（由 TimerSubsystem 持有）
+	// 如果后续需要，可在此添加转发
 }

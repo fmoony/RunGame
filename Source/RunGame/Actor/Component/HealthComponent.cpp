@@ -1,7 +1,6 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
 #include "Actor/Component/HealthComponent.h"
+#include "WorldSubsystem/State/CombatRuntimeState.h"
+#include "Engine/World.h"
 
 UHealthComponent::UHealthComponent()
 {
@@ -12,71 +11,119 @@ void UHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	CurrentHP = MaxHP;
-	bIsDead = false;
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		RS->SetMaxHP(MaxHP);
+		RS->Revive(MaxHP);
+
+		RS->OnHealthChanged.AddDynamic(this, &UHealthComponent::OnRS_HealthChanged);
+		RS->OnDamageTaken.AddDynamic(this, &UHealthComponent::OnRS_DamageTaken);
+		RS->OnDeath.AddDynamic(this, &UHealthComponent::OnRS_Death);
+		RS->OnInvincibilityChanged.AddDynamic(this, &UHealthComponent::OnRS_InvincibilityChanged);
+	}
 }
+
+void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		RS->OnHealthChanged.RemoveDynamic(this, &UHealthComponent::OnRS_HealthChanged);
+		RS->OnDamageTaken.RemoveDynamic(this, &UHealthComponent::OnRS_DamageTaken);
+		RS->OnDeath.RemoveDynamic(this, &UHealthComponent::OnRS_Death);
+		RS->OnInvincibilityChanged.RemoveDynamic(this, &UHealthComponent::OnRS_InvincibilityChanged);
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
+// ---- RS 转发器 ----
+
+void UHealthComponent::OnRS_HealthChanged(float CurrentHP, float InMaxHP, float InDelta)
+{
+	OnHealthChanged.Broadcast(CurrentHP, InMaxHP, InDelta);
+}
+
+void UHealthComponent::OnRS_DamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
+{
+	OnDamageTaken.Broadcast(Damage, DamageType, DamageCauser);
+}
+
+void UHealthComponent::OnRS_Death(FGameplayTag DamageType, AActor* DeathCauser)
+{
+	OnDeath.Broadcast(DamageType, DeathCauser);
+}
+
+void UHealthComponent::OnRS_InvincibilityChanged(bool bNewInvincible)
+{
+	OnInvincibilityChanged.Broadcast(bNewInvincible);
+}
+
+// ---- Health API ----
 
 void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
 {
-	if (bIsDead || Damage <= 0.0f || bIsInvincible)
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
 	{
-		return;
-	}
-
-	const float OldHP = CurrentHP;
-	CurrentHP = FMath::Clamp(CurrentHP - Damage, 0.0f, MaxHP);
-	const float Delta = CurrentHP - OldHP;
-
-	if (Delta != 0.0f)
-	{
-		OnHealthChanged.Broadcast(CurrentHP, MaxHP, Delta);
-	}
-
-	if (CurrentHP <= 0.0f)
-	{
-		bIsDead = true;
-		OnDeath.Broadcast(DamageType, DamageCauser);
-	}
-	else
-	{
-		OnDamageTaken.Broadcast(Damage, DamageType, DamageCauser);
+		RS->ApplyDamage(Damage, DamageType, DamageCauser);
 	}
 }
 
 void UHealthComponent::Heal(float Amount, AActor* Healer)
 {
-	if (bIsDead || Amount <= 0.0f)
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
 	{
-		return;
+		RS->Heal(Amount, Healer);
 	}
+}
 
-	const float OldHP = CurrentHP;
-	CurrentHP = FMath::Clamp(CurrentHP + Amount, 0.0f, MaxHP);
-	const float Delta = CurrentHP - OldHP;
-
-	if (Delta != 0.0f)
+float UHealthComponent::GetCurrentHP() const
+{
+	if (const UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
 	{
-		OnHealthChanged.Broadcast(CurrentHP, MaxHP, Delta);
+		return RS->GetCurrentHP();
 	}
+	return 0.0f;
 }
 
 float UHealthComponent::GetHealthPercentage() const
 {
-	return MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f;
+	if (const UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		return RS->GetHealthPercentage();
+	}
+	return 0.0f;
+}
+
+bool UHealthComponent::IsDead() const
+{
+	if (const UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		return RS->IsDead();
+	}
+	return false;
 }
 
 void UHealthComponent::SetInvincible(bool bNewInvincible)
 {
-	if (bIsInvincible != bNewInvincible)
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
 	{
-		bIsInvincible = bNewInvincible;
-		OnInvincibilityChanged.Broadcast(bIsInvincible);
+		RS->SetInvincible(bNewInvincible);
 	}
+}
+
+bool UHealthComponent::IsInvincible() const
+{
+	if (const UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		return RS->IsInvincible();
+	}
+	return false;
 }
 
 void UHealthComponent::Revive(float RestoreHP)
 {
-	bIsDead = false;
-	CurrentHP = FMath::Clamp(RestoreHP, 1.0f, MaxHP);
-	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
+	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	{
+		RS->Revive(RestoreHP);
+	}
 }

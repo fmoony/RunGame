@@ -84,9 +84,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
 	void SetCharacterState(ERunGameCharacterState NewState);
 
-	/** Returns the current character state */
+	/** Returns the current character state (from PlayerRuntimeState) */
 	UFUNCTION(BlueprintPure, Category = "RunGame|State")
-	ERunGameCharacterState GetCharacterState() const { return CurrentCharacterState; }
+	ERunGameCharacterState GetCharacterState() const;
 
 	/** Returns true if the transition from current state to NewState is allowed */
 	UFUNCTION(BlueprintPure, Category = "RunGame|State")
@@ -221,11 +221,8 @@ public:
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-	FORCEINLINE bool IsSliding() const { return CurrentCharacterState == ERunGameCharacterState::Sliding; }
-
-	/** Reacts to game state changes -- self-destructs when returning to MainMenu */
-	UFUNCTION()
-	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
+	UFUNCTION(BlueprintPure, Category = "RunGame|State")
+	bool IsSliding() const;
 
 	FRotator DesireRotation;
 
@@ -252,28 +249,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Movement")
 	void RemoveSpeedModifier(FGameplayTag ModifierTag);
 
-	FORCEINLINE float GetCompositeSpeedMultiplier() const { return CachedCompositeSpeedMultiplier; }
+	float GetCompositeSpeedMultiplier() const;
 
 	/** Activate a skill by tag — called from dynamically-bound Enhanced Input */
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
 private:
-	/** Central state variable — single source of truth for character status */
-	UPROPERTY(VisibleAnywhere, Category = "RunGame|State", meta = (AllowPrivateAccess = "true"))
-	ERunGameCharacterState CurrentCharacterState;
-
 	/** Buffered input — when a state transition is rejected, store it here. MAX = no buffered input */
 	ERunGameCharacterState PendingInputState = ERunGameCharacterState::MAX;
-
-	/** Set by OnCharacterStateChangedCallback when entering Turning state. Consumed by DoMove */
-	bool bTurn = false;
-
-	/** Set by OnCharacterStateChangedCallback when entering Turning state. Consumed by DoMove */
-	bool InTurnBox = false;
 
 	/** Reacts to own state changes — slide setup/cleanup, turn flag management, etc. */
 	UFUNCTION()
 	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
+	// ---- RS 绑定回调 ----
+
+	UFUNCTION()
+	void OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
+
+	UFUNCTION()
+	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
 };

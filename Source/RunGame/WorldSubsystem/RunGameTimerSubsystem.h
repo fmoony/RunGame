@@ -10,14 +10,10 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCountdownCompleteDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeChangedDelegate, float, NewTime);
 
-class ARunGameGameState;
-
 /**
- * 纯粹的计时子系统
- * 倒计时：从 DefaultCountdownSeconds 倒数至 0，每秒 Tick 一次。
- * 正向计时：从 0.0 向上累计，每帧 Tick。
- * 不持有配置数据或分数逻辑，启停完全由 GameState 状态机驱动。
- * 世界暂停时仍可正常计时。
+ * 纯粹的计时子系统（引擎）。
+ * 数据存储已迁移到 UGameFlowRuntimeState，本类仅保留 Tick 逻辑和倒计时引擎。
+ * 委托由 RS 转发器重播以保持向后兼容。
  */
 UCLASS()
 class RUNGAME_API URunGameTimerSubsystem : public UTickableWorldSubsystem
@@ -25,19 +21,18 @@ class RUNGAME_API URunGameTimerSubsystem : public UTickableWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	/** Constructs the timer subsystem with zeroed time and stopped state */
 	URunGameTimerSubsystem();
 
 	virtual TStatId GetStatId() const override;
 
-	/** Binds to the game state's state-change event on world begin play */
+	/** 绑定到 GameFlowRuntimeState 的 OnGameStateChanged 和转发器 */
 	virtual void OnWorldBeginPlay(UWorld& World) override;
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Timer")
-	float GetTotalTimeSeconds() const { return TotalTimeSeconds; }
+	float GetTotalTimeSeconds() const;
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Timer")
-	bool IsTimerRunning() const { return bIsTimerRunning; }
+	bool IsTimerRunning() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Timer")
 	FOnCountdownCompleteDelegate OnCountdownComplete;
@@ -47,55 +42,31 @@ public:
 
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
-
-	/** Stops all timers and unbinds from game state events on teardown */
 	virtual void Deinitialize() override;
-
 	virtual void Tick(float DeltaTime) override;
-
-	/** Allow ticking when the world is paused */
 	virtual bool IsTickableWhenPaused() const override { return true; }
 
 private:
-	/** Reactively starts/stops timers based on the new game state */
+	/** 响应 RS 的游戏状态变化，启动/停止计时器 */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 
-	/** Starts the 1Hz countdown timer using the configured duration */
+	// ---- RS 转发器 ----
+	UFUNCTION()
+	void OnRS_TimeChanged(float NewTime);
+
+	UFUNCTION()
+	void OnRS_CountdownComplete();
+
 	void StartCountdown();
-
-	/** Stops and clears the countdown timer handle */
 	void StopCountdown();
-
-	/** Decrements countdown each tick; finishes at zero */
 	void UpdateCountdown();
-
-	/** Stops countdown, transitions to InGame, broadcasts completion */
 	void FinishCountdown();
-
-	/** Resets forward timer to zero and begins accumulating */
 	void StartTimer();
-
-	/** Pauses forward timer accumulation */
 	void StopTimer();
-
-	/** Accumulates delta time and broadcasts updated value */
 	void UpdateTimer(float DeltaTime);
 
-	/** Returns the RunGame game state cast from the world's game state */
-	ARunGameGameState* GetGameState() const;
-
-	/** Accumulated forward time in seconds, incremented each tick */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Timer", meta = (AllowPrivateAccess = "true"))
-	float TotalTimeSeconds;
-
-	/** Whether the 1Hz countdown is currently active */
 	bool bIsCountdownActive = false;
-
-	/** Accumulates delta time to fire countdown ticks at 1Hz intervals */
 	float CountdownTickAccumulator = 0.0f;
-
-	bool bIsTimerRunning;
-
 	bool bResumingFromPause = false;
 };

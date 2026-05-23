@@ -14,6 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Central Types (`RunGameType.h`)
 
 - **`ERunGameGameState`**: `MainMenu, CountDown, InGame, Pause, GameOver, MAX` — drives the entire reactive state machine.
+- **`ERunGameCharacterState`**: `Idle, Airborne, Sliding, Turning, Dead, MAX` — character core state machine. Mutually exclusive locomotion/life states. Dead is terminal.
 - **`FFloorType`**: `StraightFloor, TurnFloor, UpAndDownFloor, MAX` — floor segment categories.
 
 ### Reactive State Machine (central event bus)
@@ -48,6 +49,8 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 | `OnHealthChanged` | `UHealthComponent` | `(float CurrentHP, float MaxHP, float Delta)` — positive=heal, negative=damage |
 | `OnDeath` | `UHealthComponent` | `(FGameplayTag DamageType, AActor* DeathCauser)` |
 | `OnCharacterDied` | `ARunGameCharacter` | `(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)` |
+| `OnCharacterStateChanged` | `ARunGameCharacter` | `(ERunGameCharacterState Old, ERunGameCharacterState New)` — pure, no side effects |
+| `OnInvincibilityChanged` | `UHealthComponent` | `(bool bNewInvincible)` |
 
 ### Player Lifecycle
 
@@ -66,6 +69,48 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
      6. If no montage found → `Destroy()` immediately or via `FTimerHandle` with `DestroyDelay`
    - **GameMode is completely decoupled** from death handling — no `HandlePlayerDeath`, no `OnPlayerDeath`
 4. **Respawn**: `GameMode::StartNewGame()` → same countdown path → `SpawnPlayer()` re-possesses a new pawn and blends the view back.
+
+### Character State Machine
+
+Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save → Modify → Broadcast`.
+
+**`ARunGameCharacter`** owns the state. `SetCharacterState(NewState)` is a **pure function** — it only manages `CurrentCharacterState` and broadcasts `OnCharacterStateChanged(Old, New)`. All behavioral side effects live in `OnCharacterStateChangedCallback`, which the character binds to its own delegate.
+
+| State | Description | Entry |
+|-------|-------------|-------|
+| `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne; slide/turn ended |
+| `Airborne` | Jumping, falling, walking off ledge | `Tick()` detects `IsFalling()` from Idle |
+| `Sliding` | Crouched, no ground friction, montage playing | `StartSlide()` calls `SetCharacterState(Sliding)` |
+| `Turning` | Inside turn zone — lateral movement blocked, rotation locked | `TurnFloor` overlap calls `SetCharacterState(Turning)` |
+| `Dead` | All input/movement blocked, dissolving | `Die()` calls `SetCharacterState(Dead)` — terminal |
+
+**Transition matrix** (enforced by `IsCharacterStateTransitionAllowed`):
+
+| FROM \ TO | Idle | Airborne | Sliding | Turning | Dead |
+|-----------|------|----------|---------|---------|------|
+| **Idle**  | -    | YES      | YES¹    | YES     | YES  |
+| **Airborne** | YES | -      | NO²     | YES     | YES  |
+| **Sliding** | YES | YES      | -       | YES     | YES  |
+| **Turning** | YES | YES      | NO      | -       | YES  |
+| **Dead**  | NO   | NO       | NO      | NO      | -    |
+
+¹ Sliding additionally requires `!IsFalling()` at runtime.
+² Sliding input while Airborne is buffered in `PendingInputState`; consumed on `Landed()` → Idle → Sliding.
+
+**Reactive callback** (`OnCharacterStateChangedCallback`):
+- Entering `Sliding` → Crouch, set `GroundFriction=0`, bind `OnSlideBlendingOut`, play slide montage
+- Leaving `Sliding` → UnCrouch, restore `GroundFriction`, reset `AnimRootMotionTranslationScale`, unbind montage callback
+- Entering `Turning` → set `bTurn=true`, `InTurnBox=true`
+- Leaving `Turning` → set `bTurn=false`, `InTurnBox=false`
+- Entering `Dead` → clear `bTurn`, `InTurnBox`
+
+**Input buffering**: `PendingInputState` stores a rejected transition request. On `Landed()` (Airborne→Idle), if `PendingInputState == Sliding`, it's consumed and `SetCharacterState(Sliding)` is retried.
+
+**Skill gating**: `ActivateSkillByTag()` blocks skills while `Dead` or `Sliding`.
+
+**Invincibility**: `UHealthComponent::SetInvincible()` follows the same Guard→Modify→Broadcast pattern, broadcasting `OnInvincibilityChanged(bool)` when the value changes. Invincibility is orthogonal — it can coexist with any character state.
+
+**Cleanup**: `BeginPlay` binds `OnCharacterStateChanged.AddDynamic`; `EndPlay` calls `RemoveDynamic`.
 
 ### World Subsystems
 
@@ -157,10 +202,11 @@ DamageDealerComponent::OnOverlap
 - `GetCurrentHP()`, `GetMaxHP()`, `IsDead()` — query functions, `BlueprintNativeEvent`
 
 **`UHealthComponent`** (ActorComponent, `RunGame/Actor/Component/`):
-- Properties: `MaxHP` (EditAnywhere, ClampMin=1), `CurrentHP`, `bIsDead`
-- Public API: `ApplyDamage(Damage, FGameplayTag DamageType, Causer)`, `Heal(Amount, Healer)`, `Revive(RestoreHP)`
-- Delegates: `FOnHealthChanged(CurrentHP, MaxHP, Delta)`, `FOnDeath(FGameplayTag DamageType, AActor* DeathCauser)`
+- Properties: `MaxHP` (EditAnywhere, ClampMin=1), `CurrentHP`, `bIsDead`, `bIsInvincible`
+- Public API: `ApplyDamage(Damage, FGameplayTag DamageType, Causer)`, `Heal(Amount, Healer)`, `Revive(RestoreHP)`, `SetInvincible(bool)`, `IsInvincible()`
+- Delegates: `FOnHealthChanged(CurrentHP, MaxHP, Delta)`, `FOnDamageTaken(Damage, DamageType, DamageCauser)`, `FOnDeath(FGameplayTag DamageType, AActor* DeathCauser)`, `FOnInvincibilityChanged(bool bNewInvincible)`
 - Tick disabled (`bCanEverTick = false`)
+- `bIsInvincible` is orthogonal to the character state machine — it can coexist with any `ERunGameCharacterState`. `SetInvincible()` follows Guard→Modify→Broadcast, broadcasting `OnInvincibilityChanged` when the value changes.
 - Does NOT inherit from `IDamagable` — the owning Actor implements the interface and forwards to this component
 
 **`UDamageDealerComponent`** (UBoxComponent, `RunGame/Actor/Component/`):
@@ -169,9 +215,10 @@ DamageDealerComponent::OnOverlap
 
 **`ARunGameCharacter`** integration:
 - Implements `IDamagable`, owns `UHealthComponent*` via `CreateDefaultSubobject`
-- `BeginPlay` binds `HealthComponent->OnDeath` → `OnHealthDepleted` → `Die(DamageType)`
-- All `IDamagable` `_Implementation` functions forward to `HealthComponent`
-- `Die(FGameplayTag DamageType, float DestroyDelay = 3.0f)` — single death entry point, full self-contained flow
+- Owns `ERunGameCharacterState CurrentCharacterState` — single source of truth for character status (see Character State Machine above)
+- `BeginPlay` binds `HealthComponent->OnDeath` → `OnHealthDepleted` → `Die(DamageType)`, and `OnCharacterStateChanged` → `OnCharacterStateChangedCallback` for reactive slide/turn/death behavior
+- All `IDamagable` `_Implementation` functions forward to `HealthComponent`; `IsDead_Implementation()` checks `CurrentCharacterState == Dead`
+- `Die(FGameplayTag DamageType, float DestroyDelay = 3.0f)` — first calls `SetCharacterState(Dead)` (state machine guards against double-entry), then proceeds with death sequence
 - `OnCharacterDied` (BlueprintAssignable) — broadcast inside `Die()`, available for external binding if needed
 - `DeathMontages` (`TMap<FGameplayTag, UAnimMontage*>`, EditAnywhere) — damage type to death animation mapping
 - `OnDeathMontageBlendingOut` — callback when death montage ends, triggers `Destroy()`

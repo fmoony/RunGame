@@ -8,9 +8,6 @@
 #include "Skill/RunGameSkillConfigData.h"
 #include "SkillComponent.generated.h"
 
-class ARunGamePlayerState;
-
-
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSkillActivatedSignature, FGameplayTag, SkillTag, float, CooldownDuration);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillReadySignature, FGameplayTag, SkillTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillExecutedSignature, FGameplayTag, SkillTag);
@@ -81,7 +78,7 @@ public:
 	// -- Energy API --
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
-	float GetCurrentEnergy() const { return CurrentEnergy; }
+	float GetCurrentEnergy() const;
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
 	bool HasEnoughEnergy(FGameplayTag SkillTag) const;
@@ -115,9 +112,17 @@ private:
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
 
-	// -- Energy runtime state --
+	// ---- RS 转发器 ----
+	UFUNCTION()
+	void OnRS_EnergyChanged(float CurrentEnergy, float InMaxEnergy);
 
-	float CurrentEnergy = 100.0f;
+	UFUNCTION()
+	void OnRS_SkillActivated(FGameplayTag SkillTag, float CooldownDuration);
+
+	UFUNCTION()
+	void OnRS_SkillReady(FGameplayTag SkillTag);
+
+	// -- Energy runtime state --
 
 	/** Flat additive bonus from scene props (can be negative) */
 	float EnergyRegenModifier = 0.0f;
@@ -126,10 +131,6 @@ private:
 	float EnergyRegenMultiplier = 1.0f;
 
 	FTimerHandle EnergyRegenTimer;
-
-	/** Cached reference to owning player's PlayerState for score-based regen acceleration */
-	UPROPERTY()
-	TObjectPtr<ARunGamePlayerState> CachedPlayerState;
 
 	void StartEnergyRegen();
 	void StopEnergyRegen();

@@ -40,23 +40,20 @@ public:
 	void SetRunGameScore(int64 NewScore);
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Score")
-	int64 GetRunGameScore() const { return RunGameScore; }
+	int64 GetRunGameScore() const;
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Score")
 	FOnScoreChangedDelegate OnScoreChanged;
 
-protected:
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Score", meta = (AllowPrivateAccess = "true"))
-	int64 RunGameScore;
-
 private:
-	/** Periodic score calculation callback -- computes cubic polynomial multiplier */
 	UFUNCTION()
 	void CalculateScoreProcess();
 
-	/** Reactively starts or stops score calculation based on game state */
 	UFUNCTION()
-	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
+	void OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
+
+	UFUNCTION()
+	void OnRS_ScoreChanged(int64 NewScore);
 
 	FTimerHandle ScoreTimerHandle;
 

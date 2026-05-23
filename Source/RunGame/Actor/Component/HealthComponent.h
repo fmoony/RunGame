@@ -20,18 +20,9 @@ class RUNGAME_API UHealthComponent : public UActorComponent
 public:
 	UHealthComponent();
 
+	/** 配置属性 —— BeginPlay 时同步到 CombatRuntimeState */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health", meta = (ClampMin = 1))
 	float MaxHP = 100.0f;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
-	float CurrentHP;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
-	bool bIsDead;
-
-	/** Temporary invincibility. When true, ApplyDamage has no effect */
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
-	bool bIsInvincible = false;
 
 	/** Broadcast when HP changes — positive Delta = healing, negative = damage */
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
@@ -58,7 +49,7 @@ public:
 	void Heal(float Amount, AActor* Healer);
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
-	float GetCurrentHP() const { return CurrentHP; }
+	float GetCurrentHP() const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
 	float GetMaxHP() const { return MaxHP; }
@@ -67,19 +58,31 @@ public:
 	float GetHealthPercentage() const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
-	bool IsDead() const { return bIsDead; }
+	bool IsDead() const;
 
-	/** Set invincibility state. Does not affect HP — only blocks incoming damage */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void SetInvincible(bool bNewInvincible);
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	bool IsInvincible() const { return bIsInvincible; }
+	bool IsInvincible() const;
 
-	/** Reset death state and restore HP to the specified amount (clamped to [1, MaxHP]) */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Revive(float RestoreHP);
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	UFUNCTION()
+	void OnRS_HealthChanged(float CurrentHP, float InMaxHP, float InDelta);
+
+	UFUNCTION()
+	void OnRS_DamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
+
+	UFUNCTION()
+	void OnRS_Death(FGameplayTag DamageType, AActor* DeathCauser);
+
+	UFUNCTION()
+	void OnRS_InvincibilityChanged(bool bNewInvincible);
 };

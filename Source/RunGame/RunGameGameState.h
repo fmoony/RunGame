@@ -11,9 +11,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnGameStateChangedSignature, ERunG
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnCountdownUpdatedSignature, int32, CountdownSeconds);
 
 /**
- * 全游戏唯一数据中心 (Single Source of Truth)
- * 状态、倒计时的秒数及可配置默认值均由 GameState 集中管理。
- * 游戏内计时为正向累计（从 0 向上递增），由 TimerSubsystem 驱动。
+ * 游戏状态薄包装 —— 数据存储已迁移到 UGameFlowRuntimeState。
+ * 保留委托作为向后兼容的转发层，消费者无需改动。
  */
 UCLASS()
 class RUNGAME_API ARunGameGameState : public AGameStateBase
@@ -24,32 +23,31 @@ public:
 	ARunGameGameState();
 
 	// ---- 游戏状态控制 ----
-	/** Changes the current game state and broadcasts OnGameStateChanged to all listeners */
+	/** 将状态写入 GameFlowRuntimeState（RS 负责广播） */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
 	void SetGameState(ERunGameGameState NewState);
 
+	/** 从 GameFlowRuntimeState 读取当前状态 */
 	UFUNCTION(BlueprintPure, Category = "RunGame|State")
-	ERunGameGameState GetCurrentState() const { return CurrentState; }
+	ERunGameGameState GetCurrentState() const;
 
-	// ---- 倒计时数据 (单一数据源) ----
+	// ---- 倒计时数据 ----
 
-	/** Sets the countdown seconds value and broadcasts OnCountdownUpdated if changed */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Countdown")
 	void SetCountdownSeconds(int32 NewCountdownSeconds);
 
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Countdown")
-	int32 GetCountdownSeconds() const { return CountdownSeconds; }
+	int32 GetCountdownSeconds() const;
 
-	// ---- 可配置默认值 (供 Subsystem 响应式读取) ----
+	// ---- 可配置默认值 (同步到 GameFlowRuntimeState) ----
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Config")
 	int32 DefaultCountdownSeconds = 3;
 
-	// 正向计时的时间上限（0.0 表示无上限，仅正向累计）
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Config")
 	float DefaultGameTotalTime = 0.0f;
 
-	// ---- 委托 ----
+	// ---- 委托 (向后兼容，由 RS 转发) ----
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Events")
 	FOnGameStateChangedSignature OnGameStateChanged;
@@ -57,10 +55,19 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Events")
 	FOnCountdownUpdatedSignature OnCountdownUpdated;
 
-private:
-	UPROPERTY(VisibleAnywhere, Category = "RunGame|State")
-	ERunGameGameState CurrentState;
+protected:
+	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	UPROPERTY(VisibleAnywhere, Category = "RunGame|State")
-	int32 CountdownSeconds;
+private:
+	// ---- RS 转发器回调 ----
+
+	UFUNCTION()
+	void OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
+
+	UFUNCTION()
+	void OnRS_CountdownUpdated(int32 CountdownSeconds);
+
+	UFUNCTION()
+	void OnRS_CountdownComplete();
 };
