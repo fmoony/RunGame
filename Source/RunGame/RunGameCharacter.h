@@ -178,6 +178,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	TObjectPtr<UCurveFloat> MaxSpeedCurve;
 
+	/** Active speed modifiers from skills, props, etc. Tag → Multiplier */
+	TMap<FGameplayTag, float> SpeedModifiers;
+
+	/** Cached product — maintained via multiply/divide on Add/Remove. 1.0 = no modifiers active */
+	float CachedCompositeSpeedMultiplier = 1.0f;
+
+	/** Current smoothed speed — interpolated toward target in Tick. Initialized from MaxWalkSpeed in BeginPlay */
+	float SmoothedMaxWalkSpeed = 1200.0f;
+
+	/** Duration in seconds to reach target speed via smooth interpolation */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Movement")
+	float SpeedTransitionDuration = 0.5f;
+
 	float DefaultGroundFriction;
 
 	float BaseMaxWalkSpeed;
@@ -218,6 +231,16 @@ public:
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 
 	FORCEINLINE USkillComponent* GetSkillComponent() const { return SkillComponent; }
+
+	/** Add or update a speed modifier. Overwrites if tag already exists. Multiplier is the factor applied */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|Movement")
+	void AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier);
+
+	/** Remove a speed modifier by tag. No-op if not found */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|Movement")
+	void RemoveSpeedModifier(FGameplayTag ModifierTag);
+
+	FORCEINLINE float GetCompositeSpeedMultiplier() const { return CachedCompositeSpeedMultiplier; }
 
 	/** Activate a skill by tag — called from dynamically-bound Enhanced Input */
 	UFUNCTION(BlueprintCallable, Category = "Skills")
