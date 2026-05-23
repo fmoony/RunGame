@@ -18,7 +18,7 @@ void UHealthComponent::BeginPlay()
 
 void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
 {
-	if (bIsDead || Damage <= 0.0f)
+	if (bIsDead || Damage <= 0.0f || bIsInvincible)
 	{
 		return;
 	}
@@ -63,6 +63,11 @@ void UHealthComponent::Heal(float Amount, AActor* Healer)
 float UHealthComponent::GetHealthPercentage() const
 {
 	return MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f;
+}
+
+void UHealthComponent::SetInvincible(bool bNewInvincible)
+{
+	bIsInvincible = bNewInvincible;
 }
 
 void UHealthComponent::Revive(float RestoreHP)

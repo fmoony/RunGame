@@ -57,3 +57,34 @@ public:
 
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
 };
+
+
+/**
+ * Unstoppable skill — speed boost + invincibility for a fixed duration.
+ * On execute: saves current speed, applies multiplier, enables invincibility.
+ * After Duration seconds: restores speed and disables invincibility.
+ */
+UCLASS(Blueprintable, BlueprintType)
+class RUNGAME_API USkillExecution_Unstoppable : public USkillExecutionBase
+{
+	GENERATED_BODY()
+
+public:
+	/** Speed multiplier applied during the effect */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Execution")
+	float SpeedMultiplier = 1.5f;
+
+	/** Duration of the effect in seconds */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Execution")
+	float Duration = 3.0f;
+
+	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
+
+private:
+	/** Skill tag cached during Execute for use in RevertEffect timer callback */
+	FGameplayTag CachedSkillTag;
+
+	FTimerHandle RevertTimer;
+
+	void RevertEffect(AActor* Instigator);
+};

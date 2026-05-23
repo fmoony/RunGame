@@ -75,6 +75,7 @@ void ARunGameCharacter::BeginPlay()
 
 	DefaultGroundFriction = GetCharacterMovement()->GroundFriction;
 	BaseMaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
+	SmoothedMaxWalkSpeed = BaseMaxWalkSpeed;
 
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
 
@@ -162,7 +163,10 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 	{
 		const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
 		const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
-		GetCharacterMovement()->MaxWalkSpeed = DesiredMaxSpeed;
+		const float TargetSpeed = DesiredMaxSpeed * CachedCompositeSpeedMultiplier;
+		const float InterpSpeed = 3.0f / FMath::Max(SpeedTransitionDuration, 0.01f);
+		SmoothedMaxWalkSpeed = FMath::FInterpTo(SmoothedMaxWalkSpeed, TargetSpeed, DeltaSeconds, InterpSpeed);
+		GetCharacterMovement()->MaxWalkSpeed = SmoothedMaxWalkSpeed;
 	}
 
 	FRotator CurrentRotation = GetController()->GetControlRotation();
@@ -549,3 +553,24 @@ bool ARunGameCharacter::IsDead_Implementation() const
 }
 
 // ~end IDamagable interface
+
+// -- Speed modifiers --
+
+void ARunGameCharacter::AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier)
+{
+	if (float* Existing = SpeedModifiers.Find(ModifierTag))
+	{
+		CachedCompositeSpeedMultiplier /= *Existing;
+	}
+	SpeedModifiers.Add(ModifierTag, Multiplier);
+	CachedCompositeSpeedMultiplier *= Multiplier;
+}
+
+void ARunGameCharacter::RemoveSpeedModifier(FGameplayTag ModifierTag)
+{
+	if (float* Existing = SpeedModifiers.Find(ModifierTag))
+	{
+		CachedCompositeSpeedMultiplier /= *Existing;
+	}
+	SpeedModifiers.Remove(ModifierTag);
+}

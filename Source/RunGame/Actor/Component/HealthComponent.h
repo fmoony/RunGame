@@ -28,6 +28,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
 	bool bIsDead;
 
+	/** Temporary invincibility. When true, ApplyDamage has no effect */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Health")
+	bool bIsInvincible = false;
+
 	/** Broadcast when HP changes — positive Delta = healing, negative = damage */
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
 	FOnHealthChanged OnHealthChanged;
@@ -59,6 +63,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
 	bool IsDead() const { return bIsDead; }
+
+	/** Set invincibility state. Does not affect HP — only blocks incoming damage */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void SetInvincible(bool bNewInvincible);
+
+	UFUNCTION(BlueprintPure, Category = "Health")
+	bool IsInvincible() const { return bIsInvincible; }
 
 	/** Reset death state and restore HP to the specified amount (clamped to [1, MaxHP]) */
 	UFUNCTION(BlueprintCallable, Category = "Health")
