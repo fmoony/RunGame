@@ -81,7 +81,8 @@ public:
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
 
 private:
-	float OriginalMaxWalkSpeed = 0.0f;
+	/** Skill tag cached during Execute for use in RevertEffect timer callback */
+	FGameplayTag CachedSkillTag;
 
 	FTimerHandle RevertTimer;
 

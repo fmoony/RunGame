@@ -37,16 +37,12 @@ void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGa
 		return;
 	}
 
-	// Speed boost
-	if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
-	{
-		OriginalMaxWalkSpeed = MoveComp->MaxWalkSpeed;
-		MoveComp->MaxWalkSpeed = OriginalMaxWalkSpeed * SpeedMultiplier;
-	}
-
-	// Invincibility
+	// Speed boost via character's modifier map — persists across Tick curve overwrites
+	CachedSkillTag = SkillTag;
 	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Character))
 	{
+		RunCharacter->AddSpeedModifier(CachedSkillTag, SpeedMultiplier);
+
 		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
 		{
 			HealthComp->SetInvincible(true);
@@ -63,16 +59,10 @@ void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGa
 
 void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
 {
-	if (ACharacter* Character = Cast<ACharacter>(Instigator))
-	{
-		if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())
-		{
-			MoveComp->MaxWalkSpeed = OriginalMaxWalkSpeed;
-		}
-	}
-
 	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
 	{
+		RunCharacter->RemoveSpeedModifier(CachedSkillTag);
+
 		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
 		{
 			HealthComp->SetInvincible(false);
