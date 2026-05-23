@@ -63,7 +63,9 @@ ARunGameCharacter::ARunGameCharacter()
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 
 	PrimaryActorTick.bCanEverTick = true;
-	bIsSliding = false;
+
+	CurrentCharacterState = ERunGameCharacterState::Idle;
+	PendingInputState = ERunGameCharacterState::MAX;
 
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
@@ -90,6 +92,9 @@ void ARunGameCharacter::BeginPlay()
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHitReaction);
 	}
 
+	// 监听自身状态变化 —— 滑动/转弯等系统响应式执行
+	OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
+
 }
 
 void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -103,6 +108,15 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			GameState->OnGameStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnGameStateChangedCallback);
 		}
 	}
+
+	if (HealthComponent)
+	{
+		HealthComponent->OnDeath.RemoveDynamic(this, &ARunGameCharacter::OnHealthDepleted);
+		HealthComponent->OnDamageTaken.RemoveDynamic(this, &ARunGameCharacter::OnHitReaction);
+	}
+
+	OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -178,6 +192,12 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 
 	AddMovementInput(Desiron, 1.0f);
 
+	// 空中检测：落地由 Landed() 处理，离地在此检测
+	if (GetCharacterMovement()->IsFalling() && CurrentCharacterState == ERunGameCharacterState::Idle)
+	{
+		SetCharacterState(ERunGameCharacterState::Airborne);
+	}
+
 }
 
 void ARunGameCharacter::Move(const FInputActionValue& Value)
@@ -251,59 +271,22 @@ void ARunGameCharacter::DoJumpEnd()
 
 void ARunGameCharacter::StartSlide()
 {
-	if (!bIsSliding && !GetCharacterMovement()->IsFalling())
+	// 纯状态请求 —— 滑动逻辑在 OnCharacterStateChangedCallback 中响应式执行
+	SetCharacterState(ERunGameCharacterState::Sliding);
+
+	// 如果转移被拒绝（如在 Airborne / Turning / Dead），缓冲输入
+	if (CurrentCharacterState != ERunGameCharacterState::Sliding)
 	{
-		bIsSliding = true;
-
-		Crouch();
-
-		GetCharacterMovement()->GroundFriction = 0.0f;
-
-		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
-		if (AnimInstance)
-		{
-			AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnSlideBlendingOut);
-
-			if (SlideMontage)
-			{
-				float FinalPlayRate = MontagePlayRate;
-				if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
-				{
-					const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
-					const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
-					FinalPlayRate = MontagePlayRate * DesiredMaxSpeed / BaseMaxWalkSpeed;
-				}
-				AnimRootMotionTranslationScale = RootMotionScale;
-				AnimInstance->Montage_Play(SlideMontage, FinalPlayRate);
-				UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide started. Playing montage: %s"), *SlideMontage->GetName());
-			}
-		}
-	}
-}
-void ARunGameCharacter::EndSlide()
-{
-	if (bIsSliding)
-	{
-		bIsSliding = false;
-
-		UnCrouch();
-
-		GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
-		AnimRootMotionTranslationScale = 1.0f;
-		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
+		PendingInputState = ERunGameCharacterState::Sliding;
 	}
 }
 
 void ARunGameCharacter::OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrupted)
 {
-	if(Montage == SlideMontage)
+	if (Montage == SlideMontage)
 	{
-		EndSlide();
-
-		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-		{
-			AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnSlideBlendingOut);
-		}
+		// 请求回到 Idle —— 滑动清理在 OnCharacterStateChangedCallback 中响应式执行
+		SetCharacterState(ERunGameCharacterState::Idle);
 	}
 }
 
@@ -327,6 +310,9 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 
 void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor* DeathCauser)
 {
+	// 状态机守卫：防止重复执行死亡逻辑
+	SetCharacterState(ERunGameCharacterState::Dead);
+
 	// Notify GameState of game over
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
@@ -508,6 +494,13 @@ void ARunGameCharacter::OnGameStateChangedCallback(ERunGameGameState OldState, E
 
 void ARunGameCharacter::ActivateSkillByTag(FGameplayTag SkillTag)
 {
+	// 死亡或滑铲中不能使用技能
+	if (CurrentCharacterState == ERunGameCharacterState::Dead
+		|| CurrentCharacterState == ERunGameCharacterState::Sliding)
+	{
+		return;
+	}
+
 	if (SkillComponent)
 	{
 		SkillComponent->TryActivateSkill(SkillTag);
@@ -549,10 +542,165 @@ float ARunGameCharacter::GetMaxHP_Implementation() const
 
 bool ARunGameCharacter::IsDead_Implementation() const
 {
-	return HealthComponent ? HealthComponent->IsDead() : false;
+	return CurrentCharacterState == ERunGameCharacterState::Dead;
 }
 
 // ~end IDamagable interface
+
+// -- State Machine --
+
+void ARunGameCharacter::SetCharacterState(ERunGameCharacterState NewState)
+{
+	// Guard：相同状态直接返回
+	if (CurrentCharacterState == NewState)
+	{
+		return;
+	}
+
+	// Guard：转移校验
+	if (!IsCharacterStateTransitionAllowed(NewState))
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Blocked invalid state transition from %d to %d"),
+			static_cast<int32>(CurrentCharacterState), static_cast<int32>(NewState));
+		return;
+	}
+
+	// Runtime guard：不能在非地面时进入 Sliding
+	if (NewState == ERunGameCharacterState::Sliding && GetCharacterMovement()->IsFalling())
+	{
+		return;
+	}
+
+	// Save old → Modify → Broadcast（纯状态管理，无副作用）
+	const ERunGameCharacterState OldState = CurrentCharacterState;
+	CurrentCharacterState = NewState;
+	OnCharacterStateChanged.Broadcast(OldState, CurrentCharacterState);
+
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Character State Changed from %d to %d"),
+		static_cast<int32>(OldState), static_cast<int32>(NewState));
+}
+
+bool ARunGameCharacter::IsCharacterStateTransitionAllowed(ERunGameCharacterState NewState) const
+{
+	// Dead 是终态 —— 不能离开
+	if (CurrentCharacterState == ERunGameCharacterState::Dead)
+	{
+		return false;
+	}
+
+	switch (NewState)
+	{
+	case ERunGameCharacterState::Idle:
+		// 可以从 Sliding、Airborne 或 Turning 回到 Idle
+		return CurrentCharacterState == ERunGameCharacterState::Sliding
+			|| CurrentCharacterState == ERunGameCharacterState::Airborne
+			|| CurrentCharacterState == ERunGameCharacterState::Turning;
+
+	case ERunGameCharacterState::Airborne:
+		// 只能从 Idle 或 Turning 进入空中（Sliding 先由回调清理再进入空中）
+		return CurrentCharacterState == ERunGameCharacterState::Idle
+			|| CurrentCharacterState == ERunGameCharacterState::Turning;
+
+	case ERunGameCharacterState::Sliding:
+		// 只能从 Idle 进入滑铲
+		return CurrentCharacterState == ERunGameCharacterState::Idle;
+
+	case ERunGameCharacterState::Turning:
+		// 可以从 Idle、Sliding 或 Airborne 进入转弯
+		return CurrentCharacterState == ERunGameCharacterState::Idle
+			|| CurrentCharacterState == ERunGameCharacterState::Sliding
+			|| CurrentCharacterState == ERunGameCharacterState::Airborne;
+
+	case ERunGameCharacterState::Dead:
+		// 可以从任何非 Dead 状态进入死亡
+		return CurrentCharacterState != ERunGameCharacterState::Dead;
+
+	default:
+		return false;
+	}
+}
+
+void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+{
+	// === 滑铲系统：进入 Sliding ===
+	if (NewState == ERunGameCharacterState::Sliding)
+	{
+		Crouch();
+		GetCharacterMovement()->GroundFriction = 0.0f;
+
+		UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+		if (AnimInstance)
+		{
+			AnimInstance->OnMontageBlendingOut.AddUniqueDynamic(this, &ARunGameCharacter::OnSlideBlendingOut);
+
+			if (SlideMontage)
+			{
+				float FinalPlayRate = MontagePlayRate;
+				if (MaxSpeedCurve && TimerSubsystem && TimerSubsystem->IsTimerRunning())
+				{
+					const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
+					const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
+					FinalPlayRate = MontagePlayRate * DesiredMaxSpeed / BaseMaxWalkSpeed;
+				}
+				AnimRootMotionTranslationScale = RootMotionScale;
+				AnimInstance->Montage_Play(SlideMontage, FinalPlayRate);
+				UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide started. Playing montage: %s"), *SlideMontage->GetName());
+			}
+		}
+	}
+
+	// === 滑铲系统：离开 Sliding ===
+	if (OldState == ERunGameCharacterState::Sliding)
+	{
+		UnCrouch();
+		GetCharacterMovement()->GroundFriction = DefaultGroundFriction;
+		AnimRootMotionTranslationScale = 1.0f;
+
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->OnMontageBlendingOut.RemoveDynamic(this, &ARunGameCharacter::OnSlideBlendingOut);
+		}
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
+	}
+
+	// === 转弯系统：进入 Turning ===
+	if (NewState == ERunGameCharacterState::Turning)
+	{
+		bTurn = true;
+		InTurnBox = true;
+	}
+
+	// === 转弯系统：离开 Turning ===
+	if (OldState == ERunGameCharacterState::Turning)
+	{
+		bTurn = false;
+		InTurnBox = false;
+	}
+
+	// === 死亡：清理转弯标志 ===
+	if (NewState == ERunGameCharacterState::Dead)
+	{
+		bTurn = false;
+		InTurnBox = false;
+	}
+}
+
+void ARunGameCharacter::Landed(const FHitResult& Hit)
+{
+	Super::Landed(Hit);
+
+	if (CurrentCharacterState == ERunGameCharacterState::Airborne)
+	{
+		SetCharacterState(ERunGameCharacterState::Idle);
+
+		// 输入缓冲：落地后执行缓冲的输入
+		if (PendingInputState == ERunGameCharacterState::Sliding)
+		{
+			PendingInputState = ERunGameCharacterState::MAX;
+			SetCharacterState(ERunGameCharacterState::Sliding);
+		}
+	}
+}
 
 // -- Speed modifiers --
 

@@ -10,6 +10,7 @@
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentHP, float, MaxHP, float, Delta);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDamageTaken, float, Damage, FGameplayTag, DamageType, AActor*, DamageCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, FGameplayTag, DamageType, AActor*, DeathCauser);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInvincibilityChangedSignature, bool, bNewInvincible);
 
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API UHealthComponent : public UActorComponent
@@ -43,6 +44,10 @@ public:
 	/** Broadcast when HP reaches 0 */
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
 	FOnDeath OnDeath;
+
+	/** Broadcast when invincibility state changes */
+	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
+	FOnInvincibilityChangedSignature OnInvincibilityChanged;
 
 	/** Subtract HP and broadcast OnHealthChanged. If HP <= 0, broadcasts OnDeath */
 	UFUNCTION(BlueprintCallable, Category = "Health")

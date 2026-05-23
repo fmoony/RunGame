@@ -28,19 +28,22 @@ void ATurnFloor::BeginPlay()
 void ATurnFloor::OnTurnBoxBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	if (ARunGameCharacter* InCharater = Cast<ARunGameCharacter>(OtherActor))
+	if (ARunGameCharacter* InCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
-		InCharater->bTurn = true;
-		InCharater->InTurnBox = true;
+		InCharacter->SetCharacterState(ERunGameCharacterState::Turning);
 	}
 }
 
 void ATurnFloor::OnTurnBoxEndOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex)
 {
-	if (ARunGameCharacter* InCharater = Cast<ARunGameCharacter>(OtherActor))
+	if (ARunGameCharacter* InCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
-		InCharater->bTurn = false;
-		InCharater->InTurnBox = false;
+		// 只有在仍处于 Turning 状态时才切回 Idle
+		// 如果角色已死亡等，则不覆盖
+		if (InCharacter->GetCharacterState() == ERunGameCharacterState::Turning)
+		{
+			InCharacter->SetCharacterState(ERunGameCharacterState::Idle);
+		}
 	}
 }

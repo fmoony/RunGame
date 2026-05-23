@@ -67,7 +67,11 @@ float UHealthComponent::GetHealthPercentage() const
 
 void UHealthComponent::SetInvincible(bool bNewInvincible)
 {
-	bIsInvincible = bNewInvincible;
+	if (bIsInvincible != bNewInvincible)
+	{
+		bIsInvincible = bNewInvincible;
+		OnInvincibilityChanged.Broadcast(bIsInvincible);
+	}
 }
 
 void UHealthComponent::Revive(float RestoreHP)

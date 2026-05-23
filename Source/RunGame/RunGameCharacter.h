@@ -21,6 +21,7 @@ struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterDiedSignature, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterStateChangedSignature, ERunGameCharacterState, OldState, ERunGameCharacterState, NewState);
 
 UCLASS(abstract)
 class ARunGameCharacter : public ACharacter, public IDamagable
@@ -75,6 +76,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Death")
 	void Die(FGameplayTag DamageType, float DestroyDelay = 3.0f, AActor* DeathCauser = nullptr);
 
+	/** Broadcast when character state changes. Follows same pattern as GameState::OnGameStateChanged */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|State")
+	FOnCharacterStateChangedSignature OnCharacterStateChanged;
+
+	/** Set the character's core state. Validates transition, guards same-state, saves old, modifies, broadcasts. Pure — no side effects */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
+	void SetCharacterState(ERunGameCharacterState NewState);
+
+	/** Returns the current character state */
+	UFUNCTION(BlueprintPure, Category = "RunGame|State")
+	ERunGameCharacterState GetCharacterState() const { return CurrentCharacterState; }
+
+	/** Returns true if the transition from current state to NewState is allowed */
+	UFUNCTION(BlueprintPure, Category = "RunGame|State")
+	bool IsCharacterStateTransitionAllowed(ERunGameCharacterState NewState) const;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -83,6 +100,9 @@ protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** Called when character lands on ground. Handles Airborne→Idle transition and input buffer consumption */
+	virtual void Landed(const FHitResult& Hit) override;
 
 	// Called when HealthComponent reaches 0 HP
 	UFUNCTION()
@@ -149,13 +169,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
-	/** Initiates slide movement -- crouches, removes ground friction, plays slide montage */
+	/** Initiates slide movement -- requests Sliding state. If rejected (e.g. Airborne), input is buffered */
 	void StartSlide();
 
-	/** Ends slide movement -- uncrouches and restores default movement parameters */
-	void EndSlide();
-
-	/** Callback when slide montage finishes blending out -- triggers EndSlide cleanup */
+	/** Callback when slide montage finishes blending out -- requests Idle state transition */
 	UFUNCTION()
 	void OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrupted);
 
@@ -165,8 +182,6 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	UAnimMontage* SlideMontage;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Movement")
-	bool bIsSliding;
 
 	UPROPERTY(EditDefaultsOnly, Category = "RunGame|Movement")
 	float RootMotionScale = 1.0f;
@@ -206,14 +221,11 @@ public:
 	/** Returns FollowCamera subobject **/
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-	FORCEINLINE bool IsSliding() const { return bIsSliding; }
+	FORCEINLINE bool IsSliding() const { return CurrentCharacterState == ERunGameCharacterState::Sliding; }
 
 	/** Reacts to game state changes -- self-destructs when returning to MainMenu */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
-
-	bool bTurn;
-	bool InTurnBox;
 
 	FRotator DesireRotation;
 
@@ -245,5 +257,23 @@ public:
 	/** Activate a skill by tag — called from dynamically-bound Enhanced Input */
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
+
+private:
+	/** Central state variable — single source of truth for character status */
+	UPROPERTY(VisibleAnywhere, Category = "RunGame|State", meta = (AllowPrivateAccess = "true"))
+	ERunGameCharacterState CurrentCharacterState;
+
+	/** Buffered input — when a state transition is rejected, store it here. MAX = no buffered input */
+	ERunGameCharacterState PendingInputState = ERunGameCharacterState::MAX;
+
+	/** Set by OnCharacterStateChangedCallback when entering Turning state. Consumed by DoMove */
+	bool bTurn = false;
+
+	/** Set by OnCharacterStateChangedCallback when entering Turning state. Consumed by DoMove */
+	bool InTurnBox = false;
+
+	/** Reacts to own state changes — slide setup/cleanup, turn flag management, etc. */
+	UFUNCTION()
+	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
 };
