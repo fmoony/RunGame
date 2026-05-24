@@ -21,7 +21,7 @@ class RUNGAME_API UHealthComponent : public UActorComponent
 public:
 	UHealthComponent();
 
-	/** 配置属性 —— BeginPlay 时同步到 CombatRuntimeState */
+	/** 最大生命值 Maximum health — set in Blueprint or C++ */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health", meta = (ClampMin = 1))
 	float MaxHP = 100.0f;
 
@@ -41,16 +41,20 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
 	FOnInvincibilityChangedSignature OnInvincibilityChanged;
 
-	/** Subtract HP and broadcast OnHealthChanged. If HP <= 0, broadcasts OnDeath */
+	/** 扣除生命值并广播。如 HP <= 0 则广播 OnDeath。无敌状态下无效 Subtract HP and broadcast. If HP <= 0, broadcasts OnDeath. No-op while invincible */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void ApplyDamage(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
 
-	/** Restore HP up to MaxHP and broadcast OnHealthChanged. No effect if dead */
+	/** 恢复生命值至多到 MaxHP 并广播。死亡后无效 Restore HP up to MaxHP and broadcast. No-op if dead */
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Heal(float Amount, AActor* Healer);
 
+	/** 强制击杀——无视无敌、直接致死 Force kill — ignores invincibility, sets HP=0, broadcasts OnDeath */
+	UFUNCTION(BlueprintCallable, Category = "Health")
+	void ForceKill(FGameplayTag DamageType, AActor* Killer);
+
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
-	float GetCurrentHP() const;
+	float GetCurrentHP() const { return CurrentHP; }
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
 	float GetMaxHP() const { return MaxHP; }
@@ -59,13 +63,13 @@ public:
 	float GetHealthPercentage() const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
-	bool IsDead() const;
+	bool IsDead() const { return bIsDead; }
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void SetInvincible(bool bNewInvincible);
 
 	UFUNCTION(BlueprintPure, Category = "Health")
-	bool IsInvincible() const;
+	bool IsInvincible() const { return bIsInvincible; }
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Revive(float RestoreHP);
@@ -75,19 +79,11 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	UFUNCTION()
-	void OnRS_HealthChanged(float CurrentHP, float InMaxHP, float InDelta);
-
-	UFUNCTION()
-	void OnRS_DamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
-
-	UFUNCTION()
-	void OnRS_Death(FGameplayTag DamageType, AActor* DeathCauser);
-
-	UFUNCTION()
-	void OnRS_InvincibilityChanged(bool bNewInvincible);
-
-	/** 响应角色状态机：进入 Dead 时自行清除无敌 */
+	/** 响应角色状态机：进入 Dead 时自行清除无敌 React to character state: clear invincibility on death */
 	UFUNCTION()
 	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
+	float CurrentHP = 0.0f;
+	bool bIsDead = false;
+	bool bIsInvincible = false;
 };

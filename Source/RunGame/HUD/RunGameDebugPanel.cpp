@@ -1,7 +1,11 @@
 #include "HUD/RunGameDebugPanel.h"
-#include "WorldSubsystem/State/GameFlowRuntimeState.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
-#include "WorldSubsystem/State/CombatRuntimeState.h"
+#include "RunGameGameState.h"
+#include "RunGamePlayerState.h"
+#include "RunGameCharacter.h"
+#include "Actor/Component/HealthComponent.h"
+#include "Actor/Component/SkillComponent.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Components/Border.h"
 #include "Components/BorderSlot.h"
 #include "Components/Overlay.h"
@@ -11,6 +15,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
 #include "Fonts/SlateFontInfo.h"
+#include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "RunGame.h"
 
@@ -43,7 +48,7 @@ bool URunGameDebugPanel::Initialize()
 	UVerticalBox* VBox = NewObject<UVerticalBox>(this);
 	Border->SetContent(VBox);
 
-	// 标题 — 大号青色粗体
+	// 标题 — 大号青色粗体 Title — large cyan bold
 	FSlateFontInfo TitleFont = FAppStyle::Get().GetFontStyle("NormalFont");;
 	TitleFont.Size = 28;
 	TitleText = NewObject<UTextBlock>(this);
@@ -79,26 +84,38 @@ void URunGameDebugPanel::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// 绑定三个 RuntimeState 的委托，实时刷新
-	if (UGameFlowRuntimeState* GRS = GetGameFlowRS())
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// 绑定 GameState 委托 Bind GameState delegates
+	if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
 	{
-		GRS->OnGameStateChanged.AddDynamic(this, &URunGameDebugPanel::OnGameStateChanged);
-		GRS->OnCountdownUpdated.AddDynamic(this, &URunGameDebugPanel::OnCountdownUpdated);
-		GRS->OnTimeChanged.AddDynamic(this, &URunGameDebugPanel::OnTimeChanged);
+		GS->OnGameStateChanged.AddDynamic(this, &URunGameDebugPanel::OnGameStateChangedCallback);
+		GS->OnCountdownUpdated.AddDynamic(this, &URunGameDebugPanel::OnCountdownUpdatedCallback);
 	}
 
-	if (UPlayerRuntimeState* PRS = GetPlayerRS())
+	// 绑定 TimerSubsystem 委托 Bind TimerSubsystem delegates
+	if (URunGameTimerSubsystem* TS = World->GetSubsystem<URunGameTimerSubsystem>())
 	{
-		PRS->OnScoreChanged.AddDynamic(this, &URunGameDebugPanel::OnScoreChanged);
-		PRS->OnCharacterStateChanged.AddDynamic(this, &URunGameDebugPanel::OnCharacterStateChanged);
+		TS->OnTimeChanged.AddDynamic(this, &URunGameDebugPanel::OnTimeChangedCallback);
 	}
 
-	if (UCombatRuntimeState* CRS = GetCombatRS())
+	// 绑定 PlayerRuntimeState 委托（角色状态） Bind PlayerRuntimeState (character state only)
+	if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
 	{
-		CRS->OnHealthChanged.AddDynamic(this, &URunGameDebugPanel::OnHealthChanged);
-		CRS->OnEnergyChanged.AddDynamic(this, &URunGameDebugPanel::OnEnergyChanged);
-		CRS->OnInvincibilityChanged.AddDynamic(this, &URunGameDebugPanel::OnInvincibilityChanged);
-		CRS->OnDeath.AddDynamic(this, &URunGameDebugPanel::OnDeath);
+		PRS->OnCharacterStateChanged.AddDynamic(this, &URunGameDebugPanel::OnCharacterStateChangedCallback);
+	}
+
+	// 角色委托绑定推迟到 OnGameStateChanged(InGame) —— NativeConstruct 时角色尚未生成
+	// Character delegate binding deferred to OnGameStateChanged(InGame) — character not spawned yet
+
+	// 绑定 PlayerState 委托（分数） Bind PlayerState (score)
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+	{
+		if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
+		{
+			PS->OnScoreChanged.AddDynamic(this, &URunGameDebugPanel::OnScoreChangedCallback);
+		}
 	}
 
 	RefreshAllData();
@@ -106,107 +123,167 @@ void URunGameDebugPanel::NativeConstruct()
 
 void URunGameDebugPanel::NativeDestruct()
 {
-	if (UGameFlowRuntimeState* GRS = GetGameFlowRS())
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		GRS->OnGameStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnGameStateChanged);
-		GRS->OnCountdownUpdated.RemoveDynamic(this, &URunGameDebugPanel::OnCountdownUpdated);
-		GRS->OnTimeChanged.RemoveDynamic(this, &URunGameDebugPanel::OnTimeChanged);
+		Super::NativeDestruct();
+		return;
 	}
 
-	if (UPlayerRuntimeState* PRS = GetPlayerRS())
+	if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
 	{
-		PRS->OnScoreChanged.RemoveDynamic(this, &URunGameDebugPanel::OnScoreChanged);
-		PRS->OnCharacterStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnCharacterStateChanged);
+		GS->OnGameStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnGameStateChangedCallback);
+		GS->OnCountdownUpdated.RemoveDynamic(this, &URunGameDebugPanel::OnCountdownUpdatedCallback);
 	}
 
-	if (UCombatRuntimeState* CRS = GetCombatRS())
+	if (URunGameTimerSubsystem* TS = World->GetSubsystem<URunGameTimerSubsystem>())
 	{
-		CRS->OnHealthChanged.RemoveDynamic(this, &URunGameDebugPanel::OnHealthChanged);
-		CRS->OnEnergyChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEnergyChanged);
-		CRS->OnInvincibilityChanged.RemoveDynamic(this, &URunGameDebugPanel::OnInvincibilityChanged);
-		CRS->OnDeath.RemoveDynamic(this, &URunGameDebugPanel::OnDeath);
+		TS->OnTimeChanged.RemoveDynamic(this, &URunGameDebugPanel::OnTimeChangedCallback);
+	}
+
+	if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->OnCharacterStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnCharacterStateChangedCallback);
+	}
+
+	if (ARunGameCharacter* Char = GetCachedCharacter())
+	{
+		if (UHealthComponent* HC = Char->GetHealthComponent())
+		{
+			HC->OnHealthChanged.RemoveDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
+			HC->OnDeath.RemoveDynamic(this, &URunGameDebugPanel::OnDeathCallback);
+			HC->OnInvincibilityChanged.RemoveDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+		}
+
+		if (USkillComponent* SC = Char->GetSkillComponent())
+		{
+			SC->OnEnergyChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
+		}
+	}
+
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+	{
+		if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
+		{
+			PS->OnScoreChanged.RemoveDynamic(this, &URunGameDebugPanel::OnScoreChangedCallback);
+		}
 	}
 
 	Super::NativeDestruct();
 }
 
-// ---- 委托回调 ----
+// ---- Helpers ----
 
-void URunGameDebugPanel::OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
+ARunGameCharacter* URunGameDebugPanel::GetCachedCharacter() const
 {
+	if (UWorld* World = GetWorld())
+	{
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+		{
+			return Cast<ARunGameCharacter>(PC->GetPawn());
+		}
+		else
+		{
+			UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get PlayerController in GetCachedCharacter"));
+		}
+	}
+	else
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get World in GetCachedCharacter"));
+	}
+	return nullptr;
+}
+
+// ---- Delegate callbacks ----
+
+void URunGameDebugPanel::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
+{
+	// 进入游戏时角色已生成，绑定其组件委托 Bind character component delegates when game starts
+	if (NewState == ERunGameGameState::InGame)
+	{
+		if (ARunGameCharacter* Char = GetCachedCharacter())
+		{
+			if (UHealthComponent* HC = Char->GetHealthComponent())
+			{
+				HC->OnHealthChanged.AddDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
+				HC->OnDeath.AddDynamic(this, &URunGameDebugPanel::OnDeathCallback);
+				HC->OnInvincibilityChanged.AddDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+			}
+
+			if (USkillComponent* SC = Char->GetSkillComponent())
+			{
+				SC->OnEnergyChanged.AddDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
+			}
+		}
+		else
+		{
+			UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get character on GameState InGame"));
+		}
+	}
+
+	// 游戏结束时解绑旧角色委托 Unbind old character delegates when game ends
+	if (NewState == ERunGameGameState::GameOver)
+	{
+		if (ARunGameCharacter* Char = GetCachedCharacter())
+		{
+			if (UHealthComponent* HC = Char->GetHealthComponent())
+			{
+				HC->OnHealthChanged.RemoveDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
+				HC->OnDeath.RemoveDynamic(this, &URunGameDebugPanel::OnDeathCallback);
+				HC->OnInvincibilityChanged.RemoveDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+			}
+
+			if (USkillComponent* SC = Char->GetSkillComponent())
+			{
+				SC->OnEnergyChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
+			}
+		}
+	}
+
 	RefreshAllData();
 }
 
-void URunGameDebugPanel::OnCountdownUpdated(int32 CountdownSeconds)
+void URunGameDebugPanel::OnCountdownUpdatedCallback(int32 CountdownSeconds)
 {
 	RefreshGameFlowData();
 }
 
-void URunGameDebugPanel::OnTimeChanged(float NewTime)
+void URunGameDebugPanel::OnTimeChangedCallback(float NewTime)
 {
 	RefreshGameFlowData();
 }
 
-void URunGameDebugPanel::OnScoreChanged(int64 NewScore)
+void URunGameDebugPanel::OnScoreChangedCallback(int64 NewScore)
 {
 	RefreshPlayerData();
 }
 
-void URunGameDebugPanel::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+void URunGameDebugPanel::OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
 	RefreshPlayerData();
 }
 
-void URunGameDebugPanel::OnHealthChanged(float CurrentHP, float MaxHP, float Delta)
+void URunGameDebugPanel::OnHealthChangedCallback(float CurrentHP, float MaxHP, float Delta)
 {
 	RefreshCombatData();
 }
 
-void URunGameDebugPanel::OnEnergyChanged(float CurrentEnergy, float MaxEnergy)
+void URunGameDebugPanel::OnEnergyChangedCallback(float CurrentEnergy, float MaxEnergy)
 {
 	RefreshCombatData();
 }
 
-void URunGameDebugPanel::OnInvincibilityChanged(bool bNewInvincible)
+void URunGameDebugPanel::OnInvincibilityChangedCallback(bool bNewInvincible)
 {
 	RefreshCombatData();
 }
 
-void URunGameDebugPanel::OnDeath(FGameplayTag DamageType, AActor* DeathCauser)
+void URunGameDebugPanel::OnDeathCallback(FGameplayTag DamageType, AActor* DeathCauser)
 {
 	RefreshCombatData();
 }
 
-// ---- 辅助 ----
-
-UGameFlowRuntimeState* URunGameDebugPanel::GetGameFlowRS() const
-{
-	if (const UWorld* World = GetWorld())
-	{
-		return World->GetSubsystem<UGameFlowRuntimeState>();
-	}
-	return nullptr;
-}
-
-UPlayerRuntimeState* URunGameDebugPanel::GetPlayerRS() const
-{
-	if (const UWorld* World = GetWorld())
-	{
-		return World->GetSubsystem<UPlayerRuntimeState>();
-	}
-	return nullptr;
-}
-
-UCombatRuntimeState* URunGameDebugPanel::GetCombatRS() const
-{
-	if (const UWorld* World = GetWorld())
-	{
-		return World->GetSubsystem<UCombatRuntimeState>();
-	}
-	return nullptr;
-}
-
-// ---- 刷新器 ----
+// ---- Refresh methods ----
 
 void URunGameDebugPanel::RefreshAllData()
 {
@@ -219,12 +296,15 @@ void URunGameDebugPanel::RefreshGameFlowData()
 {
 	if (!GameFlowText) return;
 
-	UGameFlowRuntimeState* GRS = GetGameFlowRS();
-	if (!GRS)
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		GameFlowText->SetText(FText::FromString(TEXT("[GameFlow] No RuntimeState")));
+		GameFlowText->SetText(FText::FromString(TEXT("[GameFlow] No World")));
 		return;
 	}
+
+	ARunGameGameState* GS = World->GetGameState<ARunGameGameState>();
+	URunGameTimerSubsystem* TS = World->GetSubsystem<URunGameTimerSubsystem>();
 
 	const FString Text = FString::Printf(
 		TEXT("[Game Flow]\n")
@@ -232,11 +312,11 @@ void URunGameDebugPanel::RefreshGameFlowData()
 		TEXT("  Countdown : %d s\n")
 		TEXT("  TotalTime : %s  (%.1f s)\n")
 		TEXT("  TimerRunning : %s"),
-		*GameStateToString(GRS->GetGameState()),
-		GRS->GetCountdownSeconds(),
-		*FormatTimeMMSS(GRS->GetTotalTimeSeconds()),
-		GRS->GetTotalTimeSeconds(),
-		*BoolStr(GRS->IsTimerRunning())
+		GS ? *GameStateToString(GS->GetCurrentState()) : TEXT("?"),
+		GS ? GS->GetCountdownSeconds() : 0,
+		TS ? *FormatTimeMMSS(TS->GetTotalTimeSeconds()) : TEXT("?"),
+		TS ? TS->GetTotalTimeSeconds() : 0.0f,
+		TS ? *BoolStr(TS->IsTimerRunning()) : TEXT("?")
 	);
 
 	GameFlowText->SetText(FText::FromString(Text));
@@ -246,32 +326,41 @@ void URunGameDebugPanel::RefreshPlayerData()
 {
 	if (!PlayerText) return;
 
-	UPlayerRuntimeState* PRS = GetPlayerRS();
-	if (!PRS)
+	UWorld* World = GetWorld();
+	if (!World)
 	{
-		PlayerText->SetText(FText::FromString(TEXT("[Player] No RuntimeState")));
+		PlayerText->SetText(FText::FromString(TEXT("[Player] No World")));
 		return;
 	}
 
-	bool bTurn, bInTurnBox;
-	PRS->GetTurnFlags(bTurn, bInTurnBox);
+	UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>();
+	ARunGameCharacter* Char = GetCachedCharacter();
+
+	int64 Score = 0;
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0))
+	{
+		if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
+		{
+			Score = PS->GetRunGameScore();
+		}
+	}
+
+	bool bTurn = Char ? Char->IsInTurn() : false;
+	bool bInTurnBox = Char ? Char->IsInTurnBox() : false;
+	float SpeedMulti = Char ? Char->GetCompositeSpeedMultiplier() : 1.0f;
 
 	const FString Text = FString::Printf(
 		TEXT("[Player]\n")
 		TEXT("  Score        : %lld\n")
-		TEXT("  ScoringActive: %s\n")
 		TEXT("  CharState    : %s\n")
 		TEXT("  Turn         : %s\n")
 		TEXT("  InTurnBox    : %s\n")
-		TEXT("  SpeedMulti   : %.2f\n")
-		TEXT("  SpeedMods    : %d"),
-		PRS->GetRunGameScore(),
-		*BoolStr(PRS->IsScoringActive()),
-		*CharacterStateToString(PRS->GetCharacterState()),
+		TEXT("  SpeedMulti   : %.2f"),
+		Score,
+		PRS ? *CharacterStateToString(PRS->GetCharacterState()) : TEXT("?"),
 		*BoolStr(bTurn),
 		*BoolStr(bInTurnBox),
-		PRS->GetCompositeSpeedMultiplier(),
-		PRS->GetSpeedModifierCount()
+		SpeedMulti
 	);
 
 	PlayerText->SetText(FText::FromString(Text));
@@ -281,12 +370,15 @@ void URunGameDebugPanel::RefreshCombatData()
 {
 	if (!CombatText) return;
 
-	UCombatRuntimeState* CRS = GetCombatRS();
-	if (!CRS)
+	ARunGameCharacter* Char = GetCachedCharacter();
+	if (!Char)
 	{
-		CombatText->SetText(FText::FromString(TEXT("[Combat] No RuntimeState")));
+		CombatText->SetText(FText::FromString(TEXT("[Combat] No Character")));
 		return;
 	}
+
+	UHealthComponent* HC = Char->GetHealthComponent();
+	USkillComponent* SC = Char->GetSkillComponent();
 
 	const FString Text = FString::Printf(
 		TEXT("[Combat]\n")
@@ -294,19 +386,19 @@ void URunGameDebugPanel::RefreshCombatData()
 		TEXT("  Dead       : %s\n")
 		TEXT("  Invincible : %s\n")
 		TEXT("  Energy     : %.1f / %.1f"),
-		CRS->GetCurrentHP(),
-		CRS->GetMaxHP(),
-		CRS->GetHealthPercentage() * 100.0f,
-		*BoolStr(CRS->IsDead()),
-		*BoolStr(CRS->IsInvincible()),
-		CRS->GetCurrentEnergy(),
-		CRS->GetMaxEnergy()
+		HC ? HC->GetCurrentHP() : 0.0f,
+		HC ? HC->GetMaxHP() : 0.0f,
+		HC ? HC->GetHealthPercentage() * 100.0f : 0.0f,
+		HC ? *BoolStr(HC->IsDead()) : TEXT("?"),
+		HC ? *BoolStr(HC->IsInvincible()) : TEXT("?"),
+		SC ? SC->GetCurrentEnergy() : 0.0f,
+		SC ? SC->MaxEnergy : 0.0f
 	);
 
 	CombatText->SetText(FText::FromString(Text));
 }
 
-// ---- 静态格式化 ----
+// ---- Static formatters ----
 
 FString URunGameDebugPanel::GameStateToString(ERunGameGameState State)
 {

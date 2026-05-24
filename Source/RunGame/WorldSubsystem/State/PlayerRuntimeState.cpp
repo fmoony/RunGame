@@ -1,5 +1,4 @@
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
-#include "RunGameCharacter.h"
 #include "RunGame.h"
 
 void UPlayerRuntimeState::Initialize(FSubsystemCollectionBase& Collection)
@@ -7,46 +6,14 @@ void UPlayerRuntimeState::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 }
 
-void UPlayerRuntimeState::ResetForNewGame()
-{
-	CurrentCharacterState = ERunGameCharacterState::Idle;
-	bTurn = false;
-	bInTurnBox = false;
-	SpeedModifiers.Empty();
-	CachedCompositeSpeedMultiplier = 1.0f;
-	RunGameScore = 0;
-	bIsScoringActive = false;
-}
-
 void UPlayerRuntimeState::Deinitialize()
 {
-	CachedPlayerCharacter.Reset();
 	Super::Deinitialize();
 }
 
-// ---- Score ----
-
-void UPlayerRuntimeState::AddScore(int64 Value)
+void UPlayerRuntimeState::ResetForNewGame()
 {
-	if (Value != 0)
-	{
-		RunGameScore += Value;
-		OnScoreChanged.Broadcast(RunGameScore);
-	}
-}
-
-void UPlayerRuntimeState::SetRunGameScore(int64 NewScore)
-{
-	if (RunGameScore != NewScore)
-	{
-		RunGameScore = NewScore;
-		OnScoreChanged.Broadcast(RunGameScore);
-	}
-}
-
-void UPlayerRuntimeState::SetScoringActive(bool bActive)
-{
-	bIsScoringActive = bActive;
+	CurrentCharacterState = ERunGameCharacterState::Idle;
 }
 
 // ---- Character State ----
@@ -67,15 +34,6 @@ void UPlayerRuntimeState::SetCharacterState(ERunGameCharacterState NewState)
 
 	const ERunGameCharacterState OldState = CurrentCharacterState;
 	CurrentCharacterState = NewState;
-
-	// 进入 Dead 时内部清理自身状态，组件自行监听广播响应
-	if (NewState == ERunGameCharacterState::Dead)
-	{
-		bTurn = false;
-		bInTurnBox = false;
-		SpeedModifiers.Empty();
-		CachedCompositeSpeedMultiplier = 1.0f;
-	}
 
 	OnCharacterStateChanged.Broadcast(OldState, CurrentCharacterState);
 }
@@ -112,46 +70,4 @@ bool UPlayerRuntimeState::IsCharacterStateTransitionAllowed(ERunGameCharacterSta
 	default:
 		return false;
 	}
-}
-
-void UPlayerRuntimeState::SetTurnFlags(bool bInTurn, bool bInBox)
-{
-	bTurn = bInTurn;
-	bInTurnBox = bInBox;
-}
-
-void UPlayerRuntimeState::GetTurnFlags(bool& OutTurn, bool& OutInTurnBox) const
-{
-	OutTurn = bTurn;
-	OutInTurnBox = bInTurnBox;
-}
-
-void UPlayerRuntimeState::AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier)
-{
-	if (float* Existing = SpeedModifiers.Find(ModifierTag))
-	{
-		CachedCompositeSpeedMultiplier /= *Existing;
-	}
-	SpeedModifiers.Add(ModifierTag, Multiplier);
-	CachedCompositeSpeedMultiplier *= Multiplier;
-}
-
-void UPlayerRuntimeState::RemoveSpeedModifier(FGameplayTag ModifierTag)
-{
-	if (float* Existing = SpeedModifiers.Find(ModifierTag))
-	{
-		CachedCompositeSpeedMultiplier /= *Existing;
-	}
-	SpeedModifiers.Remove(ModifierTag);
-}
-
-void UPlayerRuntimeState::ClearSpeedModifiers()
-{
-	SpeedModifiers.Empty();
-	CachedCompositeSpeedMultiplier = 1.0f;
-}
-
-void UPlayerRuntimeState::CachePlayerCharacter(ARunGameCharacter* InCharacter)
-{
-	CachedPlayerCharacter = InCharacter;
 }

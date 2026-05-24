@@ -6,7 +6,6 @@
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
 #include "RunGameType.h"
-#include "WorldSubsystem/State/CombatRuntimeState.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/RunGameSkillExecution.h"
 #include "SkillComponent.generated.h"
@@ -24,7 +23,7 @@ class RUNGAME_API USkillComponent : public UActorComponent
 public:
 	USkillComponent();
 
-	/** Skill configuration data asset — defines all available skills */
+	/** 技能配置数据资产——定义所有可用技能 Skill configuration data asset — defines all available skills */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill")
 	TObjectPtr<USkillConfigData> SkillConfig;
 
@@ -33,76 +32,76 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
 	float MaxEnergy = 100.0f;
 
-	/** Energy at game start. 0 = start empty, match MaxEnergy for full bar */
+	/** 游戏开始时的能量值。0 = 从空开始 Energy at game start. 0 = start empty, match MaxEnergy for full bar */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
 	float InitialEnergy = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
 	float BaseEnergyRegenPerSecond = 0.333f;
 
-	/** Score bonus multiplier (sqrt-scaled). Bonus = sqrt(Score) * Multiplier. Tune for explosive score growth */
+	/** 分数奖励乘数（经 sqrt 缩放）。Bonus = sqrt(分数) × 乘数 Score bonus multiplier (sqrt-scaled). Bonus = sqrt(Score) × Multiplier */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
 	float ScoreRegenMultiplier = 0.005f;
 
 	// -- Delegates --
 
-	/** Broadcast when a skill is activated — UI binds to drive MID cooldown parameters */
+	/** 技能激活时广播——UI 绑定以驱动 MID 冷却参数 Broadcast when a skill is activated — UI binds to drive MID cooldown parameters */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnSkillActivatedSignature OnSkillActivated;
 
-	/** Broadcast when a skill's cooldown expires */
+	/** 技能冷却到期时广播 Broadcast when a skill's cooldown expires */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnSkillReadySignature OnSkillReady;
 
-	/** Broadcast when a skill is executed — Character binds to implement skill behavior */
+	/** 技能执行时广播——Character 绑定以实现技能行为 Broadcast when a skill is executed — Character binds to implement skill behavior */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnSkillExecutedSignature OnSkillExecuted;
 
-	/** Broadcast when energy changes — UI binds to update energy bar and skill slot availability */
+	/** 能量变化时广播——UI 绑定以更新能量条 Broadcast when energy changes — UI binds to update energy bar */
 	UPROPERTY(BlueprintAssignable, Category = "Skill|Delegates")
 	FOnEnergyChangedSignature OnEnergyChanged;
 
-	/** Attempt to activate a skill by tag. Returns true on success */
+	/** 尝试激活技能，成功返回 true Attempt to activate a skill by tag. Returns true on success */
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	bool TryActivateSkill(FGameplayTag SkillTag);
 
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	bool IsSkillReady(FGameplayTag SkillTag) const;
 
-	/** Seconds remaining on cooldown. 0 if ready */
+	/** 剩余冷却时间（秒）。0 = 就绪 Seconds remaining on cooldown. 0 if ready */
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	float GetCooldownRemaining(FGameplayTag SkillTag) const;
 
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	int32 GetSkillCount() const { return SkillConfig ? SkillConfig->Skills.Num() : 0; }
 
-	/** Get skill definition by tag. Returns default-constructed struct with invalid tag if not found */
+	/** 按标签获取技能定义。未找到返回默认构造结构体 Get skill definition by tag. Returns default-constructed struct with invalid tag if not found */
 	UFUNCTION(BlueprintPure, Category = "Skill")
-	FSkillDefinition GetSkillDefinitionByTag(FGameplayTag SkillTag) const;	
+	FSkillDefinition GetSkillDefinitionByTag(FGameplayTag SkillTag) const;
 
 	TArray<FGameplayTag> GetSkillTags() const;
 
 	// -- Energy API --
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
-	float GetCurrentEnergy() const;
+	float GetCurrentEnergy() const { return CurrentEnergy; }
 
 	UFUNCTION(BlueprintPure, Category = "Skill|Energy")
 	bool HasEnoughEnergy(FGameplayTag SkillTag) const;
 
-	/** Scene prop interface — instantly adds energy (clamped to MaxEnergy) */
+	/** 场景道具接口——立即增加能量（钳制至 MaxEnergy） Scene prop interface — instantly adds energy (clamped to MaxEnergy) */
 	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
 	void AddEnergy(float Amount);
 
-	/** Scene prop interface — adds/subtracts a flat regen rate bonus */
+	/** 场景道具接口——加减固定回复速率奖励 Scene prop interface — adds/subtracts a flat regen rate bonus */
 	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
 	void AddEnergyRegenModifier(float Delta);
 
-	/** Scene prop interface — multiplies total regen rate (1.0 = normal) */
+	/** 场景道具接口——倍乘总回复速率（1.0 = 正常） Scene prop interface — multiplies total regen rate (1.0 = normal) */
 	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
 	void SetEnergyRegenMultiplier(float Mult);
 
-	/** Cancel all active cooldowns and clear timers */
+	/** 取消所有活跃冷却并清除定时器 Cancel all active cooldowns and clear timers */
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	void ClearAllCooldowns();
 
@@ -126,26 +125,18 @@ private:
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
 
-	// ---- RS 转发器 ----
-	UFUNCTION()
-	void OnRS_EnergyChanged(float CurrentEnergy, float InMaxEnergy);
-
-	UFUNCTION()
-	void OnRS_SkillActivated(FGameplayTag SkillTag, float CooldownDuration);
-
-	UFUNCTION()
-	void OnRS_SkillReady(FGameplayTag SkillTag);
-
-	/** 响应角色状态机：进入 Dead 时自行清空冷却和能量 */
+	/** 响应角色状态机：进入 Dead 时自行清空冷却和能量 React to character state: clear cooldowns and energy on death */
 	UFUNCTION()
 	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
 	// -- Energy runtime state --
 
-	/** Flat additive bonus from scene props (can be negative) */
+	float CurrentEnergy = 0.0f;
+
+	/** 来自场景道具的固定加减奖励 Flat additive bonus from scene props (can be negative) */
 	float EnergyRegenModifier = 0.0f;
 
-	/** Global multiplier from scene props (1.0 = normal) */
+	/** 来自场景道具的全局乘数（1.0 = 正常） Global multiplier from scene props (1.0 = normal) */
 	float EnergyRegenMultiplier = 1.0f;
 
 	FTimerHandle EnergyRegenTimer;

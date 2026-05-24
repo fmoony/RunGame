@@ -15,6 +15,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnScoreChangedDelegate, int64, NewS
  * 分数由 0.1s 后台定时器驱动，杜绝 Tick 开销。
  * 倍率使用三次多项式 (Cubic Polynomial) 平滑爆发，避免指数溢出。
  * 分数存储和运算全部使用 int64，安全承载游戏后期极高分数。
+ * Score driven by 0.1s background timer. Cubic polynomial multiplier for smooth growth. All int64.
  */
 UCLASS()
 class RUNGAME_API ARunGamePlayerState : public APlayerState
@@ -27,20 +28,20 @@ public:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** Enables or disables the score calculation timer */
+	/** 启用/禁用分数计算定时器 Enables or disables the score calculation timer */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void SetScoringActive(bool bActive);
 
-	/** Adds the given value to the player's score and broadcasts the change */
+	/** 累加分数并广播变化 Adds the given value to the player's score and broadcasts the change */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void AddScore(int64 Value);
 
-	/** Sets the player's score to an absolute value and broadcasts if changed */
+	/** 设置绝对分数值，有变化时广播 Sets the player's score to an absolute value and broadcasts if changed */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Score")
 	void SetRunGameScore(int64 NewScore);
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Score")
-	int64 GetRunGameScore() const;
+	int64 GetRunGameScore() const { return RunGameScore; }
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Score")
 	FOnScoreChangedDelegate OnScoreChanged;
@@ -49,14 +50,14 @@ private:
 	UFUNCTION()
 	void CalculateScoreProcess();
 
+	/** 响应 GameState 状态变化：清零分数、启停计分 React to GameState changes: reset score, toggle scoring */
 	UFUNCTION()
-	void OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
-
-	UFUNCTION()
-	void OnRS_ScoreChanged(int64 NewScore);
+	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 
 	FTimerHandle ScoreTimerHandle;
 
 	UPROPERTY()
 	URunGameTimerSubsystem* TimerSubsystem;
+
+	int64 RunGameScore = 0;
 };

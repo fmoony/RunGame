@@ -3,19 +3,20 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "RunGameType.h"
+#include "GameplayTagContainer.h"
 #include "RunGameDebugPanel.generated.h"
 
 class UTextBlock;
 class UBorder;
-class UGameFlowRuntimeState;
 class UPlayerRuntimeState;
-class UCombatRuntimeState;
+class ARunGameCharacter;
 
 /**
- * 调试面板 —— 实时展示三个 RuntimeState 的完整数据。
+ * 调试面板 —— 实时展示所有运行时数据。
  * 纯 C++ 构建 UI 布局，不依赖 Blueprint 子类。
  * 由 RunGameDebugSubsystem 自动创建并显示。
  * 点击穿透，不干扰其他 UI 的交互。
+ * Debug panel — real-time display of all runtime data. Click-through, no BP dependency.
  */
 UCLASS()
 class RUNGAME_API URunGameDebugPanel : public UUserWidget
@@ -35,42 +36,40 @@ private:
 	void RefreshPlayerData();
 	void RefreshCombatData();
 
-	UGameFlowRuntimeState* GetGameFlowRS() const;
-	UPlayerRuntimeState* GetPlayerRS() const;
-	UCombatRuntimeState* GetCombatRS() const;
+	ARunGameCharacter* GetCachedCharacter() const;
 
 	static FString GameStateToString(ERunGameGameState State);
 	static FString CharacterStateToString(ERunGameCharacterState State);
 	static FString FormatTimeMMSS(float TotalSeconds);
 	static FString BoolStr(bool b) { return b ? TEXT("Yes") : TEXT("No"); }
 
-	// 委托回调 —— AddDynamic 要求 UFUNCTION
+	// 委托回调 Delegate callbacks
 	UFUNCTION()
-	void OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
+	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
 
 	UFUNCTION()
-	void OnCountdownUpdated(int32 CountdownSeconds);
+	void OnCountdownUpdatedCallback(int32 CountdownSeconds);
 
 	UFUNCTION()
-	void OnTimeChanged(float NewTime);
+	void OnTimeChangedCallback(float NewTime);
 
 	UFUNCTION()
-	void OnScoreChanged(int64 NewScore);
+	void OnScoreChangedCallback(int64 NewScore);
 
 	UFUNCTION()
-	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
 	UFUNCTION()
-	void OnHealthChanged(float CurrentHP, float MaxHP, float Delta);
+	void OnHealthChangedCallback(float CurrentHP, float MaxHP, float Delta);
 
 	UFUNCTION()
-	void OnEnergyChanged(float CurrentEnergy, float MaxEnergy);
+	void OnEnergyChangedCallback(float CurrentEnergy, float MaxEnergy);
 
 	UFUNCTION()
-	void OnInvincibilityChanged(bool bNewInvincible);
+	void OnInvincibilityChangedCallback(bool bNewInvincible);
 
 	UFUNCTION()
-	void OnDeath(FGameplayTag DamageType, AActor* DeathCauser);
+	void OnDeathCallback(FGameplayTag DamageType, AActor* DeathCauser);
 
 	// Widgets
 	UPROPERTY()

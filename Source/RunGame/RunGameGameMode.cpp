@@ -29,6 +29,12 @@ void ARunGameGameMode::BeginPlay()
 		GS->OnGameStateChanged.AddDynamic(this, &ARunGameGameMode::OnGameStateChangedCallback);
 	}
 
+	// 监听角色死亡——响应式设置 GameOver Listen to character death — reactively set GameOver
+	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->OnCharacterDied.AddDynamic(this, &ARunGameGameMode::OnCharacterDiedCallback);
+	}
+
 	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
 	{
 		if (FloorConfig)
@@ -49,9 +55,17 @@ void ARunGameGameMode::BeginPlay()
 
 void ARunGameGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (ARunGameGameState* GS = GetGameState<ARunGameGameState>())
+	if (UWorld* World = GetWorld())
 	{
-		GS->OnGameStateChanged.RemoveDynamic(this, &ARunGameGameMode::OnGameStateChangedCallback);
+		if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
+		{
+			GS->OnGameStateChanged.RemoveDynamic(this, &ARunGameGameMode::OnGameStateChangedCallback);
+		}
+
+		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		{
+			PRS->OnCharacterDied.RemoveDynamic(this, &ARunGameGameMode::OnCharacterDiedCallback);
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -80,6 +94,14 @@ void ARunGameGameMode::StartGameCountDown(int32 CountdownSeconds /* = 3*/)
 	}
 	// TimerSubsystem 自行监听 OnGameStateChanged 来启动倒计时
 	// SpawnPlayer 由 OnGameStateChangedCallback 在状态变为 InGame 时自行触发
+}
+
+void ARunGameGameMode::OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)
+{
+	if (ARunGameGameState* GS = GetGameState<ARunGameGameState>())
+	{
+		GS->SetGameState(ERunGameGameState::GameOver);
+	}
 }
 
 void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)

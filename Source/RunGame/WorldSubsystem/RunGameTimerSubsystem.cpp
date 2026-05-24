@@ -1,5 +1,5 @@
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
-#include "WorldSubsystem/State/GameFlowRuntimeState.h"
+#include "RunGameGameState.h"
 #include "Engine/World.h"
 #include "RunGame.h"
 
@@ -22,68 +22,35 @@ void URunGameTimerSubsystem::Deinitialize()
 	StopCountdown();
 	StopTimer();
 
-	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	if (UWorld* World = GetWorld())
 	{
-		RS->OnGameStateChanged.RemoveDynamic(this, &URunGameTimerSubsystem::OnGameStateChangedCallback);
-		RS->OnTimeChanged.RemoveDynamic(this, &URunGameTimerSubsystem::OnRS_TimeChanged);
-		RS->OnCountdownComplete.RemoveDynamic(this, &URunGameTimerSubsystem::OnRS_CountdownComplete);
+		if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
+		{
+			GS->OnGameStateChanged.RemoveDynamic(this, &URunGameTimerSubsystem::OnGameStateChangedCallback);
+		}
 	}
 
 	Super::Deinitialize();
 }
 
-float URunGameTimerSubsystem::GetTotalTimeSeconds() const
-{
-	if (const UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
-	{
-		return RS->GetTotalTimeSeconds();
-	}
-	return 0.0f;
-}
-
-bool URunGameTimerSubsystem::IsTimerRunning() const
-{
-	if (const UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
-	{
-		return RS->IsTimerRunning();
-	}
-	return false;
-}
-
-// ---- 响应式绑定 ----
+// ---- 响应式绑定 Reactive Binding ----
 
 void URunGameTimerSubsystem::OnWorldBeginPlay(UWorld& World)
 {
 	Super::OnWorldBeginPlay(World);
 
-	if (UGameFlowRuntimeState* RS = World.GetSubsystem<UGameFlowRuntimeState>())
+	if (ARunGameGameState* GS = World.GetGameState<ARunGameGameState>())
 	{
-		// 状态机响应
-		RS->OnGameStateChanged.AddDynamic(this, &URunGameTimerSubsystem::OnGameStateChangedCallback);
-		// 委托转发
-		RS->OnTimeChanged.AddDynamic(this, &URunGameTimerSubsystem::OnRS_TimeChanged);
-		RS->OnCountdownComplete.AddDynamic(this, &URunGameTimerSubsystem::OnRS_CountdownComplete);
-		UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Bound to GameFlowRuntimeState"));
+		GS->OnGameStateChanged.AddDynamic(this, &URunGameTimerSubsystem::OnGameStateChangedCallback);
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Bound to GameState::OnGameStateChanged"));
 	}
 	else
 	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameTimerSubsystem: Failed to get GameFlowRuntimeState"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameTimerSubsystem: Failed to get GameState"));
 	}
 }
 
-// ---- RS 转发器 ----
-
-void URunGameTimerSubsystem::OnRS_TimeChanged(float NewTime)
-{
-	OnTimeChanged.Broadcast(NewTime);
-}
-
-void URunGameTimerSubsystem::OnRS_CountdownComplete()
-{
-	OnCountdownComplete.Broadcast();
-}
-
-// ---- 状态机响应回调 ----
+// ---- 状态机响应回调 State Machine Callback ----
 
 void URunGameTimerSubsystem::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
 {
@@ -104,10 +71,7 @@ void URunGameTimerSubsystem::OnGameStateChangedCallback(ERunGameGameState OldSta
 	case ERunGameGameState::InGame:
 		if (OldState == ERunGameGameState::Pause || bResumingFromPause)
 		{
-			if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
-			{
-				RS->SetTimerRunning(true);
-			}
+			bIsTimerRunning = true;
 			bResumingFromPause = false;
 		}
 		else
@@ -148,18 +112,18 @@ void URunGameTimerSubsystem::Tick(float DeltaTime)
 	}
 }
 
-// ---- 内部倒计时 ----
+// ---- 内部倒计时 Internal Countdown ----
 
 void URunGameTimerSubsystem::StartCountdown()
 {
-	UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>();
-	if (!RS)
+	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
+	if (!GS)
 	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameTimerSubsystem::StartCountdown: No GameFlowRuntimeState"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameTimerSubsystem::StartCountdown: No GameState"));
 		return;
 	}
 
-	const int32 InitialSeconds = FMath::RoundToInt(RS->DefaultCountdownSeconds);
+	const int32 InitialSeconds = GS->DefaultCountdownSeconds;
 	if (InitialSeconds <= 0)
 	{
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Invalid countdown seconds: %d"), InitialSeconds);
@@ -168,7 +132,7 @@ void URunGameTimerSubsystem::StartCountdown()
 
 	StopCountdown();
 
-	RS->SetCountdownSeconds(InitialSeconds);
+	GS->SetCountdownSeconds(InitialSeconds);
 
 	bIsCountdownActive = true;
 	CountdownTickAccumulator = 0.0f;
@@ -185,18 +149,18 @@ void URunGameTimerSubsystem::StopCountdown()
 
 void URunGameTimerSubsystem::UpdateCountdown()
 {
-	UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>();
-	if (!RS)
+	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
+	if (!GS)
 	{
 		StopCountdown();
 		return;
 	}
 
-	int32 Current = RS->GetCountdownSeconds();
+	int32 Current = GS->GetCountdownSeconds();
 	if (Current > 0)
 	{
 		Current--;
-		RS->SetCountdownSeconds(Current);
+		GS->SetCountdownSeconds(Current);
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Countdown updated: %d"), Current);
 	}
 	else
@@ -209,27 +173,24 @@ void URunGameTimerSubsystem::FinishCountdown()
 {
 	StopCountdown();
 
-	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
+	if (GS)
 	{
-		RS->SetGameState(ERunGameGameState::InGame);
-		RS->BroadcastCountdownComplete();
+		GS->SetGameState(ERunGameGameState::InGame);
+		GS->OnCountdownComplete.Broadcast();
 	}
+
+	OnCountdownComplete.Broadcast();
 }
 
-// ---- 内部游戏计时 ----
+// ---- 内部游戏计时 Internal Game Timer ----
 
 void URunGameTimerSubsystem::StartTimer()
 {
-	UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>();
-	if (!RS)
-	{
-		return;
-	}
+	TotalTimeSeconds = 0.0f;
+	bIsTimerRunning = true;
 
-	RS->SetTotalTimeSeconds(0.0f);
-	RS->SetTimerRunning(true);
-
-	// 即使 RS 因为 guard 没有广播（值为 0.0），也确保消费者收到重置
+	// 即使初始值为 0，也确保消费者收到重置 Ensure consumers receive reset even when value is 0
 	OnTimeChanged.Broadcast(0.0f);
 
 	UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Forward timer started from 0.0 seconds"));
@@ -237,20 +198,17 @@ void URunGameTimerSubsystem::StartTimer()
 
 void URunGameTimerSubsystem::StopTimer()
 {
-	if (UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
-	{
-		RS->SetTimerRunning(false);
-	}
+	bIsTimerRunning = false;
 	UE_LOG(LogRunGame, Warning, TEXT("RunGameTimerSubsystem: Timer stopped"));
 }
 
 void URunGameTimerSubsystem::UpdateTimer(float DeltaTime)
 {
-	UGameFlowRuntimeState* RS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>();
-	if (!RS || !RS->IsTimerRunning())
+	if (!bIsTimerRunning)
 	{
 		return;
 	}
 
-	RS->SetTotalTimeSeconds(RS->GetTotalTimeSeconds() + DeltaTime);
+	TotalTimeSeconds += DeltaTime;
+	OnTimeChanged.Broadcast(TotalTimeSeconds);
 }

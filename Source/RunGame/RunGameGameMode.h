@@ -6,7 +6,10 @@
 #include "GameFramework/GameModeBase.h"
 #include "RunGameType.h"
 #include "DataAssets/FloorConfigData.h"
+#include "GameplayTagContainer.h"
 #include "RunGameGameMode.generated.h"
+
+class ARunGameCharacter;
 
 /**
  *  Simple GameMode for a third person game
@@ -69,6 +72,10 @@ protected:
 	/** Reacts to game state changes -- spawns player when entering InGame */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
+
+	/** Reacts to character death — sets GameOver state */
+	UFUNCTION()
+	void OnCharacterDiedCallback(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter);
 
 private:
 	bool bResumingFromPause = false;

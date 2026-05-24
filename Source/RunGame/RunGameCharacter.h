@@ -255,6 +255,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
+	/** 获取转弯/转角盒状态（调试用） Get turn/box flags (for debug) */
+	FORCEINLINE bool IsInTurn() const { return bTurn; }
+	FORCEINLINE bool IsInTurnBox() const { return bInTurnBox; }
+
 private:
 	/** Buffered input — when a state transition is rejected, store it here. MAX = no buffered input */
 	ERunGameCharacterState PendingInputState = ERunGameCharacterState::MAX;
@@ -263,12 +267,16 @@ private:
 	UFUNCTION()
 	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
-	// ---- RS 绑定回调 ----
+	// ---- GameState 响应 ----
 
 	UFUNCTION()
-	void OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
+	void OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
 
+	/** 响应 RS 状态变化——广播自身委托让蓝图可监听 Forward RS state to own delegate for BP listeners */
 	UFUNCTION()
-	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+	void OnRSCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
+	bool bTurn = false;
+	bool bInTurnBox = false;
 
 };

@@ -34,11 +34,11 @@ void ARunGameDeathVolume::TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, AR
 		return;
 	}
 
-	// 死亡体积强制击杀：无视无敌，走伤害接口统一链路
+	// 死亡体积强制击杀：无视无敌，直接置零 HP 并广播死亡
+	// DeathVolume force kill: bypass invincibility, directly zero HP and broadcast death
 	if (UHealthComponent* HC = PlayerCharacter->GetHealthComponent())
 	{
-		HC->SetInvincible(false);
+		HC->ForceKill(FGameplayTag(), DeathVolume);
 	}
-	IDamagable::Execute_OnTakeDamage(PlayerCharacter, 99999.0f, FGameplayTag(), DeathVolume);
 	bHasTriggeredDeath = false;
 }

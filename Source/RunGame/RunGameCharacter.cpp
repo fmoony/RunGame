@@ -3,7 +3,6 @@
 #include "Actor/Component/HealthComponent.h"
 #include "Actor/Component/SkillComponent.h"
 #include "Skill/RunGameSkillConfigData.h"
-#include "WorldSubsystem/State/GameFlowRuntimeState.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
@@ -75,18 +74,14 @@ void ARunGameCharacter::BeginPlay()
 
 	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
-		RS->CachePlayerCharacter(this);
-
-		// 角色状态变化：自身响应式逻辑
+		// 响应角色状态变化：自身逻辑 + 转发给蓝图监听者 Reactive to state: self logic + forward to BP listeners
 		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
-		// 角色状态变化：转发到自身委托（向后兼容外部监听）
-		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnRS_CharacterStateChanged);
+		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnRSCharacterStateChanged);
 	}
 
-	if (UGameFlowRuntimeState* GRS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
-		// 游戏状态变化
-		GRS->OnGameStateChanged.AddDynamic(this, &ARunGameCharacter::OnRS_GameStateChanged);
+		GS->OnGameStateChanged.AddDynamic(this, &ARunGameCharacter::OnGameStateChanged);
 	}
 
 	if (HealthComponent)
@@ -105,12 +100,12 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		if (UPlayerRuntimeState* RS = World->GetSubsystem<UPlayerRuntimeState>())
 		{
 			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
-			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnRS_CharacterStateChanged);
+			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnRSCharacterStateChanged);
 		}
 
-		if (UGameFlowRuntimeState* GRS = World->GetSubsystem<UGameFlowRuntimeState>())
+		if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
 		{
-			GRS->OnGameStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnRS_GameStateChanged);
+			GS->OnGameStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnGameStateChanged);
 		}
 	}
 
@@ -173,7 +168,7 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 	{
 		const float ElapsedTime = TimerSubsystem->GetTotalTimeSeconds();
 		const float DesiredMaxSpeed = MaxSpeedCurve->GetFloatValue(ElapsedTime);
-		const float TargetSpeed = DesiredMaxSpeed * RS->GetCompositeSpeedMultiplier();
+		const float TargetSpeed = DesiredMaxSpeed * CachedCompositeSpeedMultiplier;
 		const float InterpSpeed = 3.0f / FMath::Max(SpeedTransitionDuration, 0.01f);
 		SmoothedMaxWalkSpeed = FMath::FInterpTo(SmoothedMaxWalkSpeed, TargetSpeed, DeltaSeconds, InterpSpeed);
 		GetCharacterMovement()->MaxWalkSpeed = SmoothedMaxWalkSpeed;
@@ -188,7 +183,7 @@ void ARunGameCharacter::Tick(float DeltaSeconds)
 
 	AddMovementInput(Desiron, 1.0f);
 
-	// 空中检测
+	// 空中检测 Airborne detection
 	if (GetCharacterMovement()->IsFalling() && RS->GetCharacterState() == ERunGameCharacterState::Idle)
 	{
 		SetCharacterState(ERunGameCharacterState::Airborne);
@@ -216,15 +211,7 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 
 		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-		bool bTurnFlag = false;
-		bool bInTurnBoxFlag = false;
-		if (RS)
-		{
-			RS->GetTurnFlags(bTurnFlag, bInTurnBoxFlag);
-		}
-
-		if (bTurnFlag)
+		if (bTurn)
 		{
 			FRotator NewRotation = FRotator(0.f, 90.f * Right, 0.f);
 
@@ -239,14 +226,11 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 				MovementComponent->Velocity = NewVelocity;
 			}
 
-			if (RS)
-			{
-				RS->SetTurnFlags(false, bInTurnBoxFlag);
-			}
+			bTurn = false;
 		}
 		else
 		{
-			if (!bInTurnBoxFlag)
+			if (!bInTurnBox)
 			{
 				AddMovementInput(RightDirection, Right);
 			}
@@ -314,17 +298,13 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 
 void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor* DeathCauser)
 {
+	// 设置角色状态为 Dead（RS 负责广播）Set character state to Dead (RS broadcasts)
 	SetCharacterState(ERunGameCharacterState::Dead);
 
-	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
-	{
-		GS->SetGameState(ERunGameGameState::GameOver);
-	}
-
-	if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
-	{
-		AnimInstance->StopAllMontages(0.0f);
-	}
+	// Die() 仅处理角色自身的视觉呈现：摄像机、动画、溶解
+	// GameOver 由 GameMode 监听 OnCharacterDied 响应式设置
+	// Die() only handles character presentation: camera, animation, dissolve
+	// GameOver is set reactively by GameMode listening to OnCharacterDied
 
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
@@ -342,7 +322,7 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor*
 		}
 	}
 
-	// Broadcast via RS
+	// Broadcast via RS + own delegate
 	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
 		RS->OnCharacterDied.Broadcast(DamageType, this);
@@ -469,9 +449,9 @@ void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathC
 	Die(DamageType, 3.0f, DeathCauser);
 }
 
-// ---- RS 回调 ----
+// ---- GameState 响应 ----
 
-void ARunGameCharacter::OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
+void ARunGameCharacter::OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
 {
 	if (OldState == NewState)
 	{
@@ -488,9 +468,11 @@ void ARunGameCharacter::OnRS_GameStateChanged(ERunGameGameState OldState, ERunGa
 	}
 }
 
-void ARunGameCharacter::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+// ---- RS 转发 ----
+
+void ARunGameCharacter::OnRSCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
-	// 转发 RS 的状态变化到自身委托（向后兼容外部蓝图等监听者）
+	// 转发 RS 的状态变化到自身委托（向后兼容外部蓝图监听）Forward RS state to own delegate for BP listeners
 	OnCharacterStateChanged.Broadcast(OldState, NewState);
 }
 
@@ -546,11 +528,7 @@ float ARunGameCharacter::GetMaxHP_Implementation() const
 
 bool ARunGameCharacter::IsDead_Implementation() const
 {
-	if (const UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		return RS->GetCharacterState() == ERunGameCharacterState::Dead;
-	}
-	return false;
+	return HealthComponent ? HealthComponent->IsDead() : false;
 }
 
 // ~end IDamagable interface
@@ -581,7 +559,7 @@ void ARunGameCharacter::SetCharacterState(ERunGameCharacterState NewState)
 		return;
 	}
 
-	// 转移校验通过，写入 RS（RS 负责广播）
+	// 转移校验通过，写入 RS（RS 负责广播）Validation passed, write to RS (RS broadcasts)
 	RS->SetCharacterState(NewState);
 }
 
@@ -590,45 +568,11 @@ bool ARunGameCharacter::IsCharacterStateTransitionAllowed(ERunGameCharacterState
 	const UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
 	if (!RS) return false;
 
-	const ERunGameCharacterState CurrentState = RS->GetCharacterState();
-
-	if (CurrentState == ERunGameCharacterState::Dead)
-	{
-		return false;
-	}
-
-	switch (NewState)
-	{
-	case ERunGameCharacterState::Idle:
-		return CurrentState == ERunGameCharacterState::Sliding
-			|| CurrentState == ERunGameCharacterState::Airborne
-			|| CurrentState == ERunGameCharacterState::Turning;
-
-	case ERunGameCharacterState::Airborne:
-		return CurrentState == ERunGameCharacterState::Idle
-			|| CurrentState == ERunGameCharacterState::Turning;
-
-	case ERunGameCharacterState::Sliding:
-		return CurrentState == ERunGameCharacterState::Idle;
-
-	case ERunGameCharacterState::Turning:
-		return CurrentState == ERunGameCharacterState::Idle
-			|| CurrentState == ERunGameCharacterState::Sliding
-			|| CurrentState == ERunGameCharacterState::Airborne;
-
-	case ERunGameCharacterState::Dead:
-		return CurrentState != ERunGameCharacterState::Dead;
-
-	default:
-		return false;
-	}
+	return RS->IsCharacterStateTransitionAllowed(NewState);
 }
 
 void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
-	UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (!RS) return;
-
 	// === 滑铲系统：进入 Sliding ===
 	if (NewState == ERunGameCharacterState::Sliding)
 	{
@@ -670,20 +614,32 @@ void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState O
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Slide ended."));
 	}
 
-	// === 转弯系统 ===
+	// === 转弯系统：本地旗帜管理 Turn system: local flags ===
 	if (NewState == ERunGameCharacterState::Turning)
 	{
-		RS->SetTurnFlags(true, true);
+		bTurn = true;
+		bInTurnBox = true;
 	}
 	if (OldState == ERunGameCharacterState::Turning)
 	{
-		RS->SetTurnFlags(false, false);
+		bTurn = false;
+		bInTurnBox = false;
 	}
 
-	// === 死亡：RS 内部清理 + 组件自行监听广播响应 ===
+	// === 死亡：清除缓冲输入 + 停止动画 Death: clear buffered input + stop all montages ===
 	if (NewState == ERunGameCharacterState::Dead)
 	{
+		bTurn = false;
+		bInTurnBox = false;
+		SpeedModifiers.Empty();
+		CachedCompositeSpeedMultiplier = 1.0f;
+
 		PendingInputState = ERunGameCharacterState::MAX;
+
+		if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->StopAllMontages(0.0f);
+		}
 	}
 }
 
@@ -722,27 +678,26 @@ bool ARunGameCharacter::IsSliding() const
 
 float ARunGameCharacter::GetCompositeSpeedMultiplier() const
 {
-	if (const UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		return RS->GetCompositeSpeedMultiplier();
-	}
-	return 1.0f;
+	return CachedCompositeSpeedMultiplier;
 }
 
-// -- Speed modifiers --
+// -- Speed modifiers —
 
 void ARunGameCharacter::AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier)
 {
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	if (float* Existing = SpeedModifiers.Find(ModifierTag))
 	{
-		RS->AddSpeedModifier(ModifierTag, Multiplier);
+		CachedCompositeSpeedMultiplier /= *Existing;
 	}
+	SpeedModifiers.Add(ModifierTag, Multiplier);
+	CachedCompositeSpeedMultiplier *= Multiplier;
 }
 
 void ARunGameCharacter::RemoveSpeedModifier(FGameplayTag ModifierTag)
 {
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	if (float* Existing = SpeedModifiers.Find(ModifierTag))
 	{
-		RS->RemoveSpeedModifier(ModifierTag);
+		CachedCompositeSpeedMultiplier /= *Existing;
 	}
+	SpeedModifiers.Remove(ModifierTag);
 }

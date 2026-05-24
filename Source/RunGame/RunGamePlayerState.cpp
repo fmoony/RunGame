@@ -1,7 +1,6 @@
 #include "RunGamePlayerState.h"
+#include "RunGameGameState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
-#include "WorldSubsystem/State/GameFlowRuntimeState.h"
-#include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
@@ -28,14 +27,9 @@ void ARunGamePlayerState::BeginPlay()
 		World->GetTimerManager().PauseTimer(ScoreTimerHandle);
 	}
 
-	if (UGameFlowRuntimeState* GRS = GetWorld()->GetSubsystem<UGameFlowRuntimeState>())
+	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
-		GRS->OnGameStateChanged.AddDynamic(this, &ARunGamePlayerState::OnRS_GameStateChanged);
-	}
-
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		RS->OnScoreChanged.AddDynamic(this, &ARunGamePlayerState::OnRS_ScoreChanged);
+		GS->OnGameStateChanged.AddDynamic(this, &ARunGamePlayerState::OnGameStateChangedCallback);
 	}
 }
 
@@ -45,23 +39,18 @@ void ARunGamePlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		World->GetTimerManager().ClearTimer(ScoreTimerHandle);
 
-		if (UGameFlowRuntimeState* GRS = World->GetSubsystem<UGameFlowRuntimeState>())
+		if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
 		{
-			GRS->OnGameStateChanged.RemoveDynamic(this, &ARunGamePlayerState::OnRS_GameStateChanged);
-		}
-
-		if (UPlayerRuntimeState* RS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			RS->OnScoreChanged.RemoveDynamic(this, &ARunGamePlayerState::OnRS_ScoreChanged);
+			GS->OnGameStateChanged.RemoveDynamic(this, &ARunGamePlayerState::OnGameStateChangedCallback);
 		}
 	}
 	TimerSubsystem = nullptr;
 	Super::EndPlay(EndPlayReason);
 }
 
-// ---- RS 回调 ----
+// ---- GameState 响应 GameState Callback ----
 
-void ARunGamePlayerState::OnRS_GameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
+void ARunGamePlayerState::OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState)
 {
 	if (OldState == NewState)
 	{
@@ -81,11 +70,6 @@ void ARunGamePlayerState::OnRS_GameStateChanged(ERunGameGameState OldState, ERun
 	{
 		SetScoringActive(false);
 	}
-}
-
-void ARunGamePlayerState::OnRS_ScoreChanged(int64 NewScore)
-{
-	OnScoreChanged.Broadcast(NewScore);
 }
 
 // ---- Scoring ----
@@ -127,25 +111,18 @@ void ARunGamePlayerState::CalculateScoreProcess()
 
 void ARunGamePlayerState::AddScore(int64 Value)
 {
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	if (Value != 0)
 	{
-		RS->AddScore(Value);
+		RunGameScore += Value;
+		OnScoreChanged.Broadcast(RunGameScore);
 	}
 }
 
 void ARunGamePlayerState::SetRunGameScore(int64 NewScore)
 {
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	if (RunGameScore != NewScore)
 	{
-		RS->SetRunGameScore(NewScore);
+		RunGameScore = NewScore;
+		OnScoreChanged.Broadcast(RunGameScore);
 	}
-}
-
-int64 ARunGamePlayerState::GetRunGameScore() const
-{
-	if (const UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		return RS->GetRunGameScore();
-	}
-	return 0;
 }

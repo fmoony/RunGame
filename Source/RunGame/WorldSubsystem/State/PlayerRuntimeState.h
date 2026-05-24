@@ -8,13 +8,14 @@
 
 class ARunGameCharacter;
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FPR_OnScoreChanged, int64, NewScore);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterStateChanged, ERunGameCharacterState, OldState, ERunGameCharacterState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterDied, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
 
 /**
- * 玩家运行时状态 —— 分数、角色状态、速度修改器。
- * 通过 GetWorld()->GetSubsystem<UPlayerRuntimeState>() 访问。
+ * 角色状态机——纯事件总线。
+ * 管理 CurrentCharacterState 的转移校验和广播，所有受限于此状态机的系统直接绑定 OnCharacterStateChanged 自行响应。
+ * Character state machine — pure event bus.
+ * Manages CurrentCharacterState transitions and broadcasts. All constrained systems bind directly and self-respond.
  */
 UCLASS()
 class RUNGAME_API UPlayerRuntimeState : public UWorldSubsystem
@@ -22,26 +23,6 @@ class RUNGAME_API UPlayerRuntimeState : public UWorldSubsystem
 	GENERATED_BODY()
 
 public:
-	// ---- Score ----
-
-	UFUNCTION(BlueprintCallable, Category = "Player|Score")
-	void AddScore(int64 Value);
-
-	UFUNCTION(BlueprintCallable, Category = "Player|Score")
-	void SetRunGameScore(int64 NewScore);
-
-	UFUNCTION(BlueprintPure, Category = "Player|Score")
-	int64 GetRunGameScore() const { return RunGameScore; }
-
-	UFUNCTION(BlueprintCallable, Category = "Player|Score")
-	void SetScoringActive(bool bActive);
-
-	UFUNCTION(BlueprintPure, Category = "Player|Score")
-	bool IsScoringActive() const { return bIsScoringActive; }
-
-	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
-	FPR_OnScoreChanged OnScoreChanged;
-
 	// ---- Character State ----
 
 	UFUNCTION(BlueprintCallable, Category = "Player|Character")
@@ -59,21 +40,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
 	FPR_OnCharacterDied OnCharacterDied;
 
-	void SetTurnFlags(bool bInTurn, bool bInBox);
-	void GetTurnFlags(bool& OutTurn, bool& OutInTurnBox) const;
-
-	void AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier);
-	void RemoveSpeedModifier(FGameplayTag ModifierTag);
-	void ClearSpeedModifiers();
-	float GetCompositeSpeedMultiplier() const { return CachedCompositeSpeedMultiplier; }
-
-	int32 GetSpeedModifierCount() const { return SpeedModifiers.Num(); }
-
-	void CachePlayerCharacter(ARunGameCharacter* InCharacter);
-	UFUNCTION(BlueprintPure, Category = "Player|Character")
-	ARunGameCharacter* GetPlayerCharacter() const { return CachedPlayerCharacter.Get(); }
-
-	/** 重置为新游戏——清除分数、角色状态与修改器 Reset for new game: clear score, character state, and modifiers */
+	/** 重置为新游戏——清除角色状态 Reset for new game: clear character state to Idle */
 	void ResetForNewGame();
 
 	// ---- Lifecycle ----
@@ -82,12 +49,5 @@ public:
 	virtual void Deinitialize() override;
 
 private:
-	int64 RunGameScore = 0;
-	bool bIsScoringActive = false;
 	ERunGameCharacterState CurrentCharacterState = ERunGameCharacterState::Idle;
-	bool bTurn = false;
-	bool bInTurnBox = false;
-	TMap<FGameplayTag, float> SpeedModifiers;
-	float CachedCompositeSpeedMultiplier = 1.0f;
-	TWeakObjectPtr<ARunGameCharacter> CachedPlayerCharacter;
 };

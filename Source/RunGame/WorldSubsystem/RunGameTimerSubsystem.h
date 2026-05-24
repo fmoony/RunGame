@@ -11,9 +11,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCountdownCompleteDelegate);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTimeChangedDelegate, float, NewTime);
 
 /**
- * 纯粹的计时子系统（引擎）。
- * 数据存储已迁移到 UGameFlowRuntimeState，本类仅保留 Tick 逻辑和倒计时引擎。
- * 委托由 RS 转发器重播以保持向后兼容。
+ * 纯计时子系统 —— Tick 驱动的倒计时引擎和正向计时器。
+ * 直接持有计时数据，绑定 GameState 委托响应状态变化。
+ * Pure timer subsystem — Tick-driven countdown engine and forward timer.
+ * Holds timer data directly, binds GameState delegates reactively.
  */
 UCLASS()
 class RUNGAME_API URunGameTimerSubsystem : public UTickableWorldSubsystem
@@ -25,14 +26,14 @@ public:
 
 	virtual TStatId GetStatId() const override;
 
-	/** 绑定到 GameFlowRuntimeState 的 OnGameStateChanged 和转发器 */
+	/** 绑定 GameState 的 OnGameStateChanged 以响应状态变化 Bind to GameState's OnGameStateChanged for reactive timing */
 	virtual void OnWorldBeginPlay(UWorld& World) override;
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Timer")
-	float GetTotalTimeSeconds() const;
+	float GetTotalTimeSeconds() const { return TotalTimeSeconds; }
 
 	UFUNCTION(BlueprintPure, Category = "RunGame|Timer")
-	bool IsTimerRunning() const;
+	bool IsTimerRunning() const { return bIsTimerRunning; }
 
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Timer")
 	FOnCountdownCompleteDelegate OnCountdownComplete;
@@ -47,16 +48,9 @@ protected:
 	virtual bool IsTickableWhenPaused() const override { return true; }
 
 private:
-	/** 响应 RS 的游戏状态变化，启动/停止计时器 */
+	/** 响应 GameState 的游戏状态变化，启动/停止计时器 React to GameState changes: start/stop timers */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
-
-	// ---- RS 转发器 ----
-	UFUNCTION()
-	void OnRS_TimeChanged(float NewTime);
-
-	UFUNCTION()
-	void OnRS_CountdownComplete();
 
 	void StartCountdown();
 	void StopCountdown();
@@ -66,6 +60,8 @@ private:
 	void StopTimer();
 	void UpdateTimer(float DeltaTime);
 
+	float TotalTimeSeconds = 0.0f;
+	bool bIsTimerRunning = false;
 	bool bIsCountdownActive = false;
 	float CountdownTickAccumulator = 0.0f;
 	bool bResumingFromPause = false;

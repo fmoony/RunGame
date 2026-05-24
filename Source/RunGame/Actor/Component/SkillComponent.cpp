@@ -1,8 +1,8 @@
 #include "Actor/Component/SkillComponent.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/RunGameSkillExecution.h"
-#include "WorldSubsystem/State/CombatRuntimeState.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
+#include "RunGamePlayerState.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "RunGame.h"
@@ -19,19 +19,10 @@ void USkillComponent::BeginPlay()
 
 	InitializeFromConfig();
 
-	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
-	{
-		// 同步配置
-		RS->SetMaxEnergy(MaxEnergy);
-		RS->SetEnergy(InitialEnergy);
+	// 初始化能量 Initialize energy
+	CurrentEnergy = FMath::Clamp(InitialEnergy, 0.0f, MaxEnergy);
 
-		// 绑定转发器
-		RS->OnEnergyChanged.AddDynamic(this, &USkillComponent::OnRS_EnergyChanged);
-		RS->OnSkillActivated.AddDynamic(this, &USkillComponent::OnRS_SkillActivated);
-		RS->OnSkillReady.AddDynamic(this, &USkillComponent::OnRS_SkillReady);
-	}
-
-	// 监听角色状态机：死亡时自行清空冷却和能量
+	// 监听角色状态机：死亡时自行清空冷却和能量 Listen to character state: clear cooldowns and energy on death
 	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
 		PRS->OnCharacterStateChanged.AddDynamic(this, &USkillComponent::OnRS_CharacterStateChanged);
@@ -39,8 +30,8 @@ void USkillComponent::BeginPlay()
 
 	StartEnergyRegen();
 
-	// 广播初始能量状态
-	OnEnergyChanged.Broadcast(InitialEnergy, MaxEnergy);
+	// 广播初始能量状态 Broadcast initial energy
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 }
 
 void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -56,13 +47,6 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			}
 		}
 
-		if (UCombatRuntimeState* RS = World->GetSubsystem<UCombatRuntimeState>())
-		{
-			RS->OnEnergyChanged.RemoveDynamic(this, &USkillComponent::OnRS_EnergyChanged);
-			RS->OnSkillActivated.RemoveDynamic(this, &USkillComponent::OnRS_SkillActivated);
-			RS->OnSkillReady.RemoveDynamic(this, &USkillComponent::OnRS_SkillReady);
-		}
-
 		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
 		{
 			PRS->OnCharacterStateChanged.RemoveDynamic(this, &USkillComponent::OnRS_CharacterStateChanged);
@@ -73,36 +57,6 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	SkillStates.Empty();
 
 	Super::EndPlay(EndPlayReason);
-}
-
-// ---- RS 转发器 ----
-
-void USkillComponent::OnRS_EnergyChanged(float CurrentEnergy, float InMaxEnergy)
-{
-	OnEnergyChanged.Broadcast(CurrentEnergy, InMaxEnergy);
-}
-
-void USkillComponent::OnRS_SkillActivated(FGameplayTag SkillTag, float CooldownDuration)
-{
-	OnSkillActivated.Broadcast(SkillTag, CooldownDuration);
-}
-
-void USkillComponent::OnRS_SkillReady(FGameplayTag SkillTag)
-{
-	OnSkillReady.Broadcast(SkillTag);
-}
-
-void USkillComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
-{
-	if (NewState == ERunGameCharacterState::Dead)
-	{
-		ClearAllCooldowns();
-
-		if (UCombatRuntimeState* CRS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
-		{
-			CRS->SetEnergy(0.0f);
-		}
-	}
 }
 
 // ---- Init ----
@@ -149,13 +103,7 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		return false;
 	}
 
-	UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>();
-	if (!RS)
-	{
-		return false;
-	}
-
-	const float CurrentEnergy = RS->GetCurrentEnergy();
+	// 能量检查 Energy check
 	if (CurrentEnergy < SkillDef->EnergyCost)
 	{
 		UE_LOG(LogRunGame, Warning, TEXT("USkillComponent::TryActivateSkill failed: Skill '%s' requires %.1f energy but only %.1f available"), *SkillTag.ToString(), SkillDef->EnergyCost, CurrentEnergy);
@@ -193,8 +141,9 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		World->GetTimerManager().SetTimer(State->CooldownTimer, TimerDel, CooldownDuration, false);
 	}
 
-	// 扣减能量并写入 RS
-	RS->SetEnergy(CurrentEnergy - SkillDef->EnergyCost);
+	// 扣减能量 Deduct energy
+	CurrentEnergy = FMath::Clamp(CurrentEnergy - SkillDef->EnergyCost, 0.0f, MaxEnergy);
+	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 
 	ActiveExecution = ExecObj;
 
@@ -203,12 +152,13 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 		ExecObj->Execute(Owner, SkillTag);
 	}
 
-	RS->BroadcastSkillActivated(SkillTag, CooldownDuration);
+	// 广播技能激活 Broadcast skill activated
+	OnSkillActivated.Broadcast(SkillTag, CooldownDuration);
 
 	if (CooldownDuration <= 0.0f)
 	{
 		State->bOnCooldown = false;
-		RS->BroadcastSkillReady(SkillTag);
+		OnSkillReady.Broadcast(SkillTag);
 	}
 
 	UE_LOG(LogRunGame, Warning, TEXT("USkillComponent: Activated skill '%s' with cooldown %.2f seconds"), *SkillTag.ToString(), CooldownDuration);
@@ -227,10 +177,7 @@ void USkillComponent::OnCooldownExpired(FGameplayTag SkillTag)
 	State->bOnCooldown = false;
 	State->CooldownTimer.Invalidate();
 
-	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
-	{
-		RS->BroadcastSkillReady(SkillTag);
-	}
+	OnSkillReady.Broadcast(SkillTag);
 }
 
 bool USkillComponent::IsSkillReady(FGameplayTag SkillTag) const
@@ -285,15 +232,6 @@ TArray<FGameplayTag> USkillComponent::GetSkillTags() const
 
 // -- Energy ----
 
-float USkillComponent::GetCurrentEnergy() const
-{
-	if (const UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
-	{
-		return RS->GetCurrentEnergy();
-	}
-	return 0.0f;
-}
-
 bool USkillComponent::HasEnoughEnergy(FGameplayTag SkillTag) const
 {
 	if (!SkillConfig)
@@ -307,14 +245,16 @@ bool USkillComponent::HasEnoughEnergy(FGameplayTag SkillTag) const
 		return false;
 	}
 
-	return GetCurrentEnergy() >= SkillDef->EnergyCost;
+	return CurrentEnergy >= SkillDef->EnergyCost;
 }
 
 void USkillComponent::AddEnergy(float Amount)
 {
-	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	const float NewValue = FMath::Clamp(CurrentEnergy + Amount, 0.0f, MaxEnergy);
+	if (CurrentEnergy != NewValue)
 	{
-		RS->AddEnergy(Amount);
+		CurrentEnergy = NewValue;
+		OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 	}
 }
 
@@ -347,10 +287,7 @@ void USkillComponent::ClearAllCooldowns()
 				TimerManager.ClearTimer(Pair.Value.CooldownTimer);
 				Pair.Value.bOnCooldown = false;
 
-				if (UCombatRuntimeState* RS = World->GetSubsystem<UCombatRuntimeState>())
-				{
-					RS->BroadcastSkillReady(Pair.Key);
-				}
+				OnSkillReady.Broadcast(Pair.Key);
 			}
 		}
 	}
@@ -380,23 +317,38 @@ void USkillComponent::StopEnergyRegen()
 
 void USkillComponent::TickEnergyRegen()
 {
-	UCombatRuntimeState* CRS = GetWorld()->GetSubsystem<UCombatRuntimeState>();
-	UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (!CRS || !PRS)
-	{
-		return;
-	}
-
-	const float CurrentEnergy = CRS->GetCurrentEnergy();
 	if (CurrentEnergy >= MaxEnergy)
 	{
 		return;
 	}
 
-	// 跨领域读取：分数在 PlayerRuntimeState，能量在 CombatRuntimeState
+	// 跨领域读取：分数在 PlayerState，能量本地管理
 	// 使用 sqrt 缩放应对爆炸式分数增长
-	const float ScoreBonus = FMath::Sqrt(FMath::Max(0.0f, static_cast<float>(PRS->GetRunGameScore()))) * ScoreRegenMultiplier;
+	// Cross-domain read: score from PlayerState, energy managed locally
+	// sqrt scaling for explosive score growth
+	int64 Score = 0;
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
+		{
+			Score = PS->GetRunGameScore();
+		}
+	}
+
+	const float ScoreBonus = FMath::Sqrt(FMath::Max(0.0f, static_cast<float>(Score))) * ScoreRegenMultiplier;
 
 	const float RegenAmount = (BaseEnergyRegenPerSecond + ScoreBonus + EnergyRegenModifier) * EnergyRegenMultiplier * 0.1f;
-	CRS->AddEnergy(RegenAmount);
+
+	AddEnergy(RegenAmount);
+}
+
+void USkillComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+{
+	if (NewState == ERunGameCharacterState::Dead)
+	{
+		ClearAllCooldowns();
+
+		CurrentEnergy = 0.0f;
+		OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
+	}
 }
