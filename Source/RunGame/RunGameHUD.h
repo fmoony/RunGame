@@ -10,7 +10,7 @@
 class UUserWidget;
 
 /**
- * 
+ *
  */
 UCLASS()
 class RUNGAME_API ARunGameHUD : public AHUD

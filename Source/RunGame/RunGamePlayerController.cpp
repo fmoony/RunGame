@@ -239,4 +239,3 @@ void ARunGamePlayerController::OnCountdownCompleteCallback()
 	UGameplayStatics::SetGamePaused(GetWorld(), false);
 	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Countdown complete, engine unfrozen."));
 }
-

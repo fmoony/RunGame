@@ -66,6 +66,8 @@ public:
 	void RemoveSpeedModifier(FGameplayTag ModifierTag);
 	float GetCompositeSpeedMultiplier() const { return CachedCompositeSpeedMultiplier; }
 
+	int32 GetSpeedModifierCount() const { return SpeedModifiers.Num(); }
+
 	void CachePlayerCharacter(ARunGameCharacter* InCharacter);
 	UFUNCTION(BlueprintPure, Category = "Player|Character")
 	ARunGameCharacter* GetPlayerCharacter() const { return CachedPlayerCharacter.Get(); }

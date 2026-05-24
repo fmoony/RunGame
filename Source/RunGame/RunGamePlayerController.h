@@ -62,7 +62,7 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "RunGame|Camera")
 	FName MainMenuCameraTag = FName("MainMenuCamera");
 
-public:	
+public:
 	/** Finds the main menu camera by tag and blends the view to it */
 	void SetViewTargetToMainMenuCamera();
 
