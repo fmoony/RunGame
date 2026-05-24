@@ -174,3 +174,46 @@ void ARunGameCharacter::AddScore()
 
 // NOTE: （重要提示，提醒其他开发者注意这里的特殊逻辑）
 
+## 6. 中英双语注释（Bilingual Comments）
+
+所有注释和文档字符串必须同时包含中文和英文，格式为：**中文在前，英文在后，以空格分隔**。
+
+```cpp
+// 正确 — 函数注释（中文在前，英文在后）
+/** 触发角色死亡逻辑 Trigger character death logic */
+void Die();
+
+// 正确 — 变量注释
+/** 角色最大移动速度 Max walk speed of the character */
+UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RunGame|Speed")
+float MaxWalkSpeed;
+
+// 正确 — 函数内注释
+// 验证控制器与输入有效性 Validate controller and input validity
+if (GetController() == nullptr || Right == 0.0f)
+{
+    return;
+}
+
+// 正确 — 标记词
+// TODO: 需要实现可配置的冷却时间 Need to implement configurable cooldown duration
+
+// 正确 — 内联 getter
+/** 获取摄像机吊臂 Get the camera boom */
+FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+
+// 错误 — 仅有英文，缺少中文
+/** Get the camera boom */
+FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+
+// 错误 — 仅有中文，缺少英文
+/** 获取摄像机吊臂 */
+FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+```
+
+**规则要点**：
+- 中文描述在前，英文描述在后，中间以空格分隔
+- 两类描述内容应对等，表达相同的含义
+- 已有代码中的注释暂不要求补齐双语，后续修改时顺带补充
+- 标记词（TODO/FIXME/HACK/NOTE）同样适用此规则
+
