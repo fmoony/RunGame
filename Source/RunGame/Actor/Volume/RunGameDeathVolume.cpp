@@ -2,6 +2,8 @@
 
 #include "Actor/Volume/RunGameDeathVolume.h"
 #include "RunGameCharacter.h"
+#include "Actor/Component/HealthComponent.h"
+#include "Interfaces/Damagable.h"
 #include "GameplayTagContainer.h"
 
 ARunGameDeathVolume::ARunGameDeathVolume()
@@ -32,7 +34,11 @@ void ARunGameDeathVolume::TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, AR
 		return;
 	}
 
-	// 直接调用 Character 的 Die，死亡逻辑完全由 Character 自行处理
-	PlayerCharacter->Die(FGameplayTag(), DeathDelay);
+	// 死亡体积强制击杀：无视无敌，走伤害接口统一链路
+	if (UHealthComponent* HC = PlayerCharacter->GetHealthComponent())
+	{
+		HC->SetInvincible(false);
+	}
+	IDamagable::Execute_OnTakeDamage(PlayerCharacter, 99999.0f, FGameplayTag(), DeathVolume);
 	bHasTriggeredDeath = false;
 }

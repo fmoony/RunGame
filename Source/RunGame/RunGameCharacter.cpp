@@ -679,9 +679,11 @@ void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState O
 	{
 		RS->SetTurnFlags(false, false);
 	}
+
+	// === 死亡：RS 内部清理 + 组件自行监听广播响应 ===
 	if (NewState == ERunGameCharacterState::Dead)
 	{
-		RS->SetTurnFlags(false, false);
+		PendingInputState = ERunGameCharacterState::MAX;
 	}
 }
 

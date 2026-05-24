@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
+#include "RunGameType.h"
 #include "HealthComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentHP, float, MaxHP, float, Delta);
@@ -85,4 +86,8 @@ private:
 
 	UFUNCTION()
 	void OnRS_InvincibilityChanged(bool bNewInvincible);
+
+	/** 响应角色状态机：进入 Dead 时自行清除无敌 */
+	UFUNCTION()
+	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 };

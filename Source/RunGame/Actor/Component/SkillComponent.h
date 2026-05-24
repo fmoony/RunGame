@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
+#include "RunGameType.h"
+#include "WorldSubsystem/State/CombatRuntimeState.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "SkillComponent.generated.h"
 
@@ -30,12 +32,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
 	float MaxEnergy = 100.0f;
 
+	/** Energy at game start. 0 = start empty, match MaxEnergy for full bar */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
-	float BaseEnergyRegenPerSecond = 1.0f;
+	float InitialEnergy = 0.0f;
 
-	/** Bonus regen per score point. Final regen = (Base + Score * Multiplier + Modifier) * RegenMultiplier */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
-	float ScoreRegenMultiplier = 0.001f;
+	float BaseEnergyRegenPerSecond = 0.333f;
+
+	/** Score bonus multiplier (sqrt-scaled). Bonus = sqrt(Score) * Multiplier. Tune for explosive score growth */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Energy")
+	float ScoreRegenMultiplier = 0.005f;
 
 	// -- Delegates --
 
@@ -95,6 +101,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill|Energy")
 	void SetEnergyRegenMultiplier(float Mult);
 
+	/** Cancel all active cooldowns and clear timers */
+	UFUNCTION(BlueprintCallable, Category = "Skill")
+	void ClearAllCooldowns();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -121,6 +131,10 @@ private:
 
 	UFUNCTION()
 	void OnRS_SkillReady(FGameplayTag SkillTag);
+
+	/** 响应角色状态机：进入 Dead 时自行清空冷却和能量 */
+	UFUNCTION()
+	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
 	// -- Energy runtime state --
 

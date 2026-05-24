@@ -56,6 +56,16 @@ void UPlayerRuntimeState::SetCharacterState(ERunGameCharacterState NewState)
 
 	const ERunGameCharacterState OldState = CurrentCharacterState;
 	CurrentCharacterState = NewState;
+
+	// 进入 Dead 时内部清理自身状态，组件自行监听广播响应
+	if (NewState == ERunGameCharacterState::Dead)
+	{
+		bTurn = false;
+		bInTurnBox = false;
+		SpeedModifiers.Empty();
+		CachedCompositeSpeedMultiplier = 1.0f;
+	}
+
 	OnCharacterStateChanged.Broadcast(OldState, CurrentCharacterState);
 }
 
@@ -122,6 +132,12 @@ void UPlayerRuntimeState::RemoveSpeedModifier(FGameplayTag ModifierTag)
 		CachedCompositeSpeedMultiplier /= *Existing;
 	}
 	SpeedModifiers.Remove(ModifierTag);
+}
+
+void UPlayerRuntimeState::ClearSpeedModifiers()
+{
+	SpeedModifiers.Empty();
+	CachedCompositeSpeedMultiplier = 1.0f;
 }
 
 void UPlayerRuntimeState::CachePlayerCharacter(ARunGameCharacter* InCharacter)

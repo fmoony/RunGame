@@ -64,6 +64,7 @@ public:
 
 	void AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier);
 	void RemoveSpeedModifier(FGameplayTag ModifierTag);
+	void ClearSpeedModifiers();
 	float GetCompositeSpeedMultiplier() const { return CachedCompositeSpeedMultiplier; }
 
 	int32 GetSpeedModifierCount() const { return SpeedModifiers.Num(); }

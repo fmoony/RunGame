@@ -1,5 +1,6 @@
 #include "Actor/Component/HealthComponent.h"
 #include "WorldSubsystem/State/CombatRuntimeState.h"
+#include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 
 UHealthComponent::UHealthComponent()
@@ -21,16 +22,30 @@ void UHealthComponent::BeginPlay()
 		RS->OnDeath.AddDynamic(this, &UHealthComponent::OnRS_Death);
 		RS->OnInvincibilityChanged.AddDynamic(this, &UHealthComponent::OnRS_InvincibilityChanged);
 	}
+
+	// 监听角色状态机，死亡时自行清除无敌
+	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->OnCharacterStateChanged.AddDynamic(this, &UHealthComponent::OnRS_CharacterStateChanged);
+	}
 }
 
 void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+	if (UWorld* World = GetWorld())
 	{
-		RS->OnHealthChanged.RemoveDynamic(this, &UHealthComponent::OnRS_HealthChanged);
-		RS->OnDamageTaken.RemoveDynamic(this, &UHealthComponent::OnRS_DamageTaken);
-		RS->OnDeath.RemoveDynamic(this, &UHealthComponent::OnRS_Death);
-		RS->OnInvincibilityChanged.RemoveDynamic(this, &UHealthComponent::OnRS_InvincibilityChanged);
+		if (UCombatRuntimeState* RS = World->GetSubsystem<UCombatRuntimeState>())
+		{
+			RS->OnHealthChanged.RemoveDynamic(this, &UHealthComponent::OnRS_HealthChanged);
+			RS->OnDamageTaken.RemoveDynamic(this, &UHealthComponent::OnRS_DamageTaken);
+			RS->OnDeath.RemoveDynamic(this, &UHealthComponent::OnRS_Death);
+			RS->OnInvincibilityChanged.RemoveDynamic(this, &UHealthComponent::OnRS_InvincibilityChanged);
+		}
+
+		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		{
+			PRS->OnCharacterStateChanged.RemoveDynamic(this, &UHealthComponent::OnRS_CharacterStateChanged);
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -125,5 +140,13 @@ void UHealthComponent::Revive(float RestoreHP)
 	if (UCombatRuntimeState* RS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
 	{
 		RS->Revive(RestoreHP);
+	}
+}
+
+void UHealthComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+{
+	if (NewState == ERunGameCharacterState::Dead)
+	{
+		SetInvincible(false);
 	}
 }

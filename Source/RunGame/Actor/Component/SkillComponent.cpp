@@ -23,7 +23,7 @@ void USkillComponent::BeginPlay()
 	{
 		// 同步配置
 		RS->SetMaxEnergy(MaxEnergy);
-		RS->SetEnergy(MaxEnergy);
+		RS->SetEnergy(InitialEnergy);
 
 		// 绑定转发器
 		RS->OnEnergyChanged.AddDynamic(this, &USkillComponent::OnRS_EnergyChanged);
@@ -31,10 +31,16 @@ void USkillComponent::BeginPlay()
 		RS->OnSkillReady.AddDynamic(this, &USkillComponent::OnRS_SkillReady);
 	}
 
+	// 监听角色状态机：死亡时自行清空冷却和能量
+	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->OnCharacterStateChanged.AddDynamic(this, &USkillComponent::OnRS_CharacterStateChanged);
+	}
+
 	StartEnergyRegen();
 
 	// 广播初始能量状态
-	OnEnergyChanged.Broadcast(MaxEnergy, MaxEnergy);
+	OnEnergyChanged.Broadcast(InitialEnergy, MaxEnergy);
 }
 
 void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -55,6 +61,11 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			RS->OnEnergyChanged.RemoveDynamic(this, &USkillComponent::OnRS_EnergyChanged);
 			RS->OnSkillActivated.RemoveDynamic(this, &USkillComponent::OnRS_SkillActivated);
 			RS->OnSkillReady.RemoveDynamic(this, &USkillComponent::OnRS_SkillReady);
+		}
+
+		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		{
+			PRS->OnCharacterStateChanged.RemoveDynamic(this, &USkillComponent::OnRS_CharacterStateChanged);
 		}
 	}
 
@@ -79,6 +90,19 @@ void USkillComponent::OnRS_SkillActivated(FGameplayTag SkillTag, float CooldownD
 void USkillComponent::OnRS_SkillReady(FGameplayTag SkillTag)
 {
 	OnSkillReady.Broadcast(SkillTag);
+}
+
+void USkillComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+{
+	if (NewState == ERunGameCharacterState::Dead)
+	{
+		ClearAllCooldowns();
+
+		if (UCombatRuntimeState* CRS = GetWorld()->GetSubsystem<UCombatRuntimeState>())
+		{
+			CRS->SetEnergy(0.0f);
+		}
+	}
 }
 
 // ---- Init ----
@@ -302,6 +326,27 @@ void USkillComponent::SetEnergyRegenMultiplier(float Mult)
 	EnergyRegenMultiplier = Mult;
 }
 
+void USkillComponent::ClearAllCooldowns()
+{
+	if (UWorld* World = GetWorld())
+	{
+		FTimerManager& TimerManager = World->GetTimerManager();
+		for (auto& Pair : SkillStates)
+		{
+			if (Pair.Value.bOnCooldown)
+			{
+				TimerManager.ClearTimer(Pair.Value.CooldownTimer);
+				Pair.Value.bOnCooldown = false;
+
+				if (UCombatRuntimeState* RS = World->GetSubsystem<UCombatRuntimeState>())
+				{
+					RS->BroadcastSkillReady(Pair.Key);
+				}
+			}
+		}
+	}
+}
+
 void USkillComponent::StartEnergyRegen()
 {
 	if (UWorld* World = GetWorld())
@@ -340,7 +385,8 @@ void USkillComponent::TickEnergyRegen()
 	}
 
 	// 跨领域读取：分数在 PlayerRuntimeState，能量在 CombatRuntimeState
-	const float ScoreBonus = static_cast<float>(PRS->GetRunGameScore()) * ScoreRegenMultiplier;
+	// 使用 sqrt 缩放应对爆炸式分数增长
+	const float ScoreBonus = FMath::Sqrt(FMath::Max(0.0f, static_cast<float>(PRS->GetRunGameScore()))) * ScoreRegenMultiplier;
 
 	const float RegenAmount = (BaseEnergyRegenPerSecond + ScoreBonus + EnergyRegenModifier) * EnergyRegenMultiplier * 0.1f;
 	CRS->AddEnergy(RegenAmount);
