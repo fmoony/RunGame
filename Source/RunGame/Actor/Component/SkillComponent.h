@@ -8,6 +8,7 @@
 #include "RunGameType.h"
 #include "WorldSubsystem/State/CombatRuntimeState.h"
 #include "Skill/RunGameSkillConfigData.h"
+#include "Skill/RunGameSkillExecution.h"
 #include "SkillComponent.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnSkillActivatedSignature, FGameplayTag, SkillTag, float, CooldownDuration);
@@ -119,6 +120,9 @@ private:
 	};
 
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;
+
+	/** 当前活跃的技能执行对象——死亡时取消其定时器 Active skill execution tracked for cancellation on death */
+	TWeakObjectPtr<USkillExecutionBase> ActiveExecution;
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
 

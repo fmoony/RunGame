@@ -7,6 +7,17 @@ void UPlayerRuntimeState::Initialize(FSubsystemCollectionBase& Collection)
 	Super::Initialize(Collection);
 }
 
+void UPlayerRuntimeState::ResetForNewGame()
+{
+	CurrentCharacterState = ERunGameCharacterState::Idle;
+	bTurn = false;
+	bInTurnBox = false;
+	SpeedModifiers.Empty();
+	CachedCompositeSpeedMultiplier = 1.0f;
+	RunGameScore = 0;
+	bIsScoringActive = false;
+}
+
 void UPlayerRuntimeState::Deinitialize()
 {
 	CachedPlayerCharacter.Reset();

@@ -73,6 +73,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Player|Character")
 	ARunGameCharacter* GetPlayerCharacter() const { return CachedPlayerCharacter.Get(); }
 
+	/** 重置为新游戏——清除分数、角色状态与修改器 Reset for new game: clear score, character state, and modifiers */
+	void ResetForNewGame();
+
 	// ---- Lifecycle ----
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;

@@ -5,6 +5,7 @@
 #include "RunGamePlayerController.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
+#include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "RunGameGameState.h"
 #include "RunGamePlayerState.h"
 #include "Kismet/GameplayStatics.h"
@@ -130,6 +131,12 @@ void ARunGameGameMode::SpawnPlayer()
 
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		// 重置玩家运行时状态，确保新角色以干净状态开始 Reset player runtime state for clean start
+		if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+		{
+			PRS->ResetForNewGame();
+		}
 
 		if (GameCharacterClass)
 		{

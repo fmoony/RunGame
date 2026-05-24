@@ -69,3 +69,16 @@ void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
 		}
 	}
 }
+
+void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
+{
+	if (UWorld* World = Instigator ? Instigator->GetWorld() : nullptr)
+	{
+		World->GetTimerManager().ClearTimer(RevertTimer);
+	}
+
+	if (Instigator && Instigator->IsValidLowLevel())
+	{
+		RevertEffect(Instigator);
+	}
+}

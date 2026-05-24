@@ -31,9 +31,14 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
 	void Execute(AActor* Instigator, FGameplayTag SkillTag);
 
+	/** Cancel active effect — called on character death or forced interrupt */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
+	void Cancel(AActor* Instigator);
+
 protected:
 	bool CanExecute_Implementation(AActor* Instigator, FGameplayTag SkillTag) const { return true; }
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) {}
+	virtual void Cancel_Implementation(AActor* Instigator) {}
 };
 
 
@@ -79,6 +84,9 @@ public:
 	float Duration = 3.0f;
 
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
+
+	/** Cancel unstoppable — clears timer and immediately reverts effects */
+	virtual void Cancel_Implementation(AActor* Instigator) override;
 
 private:
 	/** Skill tag cached during Execute for use in RevertEffect timer callback */
