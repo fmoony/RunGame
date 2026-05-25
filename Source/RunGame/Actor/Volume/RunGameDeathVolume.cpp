@@ -8,8 +8,6 @@
 
 ARunGameDeathVolume::ARunGameDeathVolume()
 {
-	bImmediateDeath = true;
-	DeathDelay = 0.0f;
 	bHasTriggeredDeath = false;
 }
 
@@ -38,7 +36,7 @@ void ARunGameDeathVolume::TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, AR
 	// DeathVolume force kill: bypass invincibility, directly zero HP and broadcast death
 	if (UHealthComponent* HC = PlayerCharacter->GetHealthComponent())
 	{
-		HC->ForceKill(FGameplayTag(), DeathVolume);
+		HC->ForceKill(DeathType, DeathVolume);
 	}
 	bHasTriggeredDeath = false;
 }

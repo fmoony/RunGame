@@ -4,7 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Volume.h"
-#include "RunGameInteractiveVolume.h"
+#include "GameplayTagContainer.h"
+#include "Actor/Volume/RunGameInteractiveVolume.h"
 #include "RunGameDeathVolume.generated.h"
 
 /**
@@ -23,12 +24,11 @@ public:
 	/** Triggers death when a player enters the volume, with duplicate-prevention */
 	virtual void OnPlayerEnter_Implementation(ARunGameCharacter* PlayerCharacter) override;
 
-	// 蓝图可配置属性
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Death")
-	bool bImmediateDeath;
+	// 蓝图可配置属性 Blueprint-configurable properties
 
+	/** 强杀伤害类型标签，用于区分不同死亡体积的致死原因 Force kill damage type tag for distinguishing death causes */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RunGame|Death")
-	float DeathDelay;
+	FGameplayTag DeathType;
 
 	/** Notifies the game mode to handle player death with configured delay settings */
 	void TriggerDeathEvent(ARunGameDeathVolume* DeathVolume, ARunGameCharacter* PlayerCharacter);

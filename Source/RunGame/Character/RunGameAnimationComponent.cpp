@@ -81,13 +81,7 @@ void URunGameAnimationComponent::OnCharacterStateChanged(ERunGameCharacterState 
 
 	if (NewState == ERunGameCharacterState::Dead)
 	{
-		if (ACharacter* Owner = Cast<ACharacter>(GetOwner()))
-		{
-			if (UAnimInstance* AnimInstance = Owner->GetMesh()->GetAnimInstance())
-			{
-				AnimInstance->StopAllMontages(0.0f);
-			}
-		}
+
 	}
 }
 
