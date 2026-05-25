@@ -2,23 +2,24 @@
 
 
 #include "HUD/RunGameCountDown.h"
-#include "RunGameGameState.h"
+#include "Game/RunGameGameState.h"
 
 void URunGameCountDown::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	// »ñÈ¡ GameState ²¢°ó¶¨ÎÒÃÇ¸Õ¸ÕĞ´µÄ¹ã²¥´úÀí (OnCountdownUpdated)
+	// è·å– GameState å¹¶ç»‘å®š OnCountdownUpdated å§”æ‰˜ Get GameState and bind to OnCountdownUpdated delegate
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
 		GS->OnCountdownUpdated.AddDynamic(this, &URunGameCountDown::OnCountdownReceived);
-		OnCountdownReceived(GS->GetCountdownSeconds()); // Í¬²½µ±Ç°µ¹¼ÆÊ±×´Ì¬£¬·ÀÖ¹UIÖÍºó
+		// åŒæ­¥å½“å‰å€’è®¡æ—¶çŠ¶æ€ï¼Œé˜²æ­¢ UI æ»å Sync current countdown to avoid UI lag
+		OnCountdownReceived(GS->GetCountdownSeconds());
 	}
 }
 
 void URunGameCountDown::NativeDestruct()
 {
-	// UI ±»Ïú»ÙÊ±£¬½â³ı°ó¶¨£¬·ÀÖ¹ÄÚ´æĞ¹Â©»òÒ°Ö¸Õë
+	// é”€æ¯æ—¶ç§»é™¤ç»‘å®šï¼Œé˜²æ­¢å†…å­˜æ³„æ¼å’Œé‡æŒ‡é’ˆ Remove bindings on destruction to avoid leaks and dangling pointers
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
 		GS->OnCountdownUpdated.RemoveDynamic(this, &URunGameCountDown::OnCountdownReceived);
@@ -30,6 +31,6 @@ void URunGameCountDown::NativeDestruct()
 
 void URunGameCountDown::OnCountdownReceived(int32 CurrentTime)
 {
-	// 3. µ±ÊÕµ½ GameState ·¢À´µÄÊı×ÖÊ±£¬Á¢¿Ìºô½ĞÀ¶Í¼È¥²¥·Å¶¯»­£¡
+	// æ”¶åˆ° GameState çš„å€’è®¡æ—¶æ›´æ–°ï¼Œè®©è“å›¾æ’­åŠ¨ç”» Receive countdown update, let Blueprint play animation
 	PlayNumberAnimation(CurrentTime);
 }

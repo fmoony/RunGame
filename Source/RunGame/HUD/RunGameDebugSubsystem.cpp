@@ -1,6 +1,6 @@
 #include "HUD/RunGameDebugSubsystem.h"
 #include "HUD/RunGameDebugPanel.h"
-#include "RunGameGameState.h"
+#include "Game/RunGameGameState.h"
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Blueprint/UserWidget.h"

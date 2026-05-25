@@ -5,7 +5,7 @@
 #include "Components/ArrowComponent.h"
 #include "Components/SplineComponent.h"
 #include "Actor/Component/CoinSpawnerComponent.h"
-#include "RunGameCharacter.h"
+#include "Character/RunGameCharacter.h"
 
 AFloorBase::AFloorBase()
 {

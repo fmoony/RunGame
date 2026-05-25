@@ -1,7 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 
-#include "RunGamePlayerController.h"
+#include "Player/RunGamePlayerController.h"
 #include "EnhancedInputSubsystems.h"
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
@@ -9,9 +9,9 @@
 #include "InputMappingContext.h"
 #include "Blueprint/UserWidget.h"
 #include "RunGame.h"
-#include "RunGameHUD.h"
-#include "RunGameCharacter.h"
-#include "RunGameGameState.h"
+#include "HUD/RunGameHUD.h"
+#include "Character/RunGameCharacter.h"
+#include "Game/RunGameGameState.h"
 #include "EngineUtils.h"
 #include "Camera/CameraActor.h"
 #include "Kismet/GameplayStatics.h"

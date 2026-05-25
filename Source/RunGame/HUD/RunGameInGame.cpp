@@ -2,15 +2,15 @@
 
 #include "HUD/RunGameInGame.h"
 #include "Actor/Component/HealthComponent.h"
-#include "Actor/Component/SkillComponent.h"
+#include "Skill/SkillComponent.h"
 #include "Components/HorizontalBox.h"
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "HUD/RunGameSkillSlot.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "GameFramework/PlayerController.h"
-#include "RunGameCharacter.h"
-#include "RunGamePlayerState.h"
+#include "Character/RunGameCharacter.h"
+#include "Player/RunGamePlayerState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 
 URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)

@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "HUD/RunGameSkillSlot.h"
-#include "Actor/Component/SkillComponent.h"
+#include "Skill/SkillComponent.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Engine/AssetManager.h"

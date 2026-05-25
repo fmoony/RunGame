@@ -2,8 +2,8 @@
 
 
 #include "HUD/RunGameMainMenu.h"
-#include "RunGameGameState.h"
-#include "RunGameGameMode.h"
+#include "Game/RunGameGameState.h"
+#include "Game/RunGameGameMode.h"
 #include <Kismet/GameplayStatics.h>
 
 void URunGameMainMenu::NativeConstruct()

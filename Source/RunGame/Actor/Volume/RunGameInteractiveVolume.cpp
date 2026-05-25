@@ -1,24 +1,24 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "RunGameInteractiveVolume.h"
-#include "RunGameCharacter.h"
+#include "Actor/Volume/RunGameInteractiveVolume.h"
+#include "Character/RunGameCharacter.h"
 #include "Components/BoxComponent.h"
 
 ARunGameInteractiveVolume::ARunGameInteractiveVolume()
 {
-	// ´´½¨Box×é¼ş£¬²¢×÷Îª¸ù×é¼ş
-    CollisionComp = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionComp"));
-    RootComponent = CollisionComp;
-    
-    // ÉèÖÃÌå»ı´óĞ¡
-    CollisionComp->SetBoxExtent(FVector(200.f, 200.f, 1.f));
- 
-    // ÆôÓÃOverlapÊÂ¼ş
-    CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
-    CollisionComp->SetCollisionResponseToAllChannels(ECR_Ignore);
-    CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
-    CollisionComp->SetGenerateOverlapEvents(true);
+	// åˆ›å»ºBoxç¢°æ’ä½“ä½œä¸ºæ ¹ç»„ä»¶ Create Box collision as root component
+	CollisionComp = CreateDefaultSubobject<UBoxComponent>(TEXT("CollisionComp"));
+	RootComponent = CollisionComp;
+
+	// è®¾ç½®ç¢°æ’ä½“å¤§å° Set collision size
+	CollisionComp->SetBoxExtent(FVector(200.f, 200.f, 1.f));
+
+	// ç»‘å®šOverlapäº‹ä»¶ Bind overlap events
+	CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
+	CollisionComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	CollisionComp->SetGenerateOverlapEvents(true);
 
 	PrimaryActorTick.bCanEverTick = false;
 }
@@ -28,15 +28,10 @@ void ARunGameInteractiveVolume::NotifyActorBeginOverlap(AActor* OtherActor)
 	UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorBeginOverlap called with OtherActor: %s"), *OtherActor->GetName());
 	Super::NotifyActorBeginOverlap(OtherActor);
 
-	// »ùÀàÖ»×öÕâ 3 ¼şÊÂ£º
-	// 1. Ö»ÔÚ·şÎñÆ÷¶ËÖ´ĞĞ£¨·şÎñÆ÷È¨Íş£©
-	//if (GetLocalRole() != ROLE_Authority) return;
-
-	// 2. ¼ì²éÊÇ·ñÊÇÍæ¼Ò½ÇÉ«
 	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: Player entered volume: %s"), *GetName());
-		// 3. µ÷ÓÃĞéº¯Êı£¬×ÓÀàÖØĞ´
+		// è°ƒç”¨è™šå‡½æ•°è®©å­ç±»é‡å†™ Call virtual function for subclasses to override
 		OnPlayerEnter(PlayerCharacter);
 	}
 	else
@@ -50,7 +45,6 @@ void ARunGameInteractiveVolume::NotifyActorEndOverlap(AActor* OtherActor)
 	UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorEndOverlap called with OtherActor: %s"), *OtherActor->GetName());
 	Super::NotifyActorEndOverlap(OtherActor);
 
-	//if (GetLocalRole() != ROLE_Authority) return;
 	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: Player left volume: %s"), *GetName());
@@ -62,10 +56,10 @@ void ARunGameInteractiveVolume::NotifyActorEndOverlap(AActor* OtherActor)
 	}
 }
 
-// Ä¬ÈÏÊµÏÖ£º¿Õº¯Êı
+// é»˜è®¤å®ç°ï¼Œç©ºå‡½æ•° Default implementation, no-op
+// è“å›¾å¯ä»¥ç»‘å§”æ‰˜ï¼ŒC++ å­ç±»å¯ä»¥ç›´æ¥é‡å†™ Blueprint delegates, C++ subclass can override
 void ARunGameInteractiveVolume::OnPlayerEnter_Implementation(ARunGameCharacter* PlayerCharacter)
 {
-	// À¶Í¼¿ÉÒÔ°ó¶¨Î¯ÍĞ£¬C++ ×ÓÀàÖØĞ´Õâ¸öº¯Êı
 	OnPlayerEnterDelegate.Broadcast(PlayerCharacter);
 }
 

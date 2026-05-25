@@ -1,13 +1,13 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
-#include "RunGameGameMode.h"
-#include "RunGameCharacter.h"
-#include "RunGamePlayerController.h"
+#include "Game/RunGameGameMode.h"
+#include "Character/RunGameCharacter.h"
+#include "Player/RunGamePlayerController.h"
 #include "GameFramework/SpectatorPawn.h"
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
-#include "RunGameGameState.h"
-#include "RunGamePlayerState.h"
+#include "Game/RunGameGameState.h"
+#include "Player/RunGamePlayerState.h"
 #include "Kismet/GameplayStatics.h"
 
 ARunGameGameMode::ARunGameGameMode()

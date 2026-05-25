@@ -3,8 +3,8 @@
 #include "HUD/RunGameGameOver.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
-#include "RunGameGameMode.h"
-#include "RunGamePlayerState.h"
+#include "Game/RunGameGameMode.h"
+#include "Player/RunGamePlayerState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 
 void URunGameGameOver::NativeConstruct()

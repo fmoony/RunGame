@@ -2,8 +2,8 @@
 
 #include "HUD/RunGamePause.h"
 #include "Components/Button.h"
-#include "RunGameGameMode.h"
-#include "RunGameGameState.h"
+#include "Game/RunGameGameMode.h"
+#include "Game/RunGameGameState.h"
 #include "Kismet/GameplayStatics.h"
 
 void URunGamePause::NativeConstruct()

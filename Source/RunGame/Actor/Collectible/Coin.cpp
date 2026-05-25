@@ -1,8 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Actor/Collectible/Coin.h"
-#include "RunGameCharacter.h"
-#include "RunGamePlayerState.h"
+#include "Character/RunGameCharacter.h"
+#include "Player/RunGamePlayerState.h"
 
 void ACoin::OnCollected_Implementation(ARunGameCharacter* CollectingCharacter)
 {

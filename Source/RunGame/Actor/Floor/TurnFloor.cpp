@@ -3,7 +3,7 @@
 #include "Actor/Floor/TurnFloor.h"
 #include "RunGameType.h"
 #include "Components/BoxComponent.h"
-#include "RunGameCharacter.h"
+#include "Character/RunGameCharacter.h"
 
 ATurnFloor::ATurnFloor()
 {

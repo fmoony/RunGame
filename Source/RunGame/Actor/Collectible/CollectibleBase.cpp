@@ -3,7 +3,7 @@
 #include "Actor/Collectible/CollectibleBase.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "RunGameCharacter.h"
+#include "Character/RunGameCharacter.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystem.h"
 #include "Sound/SoundBase.h"

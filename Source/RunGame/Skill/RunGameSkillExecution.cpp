@@ -4,7 +4,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimMontage.h"
-#include "RunGameCharacter.h"
+#include "Character/RunGameCharacter.h"
+#include "Character/RunGameMovementComponent.h"
 #include "Actor/Component/HealthComponent.h"
 
 void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
@@ -41,7 +42,10 @@ void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGa
 	CachedSkillTag = SkillTag;
 	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Character))
 	{
-		RunCharacter->AddSpeedModifier(CachedSkillTag, SpeedMultiplier);
+		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
+			{
+				MoveComp->AddSpeedModifier(CachedSkillTag, SpeedMultiplier);
+			}
 
 		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
 		{
@@ -61,7 +65,10 @@ void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
 {
 	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
 	{
-		RunCharacter->RemoveSpeedModifier(CachedSkillTag);
+		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
+			{
+				MoveComp->RemoveSpeedModifier(CachedSkillTag);
+			}
 
 		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
 		{

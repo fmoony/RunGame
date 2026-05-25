@@ -1,10 +1,11 @@
 #include "HUD/RunGameDebugPanel.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
-#include "RunGameGameState.h"
-#include "RunGamePlayerState.h"
-#include "RunGameCharacter.h"
+#include "Game/RunGameGameState.h"
+#include "Player/RunGamePlayerState.h"
+#include "Character/RunGameCharacter.h"
+#include "Character/RunGameMovementComponent.h"
 #include "Actor/Component/HealthComponent.h"
-#include "Actor/Component/SkillComponent.h"
+#include "Skill/SkillComponent.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Components/Border.h"
 #include "Components/BorderSlot.h"
@@ -345,9 +346,10 @@ void URunGameDebugPanel::RefreshPlayerData()
 		}
 	}
 
-	bool bTurn = Char ? Char->IsInTurn() : false;
-	bool bInTurnBox = Char ? Char->IsInTurnBox() : false;
-	float SpeedMulti = Char ? Char->GetCompositeSpeedMultiplier() : 1.0f;
+	URunGameMovementComponent* MoveComp = Char ? Char->GetRunGameMovementComponent() : nullptr;
+	bool bTurn = MoveComp ? MoveComp->IsInTurn() : false;
+	bool bInTurnBox = MoveComp ? MoveComp->IsInTurnBox() : false;
+	float SpeedMulti = MoveComp ? MoveComp->GetCompositeSpeedMultiplier() : 1.0f;
 
 	const FString Text = FString::Printf(
 		TEXT("[Player]\n")

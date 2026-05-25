@@ -1,12 +1,12 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "RunGameHUD.h"
+#include "HUD/RunGameHUD.h"
 #include "HUD/RunGameMainMenu.h"
 #include "RunGameType.h"
 #include "Blueprint/UserWidget.h"
 #include <Blueprint/WidgetBlueprintLibrary.h>
-#include "RunGameGameState.h"
+#include "Game/RunGameGameState.h"
 
 void ARunGameHUD::BeginPlay()
 {
