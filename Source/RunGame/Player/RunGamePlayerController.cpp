@@ -205,8 +205,7 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 	switch (NewState)
 	{
 	case ERunGameGameState::MainMenu:
-		bShowMouseCursor = true;
-		SetInputMode(FInputModeUIOnly());
+		SetInputModeToUIOnly();
 		SetViewTargetToMainMenuCamera();
 		break;
 	case ERunGameGameState::CountDown:
@@ -223,11 +222,10 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 		break;
 	case ERunGameGameState::Pause:
 		bShowMouseCursor = true;
-		SetInputMode(FInputModeGameOnly());
+		SetInputMode(FInputModeGameAndUI());
 		break;
 	case ERunGameGameState::GameOver:
-		bShowMouseCursor = true;
-		SetInputMode(FInputModeUIOnly());
+		SetInputModeToUIOnly();
 		break;
 	default:
 		break;
