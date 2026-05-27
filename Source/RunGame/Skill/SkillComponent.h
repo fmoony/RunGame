@@ -116,6 +116,10 @@ private:
 	{
 		bool bOnCooldown = false;
 		FTimerHandle CooldownTimer;
+
+		/** 缓存复用的执行对象——初始化时创建，激活时复用 Cached execution object — created once, reused on activation */
+		UPROPERTY()
+		TObjectPtr<USkillExecutionBase> ExecutionObject;
 	};
 
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;

@@ -45,6 +45,7 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				TimerManager.ClearTimer(Pair.Value.CooldownTimer);
 			}
+			Pair.Value.ExecutionObject = nullptr;
 		}
 
 		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
@@ -74,7 +75,12 @@ void USkillComponent::InitializeFromConfig()
 	{
 		if (SkillDef.SkillTag.IsValid())
 		{
-			SkillStates.Add(SkillDef.SkillTag, FSkillRuntimeState());
+			FSkillRuntimeState State;
+			if (SkillDef.ExecutionClass)
+			{
+				State.ExecutionObject = NewObject<USkillExecutionBase>(this, SkillDef.ExecutionClass);
+			}
+			SkillStates.Add(SkillDef.SkillTag, State);
 		}
 	}
 }
@@ -111,10 +117,9 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	}
 
 	AActor* const Owner = GetOwner();
-	USkillExecutionBase* ExecObj = nullptr;
-	if (SkillDef->ExecutionClass)
+	USkillExecutionBase* ExecObj = State->ExecutionObject.Get();
+	if (ExecObj)
 	{
-		ExecObj = NewObject<USkillExecutionBase>(GetTransientPackage(), SkillDef->ExecutionClass);
 		if (!ExecObj->CanExecute(Owner, SkillTag))
 		{
 			return false;
