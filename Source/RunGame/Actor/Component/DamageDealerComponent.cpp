@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+#include "RunGame.h"
 #include "Actor/Component/DamageDealerComponent.h"
 #include "Interfaces/Damagable.h"
 
@@ -37,6 +38,6 @@ void UDamageDealerComponent::OnTrapOverlap(
 	if (OtherActor && OtherActor != GetOwner() && OtherActor->Implements<UDamagable>())
 	{
 		IDamagable::Execute_OnTakeDamage(OtherActor, DamageAmount, DamageType, GetOwner());
-		UE_LOG(LogTemp, Warning, TEXT("UDamageDealerComponent: Dealt %f damage to %s with type %s"), DamageAmount, *OtherActor->GetName(), *DamageType.ToString());
+		UE_LOG(LogRunGame, Warning, TEXT("UDamageDealerComponent: Dealt %f damage to %s with type %s"), DamageAmount, *OtherActor->GetName(), *DamageType.ToString());
 	}
 }

@@ -1,6 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
+#include "RunGame.h"
 #include "HUD/RunGameHUD.h"
 #include "HUD/RunGameMainMenu.h"
 #include "RunGameType.h"
@@ -20,7 +20,7 @@ void ARunGameHUD::BeginPlay()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: Failed to get current game state in BeginPlay"));
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: Failed to get current game state in BeginPlay"));
 	}
 }
 
@@ -28,7 +28,7 @@ void ARunGameHUD::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (ARunGameGameState* CurrentGameState = GetWorld()->GetGameState<ARunGameGameState>())
 	{
-		CurrentGameState->OnGameStateChanged.RemoveAll(this);
+		CurrentGameState->OnGameStateChanged.RemoveDynamic(this,&ARunGameHUD::OnGameStateChangedCallback);
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -40,7 +40,7 @@ void ARunGameHUD::ShowUI(TSubclassOf<UUserWidget> UIClass)
 		// 优化：如果要显示的UI就是当前正在显示的，什么都不做
 		if (CurrentActiveWidget && CurrentActiveWidget->GetClass() == UIClass)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: Widget of class %s is already displayed"), *UIClass->GetName());
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: Widget of class %s is already displayed"), *UIClass->GetName());
 			return;
 		}
 
@@ -53,11 +53,11 @@ void ARunGameHUD::ShowUI(TSubclassOf<UUserWidget> UIClass)
 		{
 			// 3. 添加到视口
 			CurrentActiveWidget->AddToViewport();
-			UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: Displayed widget of class %s"), *UIClass->GetName());
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: Displayed widget of class %s"), *UIClass->GetName());
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: Failed to create widget of class %s"), *UIClass->GetName());
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: Failed to create widget of class %s"), *UIClass->GetName());
 		}
 	}
 }
@@ -70,11 +70,11 @@ void ARunGameHUD::HideUI(TSubclassOf<UUserWidget> UIClass)
 		{
 			CurrentActiveWidget->RemoveFromParent();
 			CurrentActiveWidget = nullptr;
-			UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: Removed widget of class %s from viewport"), *UIClass->GetName());
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: Removed widget of class %s from viewport"), *UIClass->GetName());
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameHUD: No widget of class %s is currently displayed"), *UIClass->GetName());
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameHUD: No widget of class %s is currently displayed"), *UIClass->GetName());
 		}
 	}
 }

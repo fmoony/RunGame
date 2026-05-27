@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+#include "RunGame.h"
 #include "Actor/Volume/RunGameDeathVolume.h"
 #include "Character/RunGameCharacter.h"
 #include "Actor/Component/HealthComponent.h"
@@ -20,7 +21,7 @@ void ARunGameDeathVolume::OnPlayerEnter_Implementation(ARunGameCharacter* Player
 
 	bHasTriggeredDeath = true;
 
-	UE_LOG(LogTemp, Error, TEXT("Player entered DeathVolume: %s"), *GetName());
+	UE_LOG(LogRunGame, Error, TEXT("Player entered DeathVolume: %s"), *GetName());
 	// 触发死亡事件
 	TriggerDeathEvent(this, PlayerCharacter);
 }

@@ -385,3 +385,6 @@ Saved/
 # 忽略按需生成的打包目录
 Archived/
 Packaged/
+
+# Reasonix AI 助手配置目录
+.reasonix/

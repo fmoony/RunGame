@@ -5,6 +5,7 @@
 #include "Game/RunGameGameState.h"
 #include "Game/RunGameGameMode.h"
 #include <Kismet/GameplayStatics.h>
+#include "RunGame.h"
 
 void URunGameMainMenu::NativeConstruct()
 {
@@ -15,7 +16,7 @@ void URunGameMainMenu::NativeConstruct()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("StartButton is not bound!"));
+		UE_LOG(LogRunGame, Warning, TEXT("StartButton is not bound!"));
 	}
 	if (QuitButton)
 	{
@@ -23,7 +24,7 @@ void URunGameMainMenu::NativeConstruct()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("QuitButton is not bound!"));
+		UE_LOG(LogRunGame, Warning, TEXT("QuitButton is not bound!"));
 	}
 }
 
@@ -33,7 +34,7 @@ void URunGameMainMenu::StartGame()
 	//FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(GetWorld(), true);
 	//if (CurrentLevelName == "")
 	//{
-	//	UE_LOG(LogTemp, Warning, TEXT("Current level name is empty!"));
+	//	UE_LOG(LogRunGame, Warning, TEXT("Current level name is empty!"));
 	//	return;
 	//}
 	//UGameplayStatics::OpenLevel(GetWorld(), FName(*CurrentLevelName));
@@ -44,7 +45,7 @@ void URunGameMainMenu::StartGame()
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Failed to get GameMode in StartGame"));
+		UE_LOG(LogRunGame, Warning, TEXT("Failed to get GameMode in StartGame"));
 	}
 }
 
@@ -55,12 +56,12 @@ void URunGameMainMenu::QuitGame()
 
 void URunGameMainMenu::OnStartClicked()
 {
-	UE_LOG(LogTemp, Warning, TEXT("OnStartClicked"));
+	UE_LOG(LogRunGame, Warning, TEXT("OnStartClicked"));
 	StartGame();
 }
 
 void URunGameMainMenu::OnQuitClicked()
 {
-	UE_LOG(LogTemp, Warning, TEXT("OnQuitClicked"));
+	UE_LOG(LogRunGame, Warning, TEXT("OnQuitClicked"));
 	QuitGame();
 }

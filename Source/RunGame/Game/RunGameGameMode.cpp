@@ -9,6 +9,7 @@
 #include "Game/RunGameGameState.h"
 #include "Player/RunGamePlayerState.h"
 #include "Kismet/GameplayStatics.h"
+#include "RunGame.h"
 
 ARunGameGameMode::ARunGameGameMode()
 {
@@ -44,12 +45,12 @@ void ARunGameGameMode::BeginPlay()
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: FloorConfig is not set. Skipping floor initialization."));
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: FloorConfig is not set. Skipping floor initialization."));
 		}
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameGameMode: Failed to get URunGameFloorSubsystem!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: Failed to get URunGameFloorSubsystem!"));
 	}
 }
 
@@ -142,7 +143,7 @@ void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ER
 
 void ARunGameGameMode::SpawnPlayer()
 {
-	UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: SpawnPlayer called - spawning player character"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SpawnPlayer called - spawning player character"));
 
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	if (PC)
@@ -172,30 +173,30 @@ void ARunGameGameMode::SpawnPlayer()
 
 				// 输入模式由 Controller 自行监听 GameState 状态变化来管理
 
-				UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: Player spawned and possessed successfully"));
+				UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Player spawned and possessed successfully"));
 
 				// InitializeGameTimer removed: SetGameState(InGame) triggers StartTimer reactively
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("RunGameGameMode: Failed to spawn player character"));
+				UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: Failed to spawn player character"));
 			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("RunGameGameMode: GameCharacterClass is NOT set in GameMode! Cannot spawn player."));
+			UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: GameCharacterClass is NOT set in GameMode! Cannot spawn player."));
 		}
 	}
 	else
 		{
-		UE_LOG(LogTemp, Error, TEXT("RunGameGameMode: Failed to get PlayerController"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: Failed to get PlayerController"));
 	}
 }
 
 // 游戏计时相关函数实现
 void ARunGameGameMode::InitializeGameTimer()
 {
-	UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: InitializeGameTimer deprecated - timer starts reactively via GameState state change."));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: InitializeGameTimer deprecated - timer starts reactively via GameState state change."));
 }
 
 // 重置游戏函数（完全重置到初始状态 = 回到主菜单）
@@ -230,7 +231,7 @@ void ARunGameGameMode::ResetGame()
 
 	// 输入模式由 Controller 自行监听 GameState 状态变化来管理
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: Game reset, all data cleared, returned to MainMenu"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Game reset, all data cleared, returned to MainMenu"));
 }
 
 // 重新开始游戏（绕过主菜单，直接进入倒计时）
@@ -256,7 +257,7 @@ void ARunGameGameMode::StartNewGame()
 
 	StartGameCountDown();
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameGameMode: New game started directly"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: New game started directly"));
 }
 
 void ARunGameGameMode::RequestRestartFromPause()

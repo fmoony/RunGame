@@ -4,6 +4,8 @@
 #include "Engine/World.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
+#include "RunGame.h"
+
 
 URunGameFloorSubsystem::URunGameFloorSubsystem()
 	: bIsLoading(false)
@@ -14,14 +16,14 @@ URunGameFloorSubsystem::URunGameFloorSubsystem()
 void URunGameFloorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Initialized"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Initialized"));
 }
 
 void URunGameFloorSubsystem::Deinitialize()
 {
 	ClearAllFloors();
 	Super::Deinitialize();
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Deinitialized and all floors cleared"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Deinitialized and all floors cleared"));
 }
 
 // ===== 初始化（异步加载）=====
@@ -30,13 +32,13 @@ void URunGameFloorSubsystem::InitializeFloorSystem(UFloorConfigData* InConfig)
 {
 	if (!InConfig)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: InitializeFloorSystem called with null config!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: InitializeFloorSystem called with null config!"));
 		return;
 	}
 
 	if (bIsInitialized)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Already initialized, skipping."));
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Already initialized, skipping."));
 		return;
 	}
 
@@ -59,7 +61,7 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 
 	if (PathsToLoad.Num() == 0)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No floor classes to load!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: No floor classes to load!"));
 		bIsInitialized = true;
 		OnFloorSystemReady.Broadcast();
 		return;
@@ -114,7 +116,7 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 
 	bIsInitialized = true;
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Pre-allocated %d floors across %d types"),
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Pre-allocated %d floors across %d types"),
 		GetPooledFloorCount(), PooledFloorsMap.Num());
 
 	OnFloorSystemReady.Broadcast();
@@ -126,19 +128,19 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 {
 	if (!bIsInitialized)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: Cannot spawn initial floors, not initialized!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Cannot spawn initial floors, not initialized!"));
 		return;
 	}
 
 	if (!GetWorld())
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No world available!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: No world available!"));
 		return;
 	}
 
 	if (!FloorConfig)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No FloorConfig available!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: No FloorConfig available!"));
 		return;
 	}
 
@@ -147,7 +149,7 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 	InLocation += FloorConfig->SpawnStartOffset;
 	NextSpawnTransform.SetLocation(InLocation);
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Spawning initial floors from location: %s"), *InLocation.ToString());
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Spawning initial floors from location: %s"), *InLocation.ToString());
 
 	// Spawn guaranteed-count floors first (in entry order)
 	for (const FLoadedFloorEntry& Entry : LoadedFloorEntries)
@@ -171,7 +173,7 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 		return Sum;
 	}();
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Initial floor chain generated: %d guaranteed + %d random = %d floors"),
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Initial floor chain generated: %d guaranteed + %d random = %d floors"),
 		TotalGuaranteed, FloorConfig->InitialRandomFloorCount, TotalGuaranteed + FloorConfig->InitialRandomFloorCount);
 }
 
@@ -179,14 +181,14 @@ AFloorBase* URunGameFloorSubsystem::RequestNextFloor()
 {
 	if (!bIsInitialized || !GetWorld())
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: Cannot request next floor, not initialized or no world!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Cannot request next floor, not initialized or no world!"));
 		return nullptr;
 	}
 
 	TSubclassOf<AActor> SelectedClass = WeightedRandomSelectFloorClass();
 	if (!SelectedClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: No floor classes available!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: No floor classes available!"));
 		return nullptr;
 	}
 
@@ -269,7 +271,7 @@ void URunGameFloorSubsystem::HideAllActiveFloors()
 	{
 		ReturnFloor(Floor);
 	}
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: All %d active floors hidden and returned to pool"),
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: All %d active floors hidden and returned to pool"),
 		FloorsToHide.Num());
 }
 
@@ -302,7 +304,7 @@ void URunGameFloorSubsystem::RecycleDistantFloors(const FVector& PlayerLocation,
 
 	if (ToRecycle.Num() > 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Recycled %d distant floors"), ToRecycle.Num());
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Recycled %d distant floors"), ToRecycle.Num());
 	}
 }
 
@@ -332,7 +334,7 @@ void URunGameFloorSubsystem::ClearAllFloors()
 	bIsInitialized = false;
 	bIsLoading = false;
 
-	UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: All floors cleared"));
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: All floors cleared"));
 }
 
 // ===== 查询 =====
@@ -425,7 +427,7 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 
 	if (!NewFloor)
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameFloorSubsystem: Failed to spawn floor actor of class %s"), *InClass->GetName());
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Failed to spawn floor actor of class %s"), *InClass->GetName());
 	}
 
 	return NewFloor;

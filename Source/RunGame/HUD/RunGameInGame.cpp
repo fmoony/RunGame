@@ -12,6 +12,7 @@
 #include "Character/RunGameCharacter.h"
 #include "Player/RunGamePlayerState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
+#include "RunGame.h"
 
 URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -40,7 +41,7 @@ void URunGameInGame::NativeConstruct()
 	// 检查UI组件是否正确绑定
 	if (!ScoreText)
 	{
-		UE_LOG(LogTemp, Error, TEXT("ScoreText is not bound in RunGameInGame widget!"));
+		UE_LOG(LogRunGame, Error, TEXT("ScoreText is not bound in RunGameInGame widget!"));
 	}
 	else
 	{
@@ -50,7 +51,7 @@ void URunGameInGame::NativeConstruct()
 
 	if (!TimerText)
 	{
-		UE_LOG(LogTemp, Error, TEXT("TimerText is not bound in RunGameInGame widget!"));
+		UE_LOG(LogRunGame, Error, TEXT("TimerText is not bound in RunGameInGame widget!"));
 	}
 	else
 	{
@@ -90,21 +91,21 @@ void URunGameInGame::NativeConstruct()
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerState for score binding"));
+				UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerState for score binding"));
 			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerController for score binding"));
+			UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerController for score binding"));
 		}
 
 		OnTimerUpdated(TimerSubsystem->GetTotalTimeSeconds());
 
-		UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Successfully bound to TimerSubsystem events"));
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Successfully bound to TimerSubsystem events"));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
 	}
 
 	// Skill bar setup
@@ -126,7 +127,7 @@ void URunGameInGame::NativeConstruct()
 						{
 							if (!SkillDef.SkillTag.IsValid())
 							{
-								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
+								UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
 								continue;
 							}
 
@@ -136,39 +137,39 @@ void URunGameInGame::NativeConstruct()
 								SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
 								SkillBarContainer->AddChild(SkillSlot);
 								SkillSlots.Add(SkillSlot);
-								UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
+								UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
 							}
 							else
 							{
-								UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
+								UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
 							}
 						}
 
-						UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
+						UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
 					}
 					else
 					{
-						UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
+						UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
 					}
 				}
 				else
 				{
-					UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get SkillComponent for skill bar setup"));
+					UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get SkillComponent for skill bar setup"));
 				}
 			}
 			else
 			{
-				UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerPawn for skill bar setup"));
+				UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerPawn for skill bar setup"));
 			}
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("RunGameInGame: Failed to get PlayerController for skill bar setup"));
+			UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerController for skill bar setup"));
 		}
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
 	}
 }
 
@@ -195,7 +196,7 @@ void URunGameInGame::NativeDestruct()
 			}
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Successfully unbound from TimerSubsystem events"));
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Successfully unbound from TimerSubsystem events"));
 	}
 
 	// 解绑能量委托
@@ -217,7 +218,7 @@ void URunGameInGame::OnScoreUpdated(int64 NewScore)
 	{
 		FString ScoreString = FString::Printf(TEXT("Score: %09d"), NewScore);
 		ScoreText->SetText(FText::FromString(ScoreString));
-		//UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Score updated to %d"), NewScore);
+		//UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Score updated to %d"), NewScore);
 	}
 }
 
@@ -228,7 +229,7 @@ void URunGameInGame::OnTimerUpdated(float NewTime)
 	{
 		FString TimeString = FString::Printf(TEXT("Time: %s"), *FormatTimeText(NewTime));
 		TimerText->SetText(FText::FromString(TimeString));
-		//UE_LOG(LogTemp, Warning, TEXT("RunGameInGame: Time updated to %f seconds"), NewTime);
+		//UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Time updated to %f seconds"), NewTime);
 	}
 }
 

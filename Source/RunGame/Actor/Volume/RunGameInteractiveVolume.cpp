@@ -3,6 +3,7 @@
 #include "Actor/Volume/RunGameInteractiveVolume.h"
 #include "Character/RunGameCharacter.h"
 #include "Components/BoxComponent.h"
+#include "RunGame.h"
 
 ARunGameInteractiveVolume::ARunGameInteractiveVolume()
 {
@@ -25,34 +26,34 @@ ARunGameInteractiveVolume::ARunGameInteractiveVolume()
 
 void ARunGameInteractiveVolume::NotifyActorBeginOverlap(AActor* OtherActor)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorBeginOverlap called with OtherActor: %s"), *OtherActor->GetName());
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorBeginOverlap called with OtherActor: %s"), *OtherActor->GetName());
 	Super::NotifyActorBeginOverlap(OtherActor);
 
 	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: Player entered volume: %s"), *GetName());
+		UE_LOG(LogRunGame, Warning, TEXT("ARunGameInteractiveVolume: Player entered volume: %s"), *GetName());
 		// 调用虚函数让子类重写 Call virtual function for subclasses to override
 		OnPlayerEnter(PlayerCharacter);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("ARunGameInteractiveVolume: Overlapped actor is not ARunGameCharacter: %s"), *OtherActor->GetName());
+		UE_LOG(LogRunGame, Error, TEXT("ARunGameInteractiveVolume: Overlapped actor is not ARunGameCharacter: %s"), *OtherActor->GetName());
 	}
 }
 
 void ARunGameInteractiveVolume::NotifyActorEndOverlap(AActor* OtherActor)
 {
-	UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorEndOverlap called with OtherActor: %s"), *OtherActor->GetName());
+	UE_LOG(LogRunGame, Warning, TEXT("ARunGameInteractiveVolume: NotifyActorEndOverlap called with OtherActor: %s"), *OtherActor->GetName());
 	Super::NotifyActorEndOverlap(OtherActor);
 
 	if (ARunGameCharacter* PlayerCharacter = Cast<ARunGameCharacter>(OtherActor))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ARunGameInteractiveVolume: Player left volume: %s"), *GetName());
+		UE_LOG(LogRunGame, Warning, TEXT("ARunGameInteractiveVolume: Player left volume: %s"), *GetName());
 		OnPlayerLeave(PlayerCharacter);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("ARunGameInteractiveVolume: EndOverlap actor is not ARunGameCharacter: %s"), *OtherActor->GetName());
+		UE_LOG(LogRunGame, Error, TEXT("ARunGameInteractiveVolume: EndOverlap actor is not ARunGameCharacter: %s"), *OtherActor->GetName());
 	}
 }
 

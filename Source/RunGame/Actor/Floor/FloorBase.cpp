@@ -1,5 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
+#include "RunGame.h"
 #include "Actor/Floor/FloorBase.h"
 #include "Components/BoxComponent.h"
 #include "Components/ArrowComponent.h"
@@ -59,11 +60,11 @@ void AFloorBase::Tick(float DeltaTime)
 void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor,
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
-	UE_LOG(LogTemp, Warning, TEXT("FloorBase: Box overlapped by %s"), *GetNameSafe(OtherActor));
+	UE_LOG(LogRunGame, Warning, TEXT("FloorBase: Box overlapped by %s"), *GetNameSafe(OtherActor));
 
 	if (!OtherActor->IsA(ARunGameCharacter::StaticClass()))
 	{
-		UE_LOG(LogTemp, Error, TEXT("FloorBase: Overlapping actor is not a RunGameCharacter, ignoring."));
+		UE_LOG(LogRunGame, Error, TEXT("FloorBase: Overlapping actor is not a RunGameCharacter, ignoring."));
 		return;
 	}
 
@@ -71,7 +72,7 @@ void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 
 	if (MyTimeHandle.IsValid())
 	{
-		UE_LOG(LogTemp, Error, TEXT("FloorBase: Overlap occurred while recycle timer is active, clearing existing timer."));
+		UE_LOG(LogRunGame, Error, TEXT("FloorBase: Overlap occurred while recycle timer is active, clearing existing timer."));
 		GetWorldTimerManager().ClearTimer(MyTimeHandle);
 	}
 
@@ -81,11 +82,11 @@ void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 		if (IsValid(this))
 		{
 			OnRecycleRequested.Broadcast(this);
-			UE_LOG(LogTemp, Warning, TEXT("FloorBase: Recycled after delay"));
+			UE_LOG(LogRunGame, Warning, TEXT("FloorBase: Recycled after delay"));
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("FloorBase: Attempted to recycle but floor is no longer valid!"));
+			UE_LOG(LogRunGame, Error, TEXT("FloorBase: Attempted to recycle but floor is no longer valid!"));
 		}
 	});
 
