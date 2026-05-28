@@ -17,6 +17,7 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameAnimationComponent;
 class URunGameMovementComponent;
+class URunGameInputBufferComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -44,6 +45,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameAnimationComponent> AnimationComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameInputBufferComponent> InputBuffer;
 
 protected:
 
@@ -168,9 +172,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
-private:
-	ERunGameCharacterState PendingInputState = ERunGameCharacterState::MAX;
+	/** 输入缓冲消费回调 Input buffer consumption callback */
+	void OnBufferedInputReady(ERunGameInputCommand Command);
 
+private:
 	UFUNCTION()
 	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 

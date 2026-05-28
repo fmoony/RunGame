@@ -4,6 +4,7 @@
 #include "Skill/SkillComponent.h"
 #include "Character/RunGameAnimationComponent.h"
 #include "Character/RunGameMovementComponent.h"
+#include "Character/RunGameInputBufferComponent.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
@@ -54,10 +55,9 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	AnimationComponent = CreateDefaultSubobject<URunGameAnimationComponent>(TEXT("AnimationComponent"));
+	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
 
 	PrimaryActorTick.bCanEverTick = false;
-
-	PendingInputState = ERunGameCharacterState::MAX;
 
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
 	GetCharacterMovement()->bRunPhysicsWithNoController = true;
@@ -88,6 +88,13 @@ void ARunGameCharacter::BeginPlay()
 	if (AnimationComponent)
 	{
 		AnimationComponent->OnDeathMontageComplete.AddDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
+	}
+
+	// 输入缓冲消费：Jump → ACharacter::Jump，Slide → SetCharacterState(Sliding)
+	// Input buffer consumption: Jump → ACharacter::Jump, Slide → SetCharacterState
+	if (InputBuffer)
+	{
+		InputBuffer->OnInputCommandConsumed.BindUObject(this, &ARunGameCharacter::OnBufferedInputReady);
 	}
 }
 
@@ -126,8 +133,8 @@ void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 {
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
 	{
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ARunGameCharacter::DoJumpStart);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ARunGameCharacter::DoJumpEnd);
 
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Move);
 
@@ -189,22 +196,25 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 	}
 }
 
-void ARunGameCharacter::DoJumpStart() { Jump(); }
+void ARunGameCharacter::DoJumpStart() { InputBuffer->BufferInput(ERunGameInputCommand::Jump); }
 void ARunGameCharacter::DoJumpEnd() { StopJumping(); }
 
-void ARunGameCharacter::StartSlide()
-{
-	SetCharacterState(ERunGameCharacterState::Sliding);
+void ARunGameCharacter::StartSlide() { InputBuffer->BufferInput(ERunGameInputCommand::Slide); }
 
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+void ARunGameCharacter::OnBufferedInputReady(ERunGameInputCommand Command)
+{
+	switch (Command)
 	{
-		if (RS->GetCharacterState() != ERunGameCharacterState::Sliding)
-		{
-			PendingInputState = ERunGameCharacterState::Sliding;
-		}
+	case ERunGameInputCommand::Jump:
+		ACharacter::Jump();
+		break;
+	case ERunGameInputCommand::Slide:
+		SetCharacterState(ERunGameCharacterState::Sliding);
+		break;
+	default:
+		break;
 	}
 }
-
 void ARunGameCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
 	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
@@ -377,11 +387,8 @@ void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState O
 	// Character blackboard only handles its own data:
 	// Movement physics → MovementComponent self-reacts
 	// Animation → AnimationComponent self-reacts
-
-	if (NewState == ERunGameCharacterState::Dead)
-	{
-		PendingInputState = ERunGameCharacterState::MAX;
-	}
+	// InputBuffer 自行监听 Dead → 清空缓冲
+{
 }
 
 void ARunGameCharacter::Landed(const FHitResult& Hit)
@@ -394,12 +401,7 @@ void ARunGameCharacter::Landed(const FHitResult& Hit)
 	if (RS->GetCharacterState() == ERunGameCharacterState::Airborne)
 	{
 		SetCharacterState(ERunGameCharacterState::Idle);
-
-		if (PendingInputState == ERunGameCharacterState::Sliding)
-		{
-			PendingInputState = ERunGameCharacterState::MAX;
-			SetCharacterState(ERunGameCharacterState::Sliding);
-		}
+		// InputBuffer 自行监听状态变化 → Idle → 自动消费缓冲的 Slide
 	}
 }
 
