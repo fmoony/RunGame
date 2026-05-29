@@ -15,6 +15,19 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillReadySignature, FGameplayTag
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillExecutedSignature, FGameplayTag, SkillTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnergyChangedSignature, float, CurrentEnergy, float, MaxEnergy);
 
+USTRUCT()
+struct FSkillRuntimeState
+{
+	GENERATED_BODY()
+
+	bool bOnCooldown = false;
+	FTimerHandle CooldownTimer;
+
+	/** 缓存复用的执行对象——初始化时创建，激活时复用 Cached execution object — created once, reused on activation */
+	UPROPERTY()
+	TObjectPtr<USkillExecutionBase> ExecutionObject;
+};
+
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API USkillComponent : public UActorComponent
 {
@@ -112,16 +125,6 @@ protected:
 	void InitializeFromConfig();
 
 private:
-	struct FSkillRuntimeState
-	{
-		bool bOnCooldown = false;
-		FTimerHandle CooldownTimer;
-
-		/** 缓存复用的执行对象——初始化时创建，激活时复用 Cached execution object — created once, reused on activation */
-		UPROPERTY()
-		TObjectPtr<USkillExecutionBase> ExecutionObject;
-	};
-
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;
 
 	/** 当前活跃的技能执行对象——死亡时取消其定时器 Active skill execution tracked for cancellation on death */

@@ -10,6 +10,8 @@ class ARunGameCharacter;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterStateChanged, ERunGameCharacterState, OldState, ERunGameCharacterState, NewState);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterDied, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnHitReaction, float, Damage, FGameplayTag, DamageType);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPR_OnDeathAnimationFinished);
 
 /**
  * 角色状态机——纯事件总线。
@@ -39,6 +41,22 @@ public:
 
 	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
 	FPR_OnCharacterDied OnCharacterDied;
+
+	// ---- Animation Events ----
+
+	/** Character 桥接：HealthComponent 伤害 → RuntimeState 广播 → AnimInstance 设触发变量 */
+	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
+	FPR_OnHitReaction OnHitReaction;
+
+	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
+	void TriggerHitReaction(float Damage, FGameplayTag DamageType);
+
+	/** AnimNotify 桥接：死亡动画末尾 → RuntimeState 广播 → Character 溶解 */
+	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
+	FPR_OnDeathAnimationFinished OnDeathAnimationFinished;
+
+	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
+	void NotifyDeathAnimationFinished();
 
 	/** 重置为新游戏——清除角色状态 Reset for new game: clear character state to Idle */
 	void ResetForNewGame();

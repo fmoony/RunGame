@@ -16,6 +16,18 @@ void UPlayerRuntimeState::ResetForNewGame()
 	CurrentCharacterState = ERunGameCharacterState::Idle;
 }
 
+// ---- Animation Events ----
+
+void UPlayerRuntimeState::TriggerHitReaction(float Damage, FGameplayTag DamageType)
+{
+	OnHitReaction.Broadcast(Damage, DamageType);
+}
+
+void UPlayerRuntimeState::NotifyDeathAnimationFinished()
+{
+	OnDeathAnimationFinished.Broadcast();
+}
+
 // ---- Character State ----
 
 void UPlayerRuntimeState::SetCharacterState(ERunGameCharacterState NewState)

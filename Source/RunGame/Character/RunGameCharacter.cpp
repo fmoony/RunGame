@@ -5,6 +5,7 @@
 #include "Character/RunGameAnimationComponent.h"
 #include "Character/RunGameMovementComponent.h"
 #include "Character/RunGameInputBufferComponent.h"
+#include "Animation/RunGameAnimInstance.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
@@ -57,6 +58,9 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	AnimationComponent = CreateDefaultSubobject<URunGameAnimationComponent>(TEXT("AnimationComponent"));
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
 
+	// 注入 Native AnimInstance 类 Inject native AnimInstance class
+	GetMesh()->SetAnimInstanceClass(URunGameAnimInstance::StaticClass());
+
 	PrimaryActorTick.bCanEverTick = false;
 
 	GetCharacterMovement()->GetNavAgentPropertiesRef().bCanCrouch = true;
@@ -88,6 +92,18 @@ void ARunGameCharacter::BeginPlay()
 	if (AnimationComponent)
 	{
 		AnimationComponent->OnDeathMontageComplete.AddDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
+	}
+
+	// 桥接 HealthComponent 伤害 → RuntimeState → AnimInstance Hit reaction bridge
+	if (HealthComponent)
+	{
+		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
+	}
+
+	// RuntimeState 死亡动画完成 → 溶解 Death animation finished → dissolve
+	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		RS->OnDeathAnimationFinished.AddDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
 	}
 
 	// 输入缓冲消费：Jump → ACharacter::Jump，Slide → SetCharacterState(Sliding)
@@ -206,7 +222,7 @@ void ARunGameCharacter::OnBufferedInputReady(ERunGameInputCommand Command)
 	switch (Command)
 	{
 	case ERunGameInputCommand::Jump:
-		ACharacter::Jump();
+		Jump();
 		break;
 	case ERunGameInputCommand::Slide:
 		SetCharacterState(ERunGameCharacterState::Sliding);
@@ -304,6 +320,14 @@ void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathC
 	Die(DamageType, 3.0f, DeathCauser);
 }
 
+void ARunGameCharacter::OnHealthDamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
+{
+	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		RS->TriggerHitReaction(Damage, DamageType);
+	}
+}
+
 // ---- GameState ----
 
 void ARunGameCharacter::OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
@@ -388,7 +412,6 @@ void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState O
 	// Movement physics → MovementComponent self-reacts
 	// Animation → AnimationComponent self-reacts
 	// InputBuffer 自行监听 Dead → 清空缓冲
-{
 }
 
 void ARunGameCharacter::Landed(const FHitResult& Hit)

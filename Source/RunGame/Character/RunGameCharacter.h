@@ -7,6 +7,7 @@
 #include "Logging/LogMacros.h"
 #include "RunGameType.h"
 #include "Interfaces/Damagable.h"
+#include "Character/RunGameInputBufferComponent.h"
 #include "RunGameCharacter.generated.h"
 
 class USpringArmComponent;
@@ -17,7 +18,6 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameAnimationComponent;
 class URunGameMovementComponent;
-class URunGameInputBufferComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -103,6 +103,10 @@ protected:
 
 	UFUNCTION()
 	void OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser);
+
+	/** 桥接 HealthComponent 伤害 → RuntimeState Bridge damage → RuntimeState */
+	UFUNCTION()
+	void OnHealthDamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
 
 	UFUNCTION()
 	void OnDeathMontageFinished();
