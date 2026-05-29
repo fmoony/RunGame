@@ -28,6 +28,7 @@ struct FSkillRuntimeState
 	TObjectPtr<USkillExecutionBase> ExecutionObject;
 };
 
+
 UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API USkillComponent : public UActorComponent
 {
@@ -125,6 +126,7 @@ protected:
 	void InitializeFromConfig();
 
 private:
+	UPROPERTY()
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;
 
 	/** 当前活跃的技能执行对象——死亡时取消其定时器 Active skill execution tracked for cancellation on death */

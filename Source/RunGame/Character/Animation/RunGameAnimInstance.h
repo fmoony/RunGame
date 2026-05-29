@@ -7,14 +7,15 @@
 #include "RunGameAnimInstance.generated.h"
 
 class ACharacter;
+class ARunGameCharacter;
 class UCharacterMovementComponent;
+class UAnimMontage;
+class URunGameTimerSubsystem;
 
 /**
- * Native AnimInstance — 缓存层：C++ 预计算所有动画数据，ABP 纯读不计算。
- * 通过 RuntimeState 事件接收受击触发，不直接绑 HealthComponent。
- *
- * Caching layer: all animation data pre-computed in C++, ABP reads only.
- * Hit reaction triggers received via RuntimeState events — no direct HealthComponent binding.
+ * Native AnimInstance — 统一管理所有动画：数据缓存 + 蒙太奇播放。
+ * AnimInstance — unified animation: data cache + montage playback.
+ * 删除 AnimationComponent，全部逻辑集中于此。
  */
 UCLASS()
 class RUNGAME_API URunGameAnimInstance : public UAnimInstance
@@ -25,35 +26,32 @@ public:
 	virtual void NativeInitializeAnimation() override;
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
 
-	// ── Hit reaction trigger ──
+	// ── Config: Slide ──
 
-	/** ABP 读取 → 播放受击动画 → AnimNotify 末尾重置 Read by ABP → play hit reaction → reset by AnimNotify */
-	UPROPERTY(BlueprintReadOnly, Category = "Animation|Hit")
-	bool bPlayHitReaction = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation|Slide")
+	TObjectPtr<UAnimMontage> SlideMontage;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Animation|Hit")
-	FGameplayTag HitReactionDamageType;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation|Slide")
+	float RootMotionScale = 1.0f;
 
-	/** AnimNotify 调用入口 — 受击动画末尾重置标记 Called by AnimNotify at end of hit reaction */
-	UFUNCTION(BlueprintCallable, Category = "Animation")
-	void NotifyHitReactionFinished();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation|Slide")
+	float MontagePlayRate = 0.8f;
 
-protected:
-	// ── Cached references ──
+	// ── Config: Death ──
 
-	UPROPERTY(BlueprintReadOnly, Transient)
-	TObjectPtr<ACharacter> Owner;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation|Death")
+	TMap<FGameplayTag, TObjectPtr<UAnimMontage>> DeathMontages;
 
-	UPROPERTY(BlueprintReadOnly, Transient)
-	TObjectPtr<UCharacterMovementComponent> MovementComp;
+	// ── Config: Hit ──
 
-	// ── Locomotion ──
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation|Hit")
+	TMap<FGameplayTag, TObjectPtr<UAnimMontage>> HitReactionMontages;
 
-	/** Total velocity magnitude */
+	// ── Locomotion (ABP 纯读) ──
+
 	UPROPERTY(BlueprintReadOnly, Category = "Locomotion")
 	float Speed = 0.0f;
 
-	/** Horizontal velocity magnitude (ignoring Z) */
 	UPROPERTY(BlueprintReadOnly, Category = "Locomotion")
 	float GroundSpeed = 0.0f;
 
@@ -63,7 +61,8 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Locomotion")
 	bool bIsMoving = false;
 
-	// ── Character State ──
+	UPROPERTY(BlueprintReadOnly, Category = "Direction")
+	float MoveDirectionAngle = 0.0f;
 
 	UPROPERTY(BlueprintReadOnly, Category = "State")
 	ERunGameCharacterState CharacterState = ERunGameCharacterState::Idle;
@@ -77,16 +76,49 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "State")
 	bool bIsDead = false;
 
-	// ── Direction ──
+protected:
+	UPROPERTY(BlueprintReadOnly, Transient)
+	TObjectPtr<ACharacter> Owner;
 
-	/** Velocity direction angle relative to actor forward (-180..180). 0 = moving straight ahead */
-	UPROPERTY(BlueprintReadOnly, Category = "Direction")
-	float MoveDirectionAngle = 0.0f;
+	UPROPERTY(BlueprintReadOnly, Transient)
+	TObjectPtr<UCharacterMovementComponent> MovementComp;
 
 private:
-	/** 绑定 RuntimeState 委托（受击）— 不直接绑 HealthComponent */
+	// ── Init ──
+
 	void BindGameplayDelegates();
+	void CacheBaseSpeed();
+
+	// ── State reactions ──
+
+	UFUNCTION()
+	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
+	// ── Slide ──
+
+	void PlaySlideMontage();
+	void EndSlide();
+
+	UFUNCTION()
+	void OnSlideBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+
+	// ── Death ──
+
+	void PlayDeathMontage(FGameplayTag DamageType);
+
+	UFUNCTION()
+	void OnDeathMontageBlendingOut(UAnimMontage* Montage, bool bInterrupted);
+
+	// ── Hit ──
 
 	UFUNCTION()
 	void OnHitReaction(float Damage, FGameplayTag DamageType);
+
+	UFUNCTION()
+	void OnCharacterDied(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter);
+
+	UPROPERTY(Transient)
+	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
+
+	float BaseMaxWalkSpeed = 1200.0f;
 };

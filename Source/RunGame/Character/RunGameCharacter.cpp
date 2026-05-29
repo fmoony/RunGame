@@ -2,7 +2,6 @@
 #include "Player/RunGamePlayerController.h"
 #include "Actor/Component/HealthComponent.h"
 #include "Skill/SkillComponent.h"
-#include "Character/RunGameAnimationComponent.h"
 #include "Character/RunGameMovementComponent.h"
 #include "Character/RunGameInputBufferComponent.h"
 #include "Animation/RunGameAnimInstance.h"
@@ -55,7 +54,6 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
-	AnimationComponent = CreateDefaultSubobject<URunGameAnimationComponent>(TEXT("AnimationComponent"));
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
 
 	// 注入 Native AnimInstance 类 Inject native AnimInstance class
@@ -86,12 +84,6 @@ void ARunGameCharacter::BeginPlay()
 	if (HealthComponent)
 	{
 		HealthComponent->OnDeath.AddDynamic(this, &ARunGameCharacter::OnHealthDepleted);
-	}
-
-	// 动画组件完成死亡蒙太奇 → 溶解 → Destroy Animation death complete → dissolve → destroy
-	if (AnimationComponent)
-	{
-		AnimationComponent->OnDeathMontageComplete.AddDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
 	}
 
 	// 桥接 HealthComponent 伤害 → RuntimeState → AnimInstance Hit reaction bridge
@@ -135,11 +127,6 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (HealthComponent)
 	{
 		HealthComponent->OnDeath.RemoveDynamic(this, &ARunGameCharacter::OnHealthDepleted);
-	}
-
-	if (AnimationComponent)
-	{
-		AnimationComponent->OnDeathMontageComplete.RemoveDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
 	}
 
 	Super::EndPlay(EndPlayReason);

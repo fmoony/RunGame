@@ -16,7 +16,6 @@ class UInputAction;
 class URunGameTimerSubsystem;
 class UHealthComponent;
 class USkillComponent;
-class URunGameAnimationComponent;
 class URunGameMovementComponent;
 struct FInputActionValue;
 
@@ -42,9 +41,6 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<USkillComponent> SkillComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<URunGameAnimationComponent> AnimationComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameInputBufferComponent> InputBuffer;
@@ -167,7 +163,6 @@ public:
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	FORCEINLINE USkillComponent* GetSkillComponent() const { return SkillComponent; }
-	FORCEINLINE URunGameAnimationComponent* GetAnimationComponent() const { return AnimationComponent; }
 
 	/** 获取自定义运动组件 Get custom movement component */
 	UFUNCTION(BlueprintCallable, Category = "Movement")
