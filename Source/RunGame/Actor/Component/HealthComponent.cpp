@@ -1,5 +1,4 @@
 #include "Actor/Component/HealthComponent.h"
-#include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 
 UHealthComponent::UHealthComponent()
@@ -14,26 +13,12 @@ void UHealthComponent::BeginPlay()
 	// 初始化生命值为满血 Initialize HP to full
 	CurrentHP = MaxHP;
 
-	// 监听角色状态机，死亡时自行清除无敌 Listen to character state: clear invincibility on death
-	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		PRS->OnCharacterStateChanged.AddDynamic(this, &UHealthComponent::OnRS_CharacterStateChanged);
-	}
-
 	// 广播初始生命值 Broadcast initial health
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
 }
 
 void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (UWorld* World = GetWorld())
-	{
-		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			PRS->OnCharacterStateChanged.RemoveDynamic(this, &UHealthComponent::OnRS_CharacterStateChanged);
-		}
-	}
-
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -41,7 +26,7 @@ void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
 {
-	if (bIsDead || Damage <= 0.0f || bIsInvincible)
+	if (CurrentHP <= 0.0f || Damage <= 0.0f || bIsInvincible)
 	{
 		return;
 	}
@@ -57,7 +42,6 @@ void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor
 
 	if (CurrentHP <= 0.0f)
 	{
-		bIsDead = true;
 		OnDeath.Broadcast(DamageType, DamageCauser);
 	}
 	else
@@ -68,7 +52,7 @@ void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor
 
 void UHealthComponent::Heal(float Amount, AActor* Healer)
 {
-	if (bIsDead || Amount <= 0.0f)
+	if (CurrentHP <= 0.0f || Amount <= 0.0f)
 	{
 		return;
 	}
@@ -85,14 +69,13 @@ void UHealthComponent::Heal(float Amount, AActor* Healer)
 
 void UHealthComponent::ForceKill(FGameplayTag DamageType, AActor* Killer)
 {
-	if (bIsDead)
+	if (CurrentHP <= 0.0f)
 	{
 		return;
 	}
 
 	bIsInvincible = false;
 	CurrentHP = 0.0f;
-	bIsDead = true;
 
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, -MaxHP);
 	OnDeath.Broadcast(DamageType, Killer);
@@ -114,15 +97,6 @@ void UHealthComponent::SetInvincible(bool bNewInvincible)
 
 void UHealthComponent::Revive(float RestoreHP)
 {
-	bIsDead = false;
 	CurrentHP = FMath::Clamp(RestoreHP, 1.0f, MaxHP);
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
-}
-
-void UHealthComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
-{
-	if (NewState == ERunGameCharacterState::Dead)
-	{
-		SetInvincible(false);
-	}
 }

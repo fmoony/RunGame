@@ -46,7 +46,7 @@ DECLARE_DELEGATE_OneParam(FOnInputCommandConsumed, ERunGameInputCommand);
  * Listens to PlayerRuntimeState, consumes buffered commands when state returns to Idle.
  * Stale commands auto-expire.
  */
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent)) 
 class RUNGAME_API URunGameInputBufferComponent : public UActorComponent
 {
 	GENERATED_BODY()

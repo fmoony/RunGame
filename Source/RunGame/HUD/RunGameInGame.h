@@ -68,6 +68,17 @@ private:
 	UPROPERTY()
 	TObjectPtr<UHealthComponent> CachedHealthComponent;
 
+	/** 尝试设置技能栏——失败时自动重试（处理角色尚未生成的竞态） Attempt skill bar setup; retries automatically on failure (race: widget created before player spawned) */
+	void SetupSkillBar();
+
+	/** 安排重试——检查计数并设 0.1s 定时器 Schedule retry — checks count and arms 0.1s timer */
+	void ScheduleSkillBarRetry();
+
+	/** 重试计数和定时器 Retry counter and timer */
+	FTimerHandle SkillBarRetryTimer;
+	int32 SkillBarRetryCount = 0;
+	static constexpr int32 MaxSkillBarRetries = 10;
+
 	/** Updates the score text display when player score changes */
 	UFUNCTION()
 	void OnScoreUpdated(int64 NewScore);

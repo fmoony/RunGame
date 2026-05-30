@@ -15,6 +15,9 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillReadySignature, FGameplayTag
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnSkillExecutedSignature, FGameplayTag, SkillTag);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnergyChangedSignature, float, CurrentEnergy, float, MaxEnergy);
 
+
+class URunGameTimerSubsystem;
+
 USTRUCT()
 struct FSkillRuntimeState
 {
@@ -29,7 +32,7 @@ struct FSkillRuntimeState
 };
 
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API USkillComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -119,6 +122,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	void ClearAllCooldowns();
 
+	/** 启停能量恢复——由 GameState 响应式调用 Enable/disable energy regen — called reactively from GameState */
+	void SetEnergyRegenActive(bool bActive);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -138,6 +144,13 @@ private:
 	UFUNCTION()
 	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
+	/** 由 TimerSubsystem::OnTimeChanged 驱动——替代独立 0.1s 定时器 Driven by TimerSubsystem::OnTimeChanged — replaces standalone 0.1s timer */
+	UFUNCTION()
+	void OnTimeChangedCallback(float NewTime);
+
+	UPROPERTY()
+	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
+
 	// -- Energy runtime state --
 
 	float CurrentEnergy = 0.0f;
@@ -148,9 +161,7 @@ private:
 	/** 来自场景道具的全局乘数（1.0 = 正常） Global multiplier from scene props (1.0 = normal) */
 	float EnergyRegenMultiplier = 1.0f;
 
-	FTimerHandle EnergyRegenTimer;
-
-	void StartEnergyRegen();
-	void StopEnergyRegen();
-	void TickEnergyRegen();
+	bool bEnergyRegenActive = false;
+	float EnergyRegenAccumulator = 0.0f;
+	float LastEnergyTime = 0.0f;
 };

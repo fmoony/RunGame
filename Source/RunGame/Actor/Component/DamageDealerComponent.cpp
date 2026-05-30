@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "RunGame.h"
 #include "Actor/Component/DamageDealerComponent.h"
+#include "RunGame.h"
 #include "Interfaces/Damagable.h"
 
 UDamageDealerComponent::UDamageDealerComponent()

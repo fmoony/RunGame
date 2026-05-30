@@ -56,6 +56,9 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
+	/** 事件驱动空中检测：移动模式变为 Falling → 设 Airborne 状态 */
+	virtual void SetMovementMode(EMovementMode NewMovementMode, uint8 NewCustomMode = 0) override;
+
 private:
 	/** 响应角色状态变化 React to character state changes */
 	UFUNCTION()

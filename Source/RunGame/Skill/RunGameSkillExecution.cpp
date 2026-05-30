@@ -30,6 +30,19 @@ void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Insti
 	}
 }
 
+void USkillExecution_Unstoppable::Reset_Implementation()
+{
+	CachedSkillTag = FGameplayTag();
+	if (RevertTimer.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().ClearTimer(RevertTimer);
+		}
+		RevertTimer.Invalidate();
+	}
+}
+
 void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
 {
 	ACharacter* Character = Cast<ACharacter>(Instigator);
@@ -53,9 +66,14 @@ void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGa
 		}
 	}
 
-	// Schedule revert after Duration
+	// Schedule revert after Duration——先清旧定时器防止重复 Execute 泄漏
+	// Clear old timer first to prevent leak on double-execute
 	if (UWorld* World = Instigator->GetWorld())
 	{
+		if (RevertTimer.IsValid())
+		{
+			World->GetTimerManager().ClearTimer(RevertTimer);
+		}
 		FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertEffect, Instigator);
 		World->GetTimerManager().SetTimer(RevertTimer, RevertDel, Duration, false);
 	}

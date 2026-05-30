@@ -13,7 +13,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDamageTaken, float, Damage, FG
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, FGameplayTag, DamageType, AActor*, DeathCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInvincibilityChangedSignature, bool, bNewInvincible);
 
-UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
+UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API UHealthComponent : public UActorComponent
 {
 	GENERATED_BODY()
@@ -62,8 +62,10 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
 	float GetHealthPercentage() const;
 
+	/** HP <= 0 即判定死亡——单一数据源，无需与 PlayerRuntimeState 同步
+	 *  HP <= 0 means dead — single source of truth, no sync with PlayerRuntimeState needed */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
-	bool IsDead() const { return bIsDead; }
+	bool IsDead() const { return CurrentHP <= 0.0f; }
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void SetInvincible(bool bNewInvincible);
@@ -79,11 +81,6 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** 响应角色状态机：进入 Dead 时自行清除无敌 React to character state: clear invincibility on death */
-	UFUNCTION()
-	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
-
 	float CurrentHP = 0.0f;
-	bool bIsDead = false;
 	bool bIsInvincible = false;
 };

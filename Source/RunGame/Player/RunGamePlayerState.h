@@ -50,14 +50,19 @@ private:
 	UFUNCTION()
 	void CalculateScoreProcess();
 
+	/** 由 TimerSubsystem::OnTimeChanged 驱动——替代独立 0.1s 定时器 Driven by TimerSubsystem::OnTimeChanged — replaces standalone 0.1s timer */
+	UFUNCTION()
+	void OnTimeChangedCallback(float NewTime);
+
 	/** 响应 GameState 状态变化：清零分数、启停计分 React to GameState changes: reset score, toggle scoring */
 	UFUNCTION()
 	void OnGameStateChangedCallback(ERunGameGameState OldState, ERunGameGameState NewState);
-
-	FTimerHandle ScoreTimerHandle;
 
 	UPROPERTY()
 	URunGameTimerSubsystem* TimerSubsystem;
 
 	int64 RunGameScore = 0;
+	bool bScoringActive = false;
+	float ScoreTickAccumulator = 0.0f;
+	float LastScoreTime = 0.0f;
 };

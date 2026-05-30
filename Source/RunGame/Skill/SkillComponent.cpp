@@ -2,9 +2,9 @@
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/RunGameSkillExecution.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
+#include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Player/RunGamePlayerState.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
 #include "RunGame.h"
 
 USkillComponent::USkillComponent()
@@ -28,7 +28,16 @@ void USkillComponent::BeginPlay()
 		PRS->OnCharacterStateChanged.AddDynamic(this, &USkillComponent::OnRS_CharacterStateChanged);
 	}
 
-	StartEnergyRegen();
+	// 订阅 Subsystem 的 OnTimeChanged——由规范时钟驱动能量恢复，消除独立定时器
+	// Subscribe to Subsystem's OnTimeChanged — canonical clock drives energy regen, eliminates standalone timer
+	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
+	if (TimerSubsystem)
+	{
+		TimerSubsystem->OnTimeChanged.AddDynamic(this, &USkillComponent::OnTimeChangedCallback);
+	}
+
+	// 初始启用能量恢复——与旧行为一致（无条件启动） Start energy regen — matches old behavior (unconditional start)
+	SetEnergyRegenActive(true);
 
 	// 广播初始能量状态 Broadcast initial energy
 	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
@@ -54,7 +63,12 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 
-	StopEnergyRegen();
+	if (TimerSubsystem)
+	{
+		TimerSubsystem->OnTimeChanged.RemoveDynamic(this, &USkillComponent::OnTimeChangedCallback);
+	}
+	TimerSubsystem = nullptr;
+
 	SkillStates.Empty();
 
 	Super::EndPlay(EndPlayReason);
@@ -154,6 +168,7 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 
 	if (ExecObj)
 	{
+		ExecObj->Reset();       // 清零逐次激活状态 Clear per-activation state
 		ExecObj->Execute(Owner, SkillTag);
 	}
 
@@ -298,53 +313,64 @@ void USkillComponent::ClearAllCooldowns()
 	}
 }
 
-void USkillComponent::StartEnergyRegen()
+void USkillComponent::SetEnergyRegenActive(bool bActive)
 {
-	if (UWorld* World = GetWorld())
+	if (bActive)
 	{
-		World->GetTimerManager().SetTimer(
-			EnergyRegenTimer,
-			this,
-			&USkillComponent::TickEnergyRegen,
-			0.1f,
-			true
-		);
+		bEnergyRegenActive = true;
+		EnergyRegenAccumulator = 0.0f;
+		LastEnergyTime = TimerSubsystem ? TimerSubsystem->GetTotalTimeSeconds() : 0.0f;
+	}
+	else
+	{
+		bEnergyRegenActive = false;
 	}
 }
 
-void USkillComponent::StopEnergyRegen()
+void USkillComponent::OnTimeChangedCallback(float NewTime)
 {
-	if (UWorld* World = GetWorld())
-	{
-		World->GetTimerManager().ClearTimer(EnergyRegenTimer);
-	}
-}
-
-void USkillComponent::TickEnergyRegen()
-{
-	if (CurrentEnergy >= MaxEnergy)
+	if (!bEnergyRegenActive)
 	{
 		return;
 	}
 
-	// 跨领域读取：分数在 PlayerState，能量本地管理
-	// 使用 sqrt 缩放应对爆炸式分数增长
-	// Cross-domain read: score from PlayerState, energy managed locally
-	// sqrt scaling for explosive score growth
-	int64 Score = 0;
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	const float DeltaTime = NewTime - LastEnergyTime;
+	LastEnergyTime = NewTime;
+
+	if (DeltaTime <= 0.0f)
 	{
-		if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
-		{
-			Score = PS->GetRunGameScore();
-		}
+		return;
 	}
 
-	const float ScoreBonus = FMath::Sqrt(FMath::Max(0.0f, static_cast<float>(Score))) * ScoreRegenMultiplier;
+	EnergyRegenAccumulator += DeltaTime;
+	while (EnergyRegenAccumulator >= 0.1f)
+	{
+		EnergyRegenAccumulator -= 0.1f;
 
-	const float RegenAmount = (BaseEnergyRegenPerSecond + ScoreBonus + EnergyRegenModifier) * EnergyRegenMultiplier * 0.1f;
+		if (CurrentEnergy >= MaxEnergy)
+		{
+			break;
+		}
 
-	AddEnergy(RegenAmount);
+		// 跨领域读取：分数在 PlayerState，能量本地管理
+		// 使用 sqrt 缩放应对爆炸式分数增长
+		// Cross-domain read: score from PlayerState, energy managed locally
+		// sqrt scaling for explosive score growth
+		int64 Score = 0;
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (ARunGamePlayerState* PS = PC->GetPlayerState<ARunGamePlayerState>())
+			{
+				Score = PS->GetRunGameScore();
+			}
+		}
+
+		const float ScoreBonus = FMath::Sqrt(FMath::Max(0.0f, static_cast<float>(Score))) * ScoreRegenMultiplier;
+
+		const float RegenAmount = (BaseEnergyRegenPerSecond + ScoreBonus + EnergyRegenModifier) * EnergyRegenMultiplier * 0.1f;
+
+		AddEnergy(RegenAmount);
+	}
 }
 
 void USkillComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)

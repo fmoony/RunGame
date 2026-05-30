@@ -48,8 +48,11 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 | `OnInteractionEnd` | `ARunGameInteractiveVolume` | `(ARunGameCharacter* PlayerCharacter)` |
 | `OnHealthChanged` | `UHealthComponent` | `(float CurrentHP, float MaxHP, float Delta)` — positive=heal, negative=damage |
 | `OnDeath` | `UHealthComponent` | `(FGameplayTag DamageType, AActor* DeathCauser)` |
-| `OnCharacterDied` | `ARunGameCharacter` | `(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)` |
-| `OnCharacterStateChanged` | `ARunGameCharacter` | `(ERunGameCharacterState Old, ERunGameCharacterState New)` — pure, no side effects |
+| `OnDamageTaken` | `UHealthComponent` | `(float Damage, FGameplayTag DamageType, AActor* DamageCauser)` |
+| `OnCharacterDied` | `ARunGameCharacter` / `UPlayerRuntimeState` | `(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)` — both declare this delegate |
+| `OnCharacterStateChanged` | `UPlayerRuntimeState` | `(ERunGameCharacterState Old, ERunGameCharacterState New)` |
+| `OnHitReaction` | `UPlayerRuntimeState` | `(float Damage, FGameplayTag DamageType)` — Character bridges HealthComponent→OnDamageTaken |
+| `OnDeathAnimationFinished` | `UPlayerRuntimeState` | `()` — AnimNotify or AnimInstance montage callback triggers dissolve |
 | `OnInvincibilityChanged` | `UHealthComponent` | `(bool bNewInvincible)` |
 | `OnSkillActivated` | `USkillComponent` | `(FGameplayTag SkillTag, float CooldownDuration)` |
 | `OnSkillReady` | `USkillComponent` | `(FGameplayTag SkillTag)` |
@@ -65,12 +68,11 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
      - (A) `ARunGameDeathVolume` clears invincibility, then applies 99999 damage via `IDamagable::Execute_OnTakeDamage` → `HealthComponent::ApplyDamage` → `OnDeath` → `OnHealthDepleted` → `Die()`
      - (B) Other damage sources (`UDamageDealerComponent`) → same `ApplyDamage` → `OnDeath` → `Die()` chain
    - **Die() executes in this order:**
-     1. `SetGameState(GameOver)` — Controller's `OnGameStateChangedCallback` reactively sets `InputModeUIOnly`, HUD switches to GameOver widget
-     2. `StopAllMontages` — halts any ongoing animation
-     3. Spawn death `ACameraActor` at follow-camera location, blend view **(before animation to avoid camera jitter)**
-     4. `OnCharacterDied.Broadcast(DamageType, this)` — for any external listeners
-     5. Look up `DeathMontages[DamageType]`, play if found; bind `OnDeathMontageBlendingOut` to `Destroy()` when montage completes
-     6. If no montage found → `Destroy()` immediately or via `FTimerHandle` with `DestroyDelay`
+     1. Spawn death `ACameraActor` at follow-camera location, blend view **(before animation to avoid camera jitter)**
+     2. `SetCharacterState(Dead)` — state machine guards against double-entry, all components react synchronously
+     3. `RS->OnCharacterDied.Broadcast(DamageType, this)` — GameMode subscribes and reactively calls `GS->SetGameState(GameOver)` (IoC: Pawn never touches global state)
+     4. `OnCharacterDied.Broadcast(DamageType, this)` — for Blueprint / other listeners
+     5. Death montage plays via `URunGameAnimInstance` (which also binds `PRS->OnCharacterDied`); dissolve → `Destroy()` on completion
    - **GameMode is completely decoupled** from death handling — no `HandlePlayerDeath`, no `OnPlayerDeath`
 4. **Respawn**: `GameMode::StartNewGame()` → same countdown path → `SpawnPlayer()` re-possesses a new pawn and blends the view back.
 
@@ -83,7 +85,7 @@ Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save �
 | State | Description | Entry |
 |-------|-------------|-------|
 | `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne; slide/turn ended |
-| `Airborne` | Jumping, falling, walking off ledge | `Tick()` detects `IsFalling()` from Idle |
+| `Airborne` | Jumping, falling, walking off ledge | `SetMovementMode` override detects `MOVE_Falling` from Idle |
 | `Sliding` | Crouched, no ground friction, montage playing | `StartSlide()` calls `SetCharacterState(Sliding)` |
 | `Turning` | Inside turn zone — lateral movement blocked, rotation locked | `TurnFloor` overlap calls `SetCharacterState(Turning)` |
 | `Dead` | All input/movement blocked, dissolving | `Die()` calls `SetCharacterState(Dead)` — terminal |
@@ -99,18 +101,15 @@ Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save �
 | **Dead**  | NO   | NO       | NO      | NO      | -    |
 
 ¹ Sliding additionally requires `!IsFalling()` at runtime.
-² Sliding input while Airborne is buffered in `PendingInputState`; consumed on `Landed()` → Idle → Sliding.
+² Sliding input while Airborne is buffered by `URunGameInputBufferComponent`; auto-consumed when state returns to Idle.
 
-**Reactive callback** (`OnCharacterStateChangedCallback`):
-- Entering `Sliding` → Crouch, set `GroundFriction=0`, bind `OnSlideBlendingOut`, play slide montage
-- Leaving `Sliding` → UnCrouch, restore `GroundFriction`, reset `AnimRootMotionTranslationScale`, unbind montage callback
-- Entering `Turning` → set `bTurn=true`, `InTurnBox=true`
-- Leaving `Turning` → set `bTurn=false`, `InTurnBox=false`
-- Entering `Dead` → clear `bTurn`, `InTurnBox`
+**Movement reaction** (`URunGameMovementComponent`): Self-binds to `OnCharacterStateChanged`. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne detection via `SetMovementMode` override (not Tick polling).
 
-**Input buffering**: `PendingInputState` stores a rejected transition request. On `Landed()` (Airborne→Idle), if `PendingInputState == Sliding`, it's consumed and `SetCharacterState(Sliding)` is retried.
+**Animation reaction** (`URunGameAnimInstance`): Self-binds to `OnCharacterStateChanged` and `OnCharacterDied`. Plays slide/death montages. Death blend-out → `PRS->NotifyDeathAnimationFinished` → Character dissolve.
 
-**Skill gating**: `ActivateSkillByTag()` reads `PlayerRuntimeState::GetCharacterState()` and blocks activation while `Dead` or `Sliding`. All other states (`Idle`, `Airborne`, `Turning`) allow skill input through to `SkillComponent::TryActivateSkill`.
+**Input buffering** (`URunGameInputBufferComponent`): `PendingInputState` removed. Character bridges EnhancedInput → `BufferInput()`. Queue stores intent with 0.3s timeout. State change back to `Idle` auto-consumes oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
+
+**Skill gating**: `ActivateSkillByTag()` reads `UPlayerRuntimeState::GetCharacterState()` and blocks activation while `Dead` or `Sliding`. All other states (`Idle`, `Airborne`, `Turning`) allow skill input through to `SkillComponent::TryActivateSkill`.
 
 **Invincibility**: `UHealthComponent::SetInvincible()` follows the same Guard→Modify→Broadcast pattern, broadcasting `OnInvincibilityChanged(bool)` when the value changes. Invincibility is orthogonal — it can coexist with any character state.
 
@@ -121,9 +120,7 @@ Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save �
 - **`URunGameFloorSubsystem`** — Procedural floor generation via object pooling. `ARunGameGameMode` holds the configuration (`StraightFloorClasses`, `TurnFloorClasses`, `PreAllocateFloorCount`) and calls `InitializeFloorSystem()` at `BeginPlay`. Async-loads floor classes from `TSoftClassPtr` arrays, then `SpawnInitialFloors()` lays out initial straight + random floors tracking `NextSpawnTransform`. `RequestNextFloor()` (80% straight / 20% turn weighted random) and `RequestFloorAt()` serve new floors; `RecycleDistantFloors()` hides distant floors and returns them to the pool. `ReturnFloor()` and `HideAllActiveFloors()` also recycle floors. Pool is per-type: `TMap<TSubclassOf<AActor>, TArray<AFloorBase*>> PooledFloorsMap`. Active floors tracked in `TArray<TObjectPtr<AFloorBase>> ActiveFloors`. `OnFloorSystemReady` delegate signals async load completion; `GameMode` binds to it for initial floor spawn.
 - **`URunGameTimerSubsystem`** — Implements `FTickableGameObject`. **Purely a timer — knows nothing about scoring.** Countdown uses `FTimerManager` at 1Hz; the forward game timer increments `TotalTimeSeconds` every `Tick`. All start/stop is driven reactively by `OnGameStateChanged`. Exposes delegates: `OnCountdownComplete`, `OnTimeChanged` (broadcasts every tick while running).
 - **`URunGameCoinSubsystem`** — Coin object pooling via LIFO stack (`TArray::Pop`/`Add`). `PreAllocateCoins(CoinClass, Count)` spawns hidden coins into per-class sub-pools (`TMap<TSubclassOf<ACoin>, TArray<ACoin*>>`). `AcquireCoin()` pops from pool or spawns new; `ReturnCoin()` pushes back via `RemoveSwap` from `ActiveCoins` then `Add` to pool. Coins stay hidden in-place (no off-screen relocation). Delegates: `OnCoinSubsystemReady`.
-- **`UGameFlowRuntimeState`** — Holds game state, countdown, and timer data. Delegates: `OnGameStateChanged`, `OnCountdownUpdated`, `OnCountdownComplete`, `OnTimeChanged`. `ARunGameGameState` and `URunGameTimerSubsystem` forward into it.
-- **`UPlayerRuntimeState`** — Holds score, character state, turn flags, speed modifiers, cached character reference. Delegates: `OnScoreChanged`, `OnCharacterStateChanged`, `OnCharacterDied`. `ARunGamePlayerState` and `ARunGameCharacter` forward into it. `SetCharacterState()` enforces the transition matrix. `ResetForNewGame()` called on respawn to clear Dead state and reset score/modifiers.
-- **`UCombatRuntimeState`** — Holds HP, invincibility, energy, and skill state. Delegates: `OnHealthChanged`, `OnDamageTaken`, `OnDeath`, `OnInvincibilityChanged`, `OnSkillActivated`, `OnSkillReady`, `OnSkillExecuted`, `OnEnergyChanged`. `UHealthComponent` and `USkillComponent` forward into it. `ApplyDamage()` contains invincibility/death guard logic.
+- **`UPlayerRuntimeState`** — Character state machine + animation event bus. Holds `CurrentCharacterState` and enforces the transition matrix via `IsCharacterStateTransitionAllowed`. Delegates: `OnCharacterStateChanged`, `OnCharacterDied`, `OnHitReaction`, `OnDeathAnimationFinished`. `ResetForNewGame()` clears state to Idle.
 
 ### Coin System
 
@@ -172,6 +169,29 @@ All score variables are `int64`. The timer is paused/unpaused reactively by `OnG
 ### Input
 
 `ARunGamePlayerController` manages `EnhancedInput` mapping contexts. Input mode and view target are self-managed reactively via `OnGameStateChangedCallback` (the big switch on state). On `GameOver`, it sets `InputModeUIOnly` — no separate death delegate binding needed (reactive pattern handles it). `MainMenuCameraTag` (`FName`, editor-configurable) identifies the main-menu camera placed in the level via tag-based actor search.
+
+### Input Buffering (`RunGameInputBufferComponent`)
+
+`URunGameInputBufferComponent` (`Character/RunGameInputBufferComponent.h/.cpp`) — ActorComponent on Character.
+
+Character binds EnhancedInput → `BufferInput(ERunGameInputCommand)`. Component listens to `UPlayerRuntimeState::OnCharacterStateChanged`, auto-consumes buffered commands when state returns to `Idle`. FIFO queue with 0.3s timeout. Same-type deduplication.
+
+| Command | Buffer when | Consume when |
+|---------|-----------|--------------|
+| `Slide` | Airborne | Landed → state back to Idle |
+| `Jump` | Sliding | Slide ends → state back to Idle |
+
+Move goes directly to MovementComponent, never buffered. `OnInputCommandConsumed` delegate fires → Character executes `Jump()` or `SetCharacterState(Sliding)`.
+
+### Animation (`URunGameAnimInstance`)
+
+`URunGameAnimInstance` (`Character/Animation/RunGameAnimInstance.h/.cpp`) — native C++ AnimInstance, replaces deleted `URunGameAnimationComponent`.
+
+**Data cache** (per-frame `NativeUpdateAnimation`): Pulls `Speed`/`GroundSpeed`/`bIsInAir`/`bIsMoving` from `CharacterMovementComponent`. Pulls `CharacterState`/`bIsSliding`/`bIsTurning`/`bIsDead` from cached `UPlayerRuntimeState*` (cached in `NativeInitializeAnimation`, avoids per-frame `GetSubsystem`). Computes `MoveDirectionAngle` (velocity vs actor forward).
+
+**Hit reaction trigger**: Binds `PRS->OnHitReaction` → sets `bPlayHitReaction + HitReactionDamageType` — ABP reads these.
+
+**ABP (Blueprint side)**: Reads all UPROPERTY variables to drive state machine transitions. `BlendPosesByEnum(CharacterState)` for locomotion/death/slide states. `bPlayHitReaction` for transient hit animation. Death animation end → `AnimNotify_RunGameEvent` → `PRS->NotifyDeathAnimationFinished` → Character dissolve.
 
 ### HUD / UI
 
@@ -224,12 +244,11 @@ DamageDealerComponent::OnOverlap
 - Implements `IDamagable`, owns `UHealthComponent*` via `CreateDefaultSubobject`
 - Character status tracked by `UPlayerRuntimeState::CurrentCharacterState` — authoritative source (see Character State Machine above)
 - `BeginPlay` binds `HealthComponent->OnDeath` → `OnHealthDepleted` → `Die(DamageType)`, and `OnCharacterStateChanged` → `OnCharacterStateChangedCallback` for reactive slide/turn/death behavior
-- All `IDamagable` `_Implementation` functions forward to `HealthComponent`; `IsDead_Implementation()` checks `CurrentCharacterState == Dead`
-- `Die(FGameplayTag DamageType, float DestroyDelay = 3.0f)` — first calls `SetCharacterState(Dead)` (state machine guards against double-entry), then proceeds with death sequence
-- `OnCharacterDied` (BlueprintAssignable) — broadcast inside `Die()`, available for external binding if needed
-- `DeathMontages` (`TMap<FGameplayTag, UAnimMontage*>`, EditAnywhere) — damage type to death animation mapping
-- `OnDeathMontageBlendingOut` — callback when death montage ends, triggers `Destroy()`
-- If no matching montage found in `DeathMontages`, immediate or delayed `Destroy()` via `FTimerHandle`
+- All `IDamagable` `_Implementation` functions forward to `HealthComponent`; `IsDead_Implementation()` delegates to `HealthComponent::IsDead()` which checks `CurrentHP <= 0.0f` (single source of truth — no separate `bIsDead` flag)
+- `Die(FGameplayTag DamageType, float DestroyDelay = 3.0f)` — spawns death camera, then calls `SetCharacterState(Dead)` (state machine guards against double-entry), then broadcasts `OnCharacterDied`. Notably does **NOT** call `SetGameState(GameOver)` — GameMode listens to `OnCharacterDied` and decides game-over (proper IoC)
+- `OnCharacterDied` (BlueprintAssignable) — broadcast inside `Die()`, also on `UPlayerRuntimeState`
+- Death montages configured on `URunGameAnimInstance::DeathMontages` (moved from Character)
+- `PRS->OnDeathAnimationFinished` — dispatch point for dissolve, bound in Character `BeginPlay`
 
 ### Skill System
 
@@ -243,7 +262,7 @@ InputAction (Started)
   → ARunGameCharacter::ActivateSkillByTag(SkillTag)     [state guard: blocks Dead/Sliding]
     → USkillComponent::TryActivateSkill(SkillTag)       [cooldown + energy + CanExecute checks]
       → USkillExecutionBase::Execute(Owner, SkillTag)    [actual gameplay effect]
-      → UCombatRuntimeState::BroadcastSkillActivated()   [UI via SkillComponent forwarder]
+      → OnSkillActivated.Broadcast()                     [UI via SkillComponent]
 ```
 
 #### Core Data Structures
@@ -263,28 +282,30 @@ InputAction (Started)
 
 **`USkillConfigData`** (`UDataAsset`) — holds `TArray<FSkillDefinition> Skills`. Lookup via `FindSkillByTag(FGameplayTag)` returns `const FSkillDefinition*`. Assigned to `USkillComponent::SkillConfig` in editor.
 
-**`FSkillRuntimeState`** (private struct inside `USkillComponent`) — per-skill runtime state:
+**`FSkillRuntimeState`** (global `USTRUCT` in `SkillComponent.h`) — per-skill runtime state:
 - `bool bOnCooldown` — whether the skill is currently cooling down
 - `FTimerHandle CooldownTimer` — timer handle managing cooldown expiry
+- `TObjectPtr<USkillExecutionBase> ExecutionObject` — cached execution object, created once in `InitializeFromConfig`, reused on activation
 
-Stored in `TMap<FGameplayTag, FSkillRuntimeState> SkillStates`.
+Stored in `UPROPERTY() TMap<FGameplayTag, FSkillRuntimeState> SkillStates` — GC-tracked.
 
 #### Skill Execution Hierarchy
 
-All execution classes are transient (`NewObject` on `GetTransientPackage()`) — created on activation, GC'd later. Base class contract:
+Execution objects are cached per-skill (not transient). Created once in `InitializeFromConfig` with `NewObject<USkillExecutionBase>(this, ExecutionClass)`, reused on every activation. `SkillComponent::TryActivateSkill` calls `Reset()` before every `Execute()` — subclasses override `Reset_Implementation()` to clear per-activation state (e.g. `CachedSkillTag`, `RevertTimer`). Base class contract:
 
 | Method | Purpose | Default |
 |--------|---------|---------|
 | `CanExecute(AActor*, FGameplayTag)` | Additional constraints beyond cooldown/energy | `true` |
 | `Execute(AActor*, FGameplayTag)` | Apply gameplay effect | no-op |
 | `Cancel(AActor*)` | Cancel active effect (called on death) | no-op |
+| `Reset()` | Clear per-activation state before next Execute | no-op |
 
 **Concrete classes:**
 
 | Class | Effect |
 |-------|--------|
 | `USkillExecution_PlayMontageAndImpulse` | Plays `Montage` on instigator, applies forward `ImpulseStrength` via `AddImpulse` |
-| `USkillExecution_Unstoppable` | Speed ×`SpeedMultiplier` (default 1.5×) + invincibility for `Duration` seconds. Arms `RevertTimer`; `Cancel()` clears timer and reverts effects immediately |
+| `USkillExecution_Unstoppable` | Speed ×`SpeedMultiplier` (default 1.5×) + invincibility for `Duration` seconds. `Reset_Implementation()` clears `CachedSkillTag` and `RevertTimer` before each activation; `Execute_Implementation()` guards against stale timer handles; `Cancel()` clears timer and reverts effects immediately |
 
 #### SkillComponent — `USkillComponent` (ActorComponent on Character)
 
@@ -297,22 +318,22 @@ All execution classes are transient (`NewObject` on `GetTransientPackage()`) —
 4. Energy check — reject if `CurrentEnergy < EnergyCost`
 5. `CanExecute` on execution object — reject if returns false
 6. Apply cooldown — set `bOnCooldown`, arm `FTimerHandle` if duration > 0
-7. Deduct energy — `CombatRuntimeState::SetEnergy(Current - Cost)`
+7. Deduct energy — `CurrentEnergy -= SkillDef->EnergyCost`
 8. Track and execute — save `ActiveExecution`, call `Execute(Owner, SkillTag)`
-9. Broadcast — `CombatRuntimeState::BroadcastSkillActivated(Tag, Duration)`
+9. Broadcast — `OnSkillActivated.Broadcast(Tag, Duration)`
 
 **Cooldown expiry** (`OnCooldownExpired`): sets `bOnCooldown = false`, calls `BroadcastSkillReady`.
 
 **Death cleanup** (`ClearAllCooldowns`, triggered by `OnRS_CharacterStateChanged(Dead)`):
 1. Cancels `ActiveExecution` (clears Unstoppable's `RevertTimer` + immediately reverts effects)
 2. Iterates all `SkillStates`, clears cooldown timers, broadcasts `SkillReady` for each
-3. Resets energy to `0.0` via `CombatRuntimeState`
+3. Resets energy to `0.0`
 
 **EndPlay**: clears all cooldown timers + energy regen timer, removes RS delegate bindings.
 
 #### Energy System
 
-Energy is stored in `UCombatRuntimeState::CurrentEnergy` (clamped `[0, MaxEnergy]`). `SkillComponent` owns configuration and the regen timer.
+Energy is stored in `USkillComponent::CurrentEnergy` (clamped `[0, MaxEnergy]`). `SkillComponent` owns both configuration and the regen timer.
 
 **Configuration** (on `USkillComponent`, EditAnywhere):
 
@@ -334,8 +355,6 @@ Energy regen starts in `BeginPlay` and runs continuously via `FTimerHandle Energ
 
 **Runtime modifiers** (from scene props): `AddEnergyRegenModifier(float Delta)` adds flat bonus; `SetEnergyRegenMultiplier(float Mult)` sets global multiplier (1.0 = normal).
 
-**Forwarder pattern**: `CombatRuntimeState` holds the value and broadcasts. `SkillComponent` binds to RS delegates and re-broadcasts through its own delegates for UI binding compatibility.
-
 #### Input Binding (dynamic)
 
 `ARunGameCharacter::SetupPlayerInputComponent` iterates `SkillConfig->Skills`. For each `FSkillDefinition` with valid `InputAction` and `SkillTag`:
@@ -356,7 +375,7 @@ All skills share a single C++ handler; the `FGameplayTag` payload determines whi
 - Rejects if `Dead` or `Sliding`; passes if `Idle`, `Airborne`, `Turning`
 - Delegates to `SkillComponent->TryActivateSkill(SkillTag)`
 
-**Speed modifier bridge** — `AddSpeedModifier(Tag, Mult)` / `RemoveSpeedModifier(Tag)` forward to `PlayerRuntimeState`, which maintains a `TMap<FGameplayTag, float>` and a cached composite multiplier. Character `Tick` reads this:
+**Speed modifier bridge** — `AddSpeedModifier(Tag, Mult)` / `RemoveSpeedModifier(Tag)` are on `ARunGameCharacter`. Maintains a `TMap<FGameplayTag, float>` and a cached composite multiplier. `URunGameMovementComponent` reads the composite via `GetCompositeSpeedMultiplier()`. Character `Tick` reads this:
 ```
 FinalMaxSpeed = MaxSpeedCurve × CompositeSpeedMultiplier
 ```
@@ -394,3 +413,5 @@ See `CODING_STYLE.md` for detailed formatting rules. Key highlights:
 
 - Only modify `ARunGameCharacter` and non-variant classes
 - Never touch `Variant_Combat/`, `Variant_Platforming/`, `Variant_SideScrolling/`
+- 2选择方案A，给出#3的解决方案，#4再探讨一下，更新#1#2的错误描述
+- 2选择方案A，给出#3的解决方案，#4再探讨一下，更新#1#2的错误描述

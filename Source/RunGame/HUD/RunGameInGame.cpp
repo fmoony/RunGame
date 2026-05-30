@@ -25,6 +25,7 @@ URunGameInGame::URunGameInGame(const FObjectInitializer& ObjectInitializer)
 	, CachedSkillComponent(nullptr)
 	, TimerSubsystem(nullptr)
 	, CachedHealthComponent(nullptr)
+	, SkillBarRetryCount(0)
 {
 }
 
@@ -108,73 +109,102 @@ void URunGameInGame::NativeConstruct()
 		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
 	}
 
-	// Skill bar setup
-	if (SkillSlotClass && SkillBarContainer)
+	// Skill bar setup——角色可能尚未生成（竞态），失败时自动重试
+	// Player may not be spawned yet (race); retry automatically on failure
+	SetupSkillBar();
+}
+
+void URunGameInGame::SetupSkillBar()
+{
+	if (!SkillSlotClass || !SkillBarContainer)
 	{
-		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
+		return;
+	}
+
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!PC)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: No PlayerController yet — will retry skill bar setup"));
+		ScheduleSkillBarRetry();
+		return;
+	}
+
+	ARunGameCharacter* Character = Cast<ARunGameCharacter>(PC->GetPawn());
+	if (!Character)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: No PlayerPawn yet — will retry skill bar setup"));
+		ScheduleSkillBarRetry();
+		return;
+	}
+
+	USkillComponent* SkillComp = Character->GetSkillComponent();
+	if (!SkillComp)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: No SkillComponent yet — will retry skill bar setup"));
+		ScheduleSkillBarRetry();
+		return;
+	}
+
+	// 成功——设置技能栏
+	CachedSkillComponent = SkillComp;
+	SkillComp->OnEnergyChanged.AddDynamic(this, &URunGameInGame::OnEnergyUpdated);
+	OnEnergyUpdated(SkillComp->GetCurrentEnergy(), SkillComp->MaxEnergy);
+
+	if (USkillConfigData* Config = SkillComp->SkillConfig)
+	{
+		for (const FSkillDefinition& SkillDef : Config->Skills)
 		{
-			if (ARunGameCharacter* Character = Cast<ARunGameCharacter>(PC->GetPawn()))
+			if (!SkillDef.SkillTag.IsValid())
 			{
-				if (USkillComponent* SkillComp = Character->GetSkillComponent())
-				{
-					CachedSkillComponent = SkillComp;
-					SkillComp->OnEnergyChanged.AddDynamic(this, &URunGameInGame::OnEnergyUpdated);
-					OnEnergyUpdated(SkillComp->GetCurrentEnergy(), SkillComp->MaxEnergy);
+				UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
+				continue;
+			}
 
-					if (USkillConfigData* Config = SkillComp->SkillConfig)
-					{
-						for (const FSkillDefinition& SkillDef : Config->Skills)
-						{
-							if (!SkillDef.SkillTag.IsValid())
-							{
-								UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skipping skill with invalid tag in SkillConfig: %s"), *SkillDef.SkillName.ToString());
-								continue;
-							}
-
-							URunGameSkillSlot* SkillSlot = CreateWidget<URunGameSkillSlot>(this, SkillSlotClass);
-							if (SkillSlot)
-							{
-								SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
-								SkillBarContainer->AddChild(SkillSlot);
-								SkillSlots.Add(SkillSlot);
-								UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
-							}
-							else
-							{
-								UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
-							}
-						}
-
-						UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
-					}
-					else
-					{
-						UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
-					}
-				}
-				else
-				{
-					UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get SkillComponent for skill bar setup"));
-				}
+			URunGameSkillSlot* SkillSlot = CreateWidget<URunGameSkillSlot>(this, SkillSlotClass);
+			if (SkillSlot)
+			{
+				SkillSlot->SetupSlot(SkillDef, SkillDef.SkillTag, CachedSkillComponent);
+				SkillBarContainer->AddChild(SkillSlot);
+				SkillSlots.Add(SkillSlot);
+				UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Created skill slot for skill '%s' with tag '%s'"), *SkillDef.SkillName.ToString(), *SkillDef.SkillTag.ToString());
 			}
 			else
 			{
-				UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerPawn for skill bar setup"));
+				UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to create skill slot widget for skill '%s'"), *SkillDef.SkillName.ToString());
 			}
 		}
-		else
-		{
-			UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get PlayerController for skill bar setup"));
-		}
+
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Skill bar setup complete with %d skills"), SkillSlots.Num());
 	}
 	else
 	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillSlotClass or SkillBarContainer is not set!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: SkillComponent on PlayerPawn does not have a SkillConfig set for skill bar setup"));
+	}
+}
+
+void URunGameInGame::ScheduleSkillBarRetry()
+{
+	if (SkillBarRetryCount < MaxSkillBarRetries)
+	{
+		SkillBarRetryCount++;
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameInGame: Retrying skill bar setup (attempt %d/%d)"), SkillBarRetryCount, MaxSkillBarRetries);
+		GetWorld()->GetTimerManager().SetTimer(SkillBarRetryTimer, this, &URunGameInGame::SetupSkillBar, 0.1f, false);
+	}
+	else
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Skill bar setup failed after %d retries"), MaxSkillBarRetries);
 	}
 }
 
 void URunGameInGame::NativeDestruct()
 {
+	// 清理技能栏重试定时器 Clear skill bar retry timer
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(SkillBarRetryTimer);
+	}
+
 	// 解绑HealthComponent委托
 	if (CachedHealthComponent)
 	{

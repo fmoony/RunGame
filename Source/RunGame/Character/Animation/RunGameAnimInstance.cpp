@@ -18,6 +18,9 @@ void URunGameAnimInstance::NativeInitializeAnimation()
 		MovementComp = Owner->GetCharacterMovement();
 	}
 
+	// 缓存 RuntimeState —— 避免每帧 GetSubsystem 查找
+	CachedPRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
+
 	CacheBaseSpeed();
 	BindGameplayDelegates();
 }
@@ -59,15 +62,12 @@ void URunGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	bIsInAir = MovementComp->IsFalling();
 	bIsMoving = GroundSpeed > 10.0f;
 
-	if (UWorld* World = GetWorld())
+	if (CachedPRS.IsValid())
 	{
-		if (const UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			CharacterState = PRS->GetCharacterState();
-			bIsSliding = (CharacterState == ERunGameCharacterState::Sliding);
-			bIsTurning = (CharacterState == ERunGameCharacterState::Turning);
-			bIsDead = (CharacterState == ERunGameCharacterState::Dead);
-		}
+		CharacterState = CachedPRS->GetCharacterState();
+		bIsSliding = (CharacterState == ERunGameCharacterState::Sliding);
+		bIsTurning = (CharacterState == ERunGameCharacterState::Turning);
+		bIsDead = (CharacterState == ERunGameCharacterState::Dead);
 	}
 
 	if (GroundSpeed > 10.0f)

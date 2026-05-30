@@ -35,10 +35,16 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
 	void Cancel(AActor* Instigator);
 
+	/** 每次 Execute 前调用——子类覆写以清零逐次激活的成员变量（如 CachedSkillTag、定时器句柄）
+	 *  Called before every Execute — subclasses override to clear per-activation state (CachedSkillTag, timer handles, etc.) */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
+	void Reset();
+
 protected:
 	bool CanExecute_Implementation(AActor* Instigator, FGameplayTag SkillTag) const { return true; }
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) {}
 	virtual void Cancel_Implementation(AActor* Instigator) {}
+	virtual void Reset_Implementation() {}
 };
 
 
@@ -87,6 +93,9 @@ public:
 
 	/** Cancel unstoppable — clears timer and immediately reverts effects */
 	virtual void Cancel_Implementation(AActor* Instigator) override;
+
+	/** 清零逐次激活状态——CachedSkillTag + RevertTimer Clear per-activation state */
+	virtual void Reset_Implementation() override;
 
 private:
 	/** Skill tag cached during Execute for use in RevertEffect timer callback */

@@ -89,13 +89,6 @@ void URunGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		Controller->SetControlRotation(SmoothRotation);
 	}
 
-	if (IsFalling() && State == ERunGameCharacterState::Idle)
-	{
-		if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(Owner))
-		{
-			Char->SetCharacterState(ERunGameCharacterState::Airborne);
-		}
-	}
 }
 
 // ---- State reactions ----
@@ -159,6 +152,27 @@ void URunGameMovementComponent::RemoveSpeedModifier(FGameplayTag ModifierTag)
 		CachedCompositeSpeedMultiplier /= *Existing;
 	}
 	SpeedModifiers.Remove(ModifierTag);
+}
+
+// ---- Movement mode event-driven airborne detection ----
+
+void URunGameMovementComponent::SetMovementMode(EMovementMode NewMovementMode, uint8 NewCustomMode)
+{
+	const EMovementMode OldMode = MovementMode;
+	Super::SetMovementMode(NewMovementMode, NewCustomMode);
+
+	// 事件驱动：进入 Falling → Airborne。替代 Tick 中每帧 IsFalling 轮询
+	if (OldMode != MOVE_Falling && NewMovementMode == MOVE_Falling)
+	{
+		UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
+		if (PRS && PRS->GetCharacterState() == ERunGameCharacterState::Idle)
+		{
+			if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
+			{
+				Char->SetCharacterState(ERunGameCharacterState::Airborne);
+			}
+		}
+	}
 }
 
 // ---- Turn ----

@@ -2,7 +2,6 @@
 #include "Game/RunGameGameState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Engine/World.h"
-#include "TimerManager.h"
 
 ARunGamePlayerState::ARunGamePlayerState()
 {
@@ -15,16 +14,11 @@ void ARunGamePlayerState::BeginPlay()
 
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
 
-	if (UWorld* World = GetWorld())
+	// 订阅 Subsystem 的 OnTimeChanged——由规范时钟驱动计分，消除独立定时器
+	// Subscribe to Subsystem's OnTimeChanged — canonical clock drives scoring, eliminates standalone timer
+	if (TimerSubsystem)
 	{
-		World->GetTimerManager().SetTimer(
-			ScoreTimerHandle,
-			this,
-			&ARunGamePlayerState::CalculateScoreProcess,
-			0.1f,
-			true
-		);
-		World->GetTimerManager().PauseTimer(ScoreTimerHandle);
+		TimerSubsystem->OnTimeChanged.AddDynamic(this, &ARunGamePlayerState::OnTimeChangedCallback);
 	}
 
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
@@ -37,12 +31,15 @@ void ARunGamePlayerState::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(ScoreTimerHandle);
-
 		if (ARunGameGameState* GS = World->GetGameState<ARunGameGameState>())
 		{
 			GS->OnGameStateChanged.RemoveDynamic(this, &ARunGamePlayerState::OnGameStateChangedCallback);
 		}
+	}
+
+	if (TimerSubsystem)
+	{
+		TimerSubsystem->OnTimeChanged.RemoveDynamic(this, &ARunGamePlayerState::OnTimeChangedCallback);
 	}
 	TimerSubsystem = nullptr;
 	Super::EndPlay(EndPlayReason);
@@ -76,19 +73,38 @@ void ARunGamePlayerState::OnGameStateChangedCallback(ERunGameGameState OldState,
 
 void ARunGamePlayerState::SetScoringActive(bool bActive)
 {
-	UWorld* World = GetWorld();
-	if (!World)
+	if (bActive)
+	{
+		bScoringActive = true;
+		ScoreTickAccumulator = 0.0f;
+		LastScoreTime = TimerSubsystem ? TimerSubsystem->GetTotalTimeSeconds() : 0.0f;
+	}
+	else
+	{
+		bScoringActive = false;
+	}
+}
+
+void ARunGamePlayerState::OnTimeChangedCallback(float NewTime)
+{
+	if (!bScoringActive)
 	{
 		return;
 	}
 
-	if (bActive)
+	const float DeltaTime = NewTime - LastScoreTime;
+	LastScoreTime = NewTime;
+
+	if (DeltaTime <= 0.0f)
 	{
-		World->GetTimerManager().UnPauseTimer(ScoreTimerHandle);
+		return;
 	}
-	else
+
+	ScoreTickAccumulator += DeltaTime;
+	while (ScoreTickAccumulator >= 0.1f)
 	{
-		World->GetTimerManager().PauseTimer(ScoreTimerHandle);
+		ScoreTickAccumulator -= 0.1f;
+		CalculateScoreProcess();
 	}
 }
 

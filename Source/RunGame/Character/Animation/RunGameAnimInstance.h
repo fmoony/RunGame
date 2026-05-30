@@ -10,6 +10,7 @@ class ACharacter;
 class ARunGameCharacter;
 class UCharacterMovementComponent;
 class UAnimMontage;
+class UPlayerRuntimeState;
 class URunGameTimerSubsystem;
 
 /**
@@ -119,6 +120,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
+
+	/** 缓存的 PRS —— 避免每帧 GetSubsystem 查找 */
+	TWeakObjectPtr<UPlayerRuntimeState> CachedPRS;
 
 	float BaseMaxWalkSpeed = 1200.0f;
 };
