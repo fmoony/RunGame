@@ -97,13 +97,35 @@ void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
 
 void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
 {
-	if (UWorld* World = Instigator ? Instigator->GetWorld() : nullptr)
+	// 先移除速度修改器——触发射 MovementComponent 开始速度插值回落
+	// Remove speed modifier first — triggers MovementComponent speed interpolation back to normal
+	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
 	{
-		World->GetTimerManager().ClearTimer(RevertTimer);
-	}
+		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
+		{
+			MoveComp->RemoveSpeedModifier(CachedSkillTag);
 
-	if (Instigator && Instigator->IsValidLowLevel())
+			// 清除旧定时器，用 SpeedTransitionDuration 重设——等速度插值完成后再关无敌
+			// Clear old timer, re-arm with SpeedTransitionDuration — wait for speed interpolation to finish
+			if (UWorld* World = Instigator->GetWorld())
+			{
+				World->GetTimerManager().ClearTimer(RevertTimer);
+				const float InterpTime = MoveComp->SpeedTransitionDuration;
+				FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertInvincibility, Instigator);
+				World->GetTimerManager().SetTimer(RevertTimer, RevertDel, InterpTime, false);
+			}
+		}
+	}
+}
+
+void USkillExecution_Unstoppable::RevertInvincibility(AActor* Instigator)
+{
+	// 速度插值已完成——安全关闭无敌 Speed interpolation complete — safe to disable invincibility
+	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
 	{
-		RevertEffect(Instigator);
+		if (UHealthComponent* HealthComp = RunCharacter->GetHealthComponent())
+		{
+			HealthComp->SetInvincible(false);
+		}
 	}
 }

@@ -17,6 +17,9 @@ class URunGameTimerSubsystem;
 class UHealthComponent;
 class USkillComponent;
 class URunGameMovementComponent;
+class URunGameEffectComponent;
+class UNiagaraSystem;
+class UNiagaraComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -44,6 +47,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameInputBufferComponent> InputBuffer;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameEffectComponent> EffectComponent;
 
 protected:
 
@@ -103,22 +109,6 @@ protected:
 	/** 桥接 HealthComponent 伤害 → RuntimeState Bridge damage → RuntimeState */
 	UFUNCTION()
 	void OnHealthDamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
-
-	UFUNCTION()
-	void OnDeathMontageFinished();
-
-	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
-	float DissolveDuration = 2.0f;
-
-	UPROPERTY(EditAnywhere, Category = "RunGame|Death")
-	FName DissolveParameterName = "DissolveAmount";
-
-	void StartDissolve();
-	void TickDissolve();
-
-	FTimerHandle DissolveTimerHandle;
-	float DissolveElapsed = 0.0f;
-	TArray<UMaterialInstanceDynamic*> DissolveMaterials;
 
 protected:
 

@@ -91,7 +91,7 @@ public:
 
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
 
-	/** Cancel unstoppable — clears timer and immediately reverts effects */
+	/** Cancel unstoppable — 仅移除速度修改器，无敌保持到定时器到期 Only removes speed modifier; invincibility persists until timer fires */
 	virtual void Cancel_Implementation(AActor* Instigator) override;
 
 	/** 清零逐次激活状态——CachedSkillTag + RevertTimer Clear per-activation state */
@@ -103,5 +103,9 @@ private:
 
 	FTimerHandle RevertTimer;
 
+	/** 定时器到期回调——移除速度修改器 + 关闭无敌（正常流程）Timer expiry — remove speed modifier + disable invincibility */
 	void RevertEffect(AActor* Instigator);
+
+	/** 仅关闭无敌——Cancel 后等速度插值完成再调用 Invincibility-only revert — called after speed interpolation completes post-Cancel */
+	void RevertInvincibility(AActor* Instigator);
 };

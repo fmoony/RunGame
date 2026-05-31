@@ -20,7 +20,8 @@ public class RunGame : ModuleRules
 			"UMG",
 			"Slate",
 			"FunctionalTesting",
-			"GameplayTags"
+			"GameplayTags",
+			"Niagara"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { });

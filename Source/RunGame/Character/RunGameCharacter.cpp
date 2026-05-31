@@ -4,6 +4,7 @@
 #include "Skill/SkillComponent.h"
 #include "Character/RunGameMovementComponent.h"
 #include "Character/RunGameInputBufferComponent.h"
+#include "Character/RunGameEffectComponent.h"
 #include "Animation/RunGameAnimInstance.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
@@ -55,6 +56,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
+	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));
 
 	// 注入 Native AnimInstance 类 Inject native AnimInstance class
 	GetMesh()->SetAnimInstanceClass(URunGameAnimInstance::StaticClass());
@@ -92,12 +94,6 @@ void ARunGameCharacter::BeginPlay()
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
 	}
 
-	// RuntimeState 死亡动画完成 → 溶解 Death animation finished → dissolve
-	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		RS->OnDeathAnimationFinished.AddDynamic(this, &ARunGameCharacter::OnDeathMontageFinished);
-	}
-
 	// 输入缓冲消费：Jump → ACharacter::Jump，Slide → SetCharacterState(Sliding)
 	// Input buffer consumption: Jump → ACharacter::Jump, Slide → SetCharacterState
 	if (InputBuffer)
@@ -110,8 +106,6 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().ClearTimer(DissolveTimerHandle);
-
 		if (UPlayerRuntimeState* RS = World->GetSubsystem<UPlayerRuntimeState>())
 		{
 			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
@@ -265,7 +259,9 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor*
 		}
 	}
 
-	// 2. 设置 Dead → 全组件同步响应 Set Dead → all components react synchronously
+	// 2. 关闭碰撞 → 设置 Dead → 全组件同步响应
+	// Disable collision → set Dead → all components react synchronously
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetCharacterState(ERunGameCharacterState::Dead);
 
 	// 3. 广播死亡 Broadcast death
@@ -274,47 +270,6 @@ void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor*
 		RS->OnCharacterDied.Broadcast(DamageType, this);
 	}
 	OnCharacterDied.Broadcast(DamageType, this);
-}
-
-void ARunGameCharacter::OnDeathMontageFinished()
-{
-	StartDissolve();
-}
-
-void ARunGameCharacter::StartDissolve()
-{
-	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-	const int32 NumMaterials = GetMesh()->GetNumMaterials();
-	for (int32 i = 0; i < NumMaterials; ++i)
-	{
-		if (UMaterialInterface* Mat = GetMesh()->GetMaterial(i))
-		{
-			UMaterialInstanceDynamic* DMI = UMaterialInstanceDynamic::Create(Mat, this);
-			DissolveMaterials.Add(DMI);
-			GetMesh()->SetMaterial(i, DMI);
-		}
-	}
-
-	DissolveElapsed = 0.0f;
-	GetWorld()->GetTimerManager().SetTimer(DissolveTimerHandle, this, &ARunGameCharacter::TickDissolve, 0.033f, true);
-}
-
-void ARunGameCharacter::TickDissolve()
-{
-	DissolveElapsed += 0.033f;
-	const float Alpha = FMath::Clamp(DissolveElapsed / DissolveDuration, 0.0f, 1.0f);
-
-	for (UMaterialInstanceDynamic* DMI : DissolveMaterials)
-	{
-		if (DMI) DMI->SetScalarParameterValue(DissolveParameterName, Alpha);
-	}
-
-	if (Alpha >= 1.0f)
-	{
-		GetWorld()->GetTimerManager().ClearTimer(DissolveTimerHandle);
-		Destroy();
-	}
 }
 
 void ARunGameCharacter::OnHealthDepleted(FGameplayTag DamageType, AActor* DeathCauser)
