@@ -65,6 +65,7 @@ void URunGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	if (CachedPRS.IsValid())
 	{
 		CharacterState = CachedPRS->GetCharacterState();
+		bIsCoyoteTime = (CharacterState == ERunGameCharacterState::CoyoteTime);
 		bIsSliding = (CharacterState == ERunGameCharacterState::Sliding);
 		bIsTurning = (CharacterState == ERunGameCharacterState::Turning);
 		bIsDead = (CharacterState == ERunGameCharacterState::Dead);

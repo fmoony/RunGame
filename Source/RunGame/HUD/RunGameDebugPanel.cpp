@@ -419,11 +419,12 @@ FString URunGameDebugPanel::CharacterStateToString(ERunGameCharacterState State)
 {
 	switch (State)
 	{
-	case ERunGameCharacterState::Idle:     return TEXT("Idle");
-	case ERunGameCharacterState::Airborne: return TEXT("Airborne");
-	case ERunGameCharacterState::Sliding:  return TEXT("Sliding");
-	case ERunGameCharacterState::Turning:  return TEXT("Turning");
-	case ERunGameCharacterState::Dead:     return TEXT("Dead");
+	case ERunGameCharacterState::Idle:       return TEXT("Idle");
+	case ERunGameCharacterState::CoyoteTime: return TEXT("CoyoteTime");
+	case ERunGameCharacterState::Airborne:   return TEXT("Airborne");
+	case ERunGameCharacterState::Sliding:    return TEXT("Sliding");
+	case ERunGameCharacterState::Turning:    return TEXT("Turning");
+	case ERunGameCharacterState::Dead:       return TEXT("Dead");
 	default:                               return TEXT("???");
 	}
 }

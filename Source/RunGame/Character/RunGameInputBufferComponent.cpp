@@ -51,14 +51,22 @@ void URunGameInputBufferComponent::BufferInput(ERunGameInputCommand Command)
 		return;
 	}
 
+	// CoyoteTime + Jump → 立即执行（土狼时间跳跃）CoyoteTime + Jump → execute immediately
+	if (CurrentState == ERunGameCharacterState::CoyoteTime && Command == ERunGameInputCommand::Jump)
+	{
+		OnInputCommandConsumed.ExecuteIfBound(Command);
+		return;
+	}
+
 	// 非 Idle 状态——判断是否可缓冲 Non-Idle — check if bufferable
 	bool bShouldBuffer = false;
 
 	switch (Command)
 	{
 	case ERunGameInputCommand::Slide:
-		// 空中按滑铲 → 缓冲，落地触发 Airborne + Slide → buffer, consume on land
-		bShouldBuffer = (CurrentState == ERunGameCharacterState::Airborne);
+		// 空中按滑铲 → 缓冲，落地触发 Airborne/CoyoteTime + Slide → buffer, consume on land
+		bShouldBuffer = (CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::CoyoteTime);
 		break;
 
 	case ERunGameInputCommand::Jump:

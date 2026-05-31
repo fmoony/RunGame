@@ -72,6 +72,9 @@ public:
 	bool bIsSliding = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "State")
+	bool bIsCoyoteTime = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "State")
 	bool bIsTurning = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = "State")

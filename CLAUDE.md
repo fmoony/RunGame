@@ -84,26 +84,36 @@ Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save �
 
 | State | Description | Entry |
 |-------|-------------|-------|
-| `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne; slide/turn ended |
-| `Airborne` | Jumping, falling, walking off ledge | `SetMovementMode` override detects `MOVE_Falling` from Idle |
+| `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne/CoyoteTime; slide/turn ended |
+| `CoyoteTime` | Grace period after walking off ledge (0.15s) — can still jump | `SetMovementMode` detects `MOVE_Falling` from Idle/Turning |
+| `Airborne` | Jumping, falling — supports double jump (`bAirJumpAvailable`) | CoyoteTime expiry; ground jump; coyote-time jump consumed |
 | `Sliding` | Crouched, no ground friction, montage playing | `StartSlide()` calls `SetCharacterState(Sliding)` |
 | `Turning` | Inside turn zone — lateral movement blocked, rotation locked | `TurnFloor` overlap calls `SetCharacterState(Turning)` |
 | `Dead` | All input/movement blocked, dissolving | `Die()` calls `SetCharacterState(Dead)` — terminal |
 
 **Transition matrix** (enforced by `IsCharacterStateTransitionAllowed`):
 
-| FROM \ TO | Idle | Airborne | Sliding | Turning | Dead |
-|-----------|------|----------|---------|---------|------|
-| **Idle**  | -    | YES      | YES¹    | YES     | YES  |
-| **Airborne** | YES | -      | NO²     | YES     | YES  |
-| **Sliding** | YES | YES      | -       | YES     | YES  |
-| **Turning** | YES | YES      | NO      | -       | YES  |
-| **Dead**  | NO   | NO       | NO      | NO      | -    |
+| FROM \ TO | Idle | CoyoteTime | Airborne | Sliding | Turning | Dead |
+|-----------|------|------------|----------|---------|---------|------|
+| **Idle**  | -    | YES        | YES      | YES¹    | YES     | YES  |
+| **CoyoteTime** | YES | -     | YES      | NO      | NO      | YES  |
+| **Airborne** | YES | NO      | -        | NO²     | YES     | YES  |
+| **Sliding** | YES | NO      | YES      | -       | YES     | YES  |
+| **Turning** | YES | YES     | YES      | NO      | -       | YES  |
+| **Dead**  | NO   | NO      | NO       | NO      | NO      | -    |
 
 ¹ Sliding additionally requires `!IsFalling()` at runtime.
-² Sliding input while Airborne is buffered by `URunGameInputBufferComponent`; auto-consumed when state returns to Idle.
+² Sliding input while Airborne/CoyoteTime is buffered by `URunGameInputBufferComponent`; auto-consumed when state returns to Idle.
 
-**Movement reaction** (`URunGameMovementComponent`): Self-binds to `OnCharacterStateChanged`. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne detection via `SetMovementMode` override (not Tick polling).
+**CoyoteTime + Double Jump**:
+
+- `URunGameMovementComponent::SetMovementMode` detects `MOVE_Falling` from Idle/Turning → sets `CoyoteTime` (not Airborne) + arms 0.15s `CoyoteTimer`. On expiry → auto-transition to `Airborne`.
+- `ARunGameCharacter::bAirJumpAvailable` granted on: entering CoyoteTime, ground jump (Idle→Airborne), landing (→Idle). Consumed on: jump during CoyoteTime or Airborne (either via buffered input or direct `DoJumpStart`).
+- `CanJumpInternal_Implementation` overridden: allows jump during CoyoteTime or Airborne with `bAirJumpAvailable`.
+- `Landed()` handles both Airborne and CoyoteTime → Idle transitions.
+- `RunGameInputBufferComponent`: Jump during CoyoteTime → immediate execute (not buffered). Slide during CoyoteTime → buffered (like Airborne).
+
+**Movement reaction** (`URunGameMovementComponent`): Self-binds to `OnCharacterStateChanged`. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
 
 **Animation reaction** (`URunGameAnimInstance`): Self-binds to `OnCharacterStateChanged` and `OnCharacterDied`. Plays slide/death montages. Death blend-out → `PRS->NotifyDeathAnimationFinished` → Character dissolve.
 
@@ -176,10 +186,10 @@ All score variables are `int64`. The timer is paused/unpaused reactively by `OnG
 
 Character binds EnhancedInput → `BufferInput(ERunGameInputCommand)`. Component listens to `UPlayerRuntimeState::OnCharacterStateChanged`, auto-consumes buffered commands when state returns to `Idle`. FIFO queue with 0.3s timeout. Same-type deduplication.
 
-| Command | Buffer when | Consume when |
-|---------|-----------|--------------|
-| `Slide` | Airborne | Landed → state back to Idle |
-| `Jump` | Sliding | Slide ends → state back to Idle |
+| Command | Buffer when | Execute immediately when |
+|---------|-----------|---------------------------|
+| `Slide` | Airborne, CoyoteTime | — |
+| `Jump` | Sliding, Airborne (no bAirJumpAvailable) | CoyoteTime |
 
 Move goes directly to MovementComponent, never buffered. `OnInputCommandConsumed` delegate fires → Character executes `Jump()` or `SetCharacterState(Sliding)`.
 
@@ -187,7 +197,7 @@ Move goes directly to MovementComponent, never buffered. `OnInputCommandConsumed
 
 `URunGameAnimInstance` (`Character/Animation/RunGameAnimInstance.h/.cpp`) — native C++ AnimInstance, replaces deleted `URunGameAnimationComponent`.
 
-**Data cache** (per-frame `NativeUpdateAnimation`): Pulls `Speed`/`GroundSpeed`/`bIsInAir`/`bIsMoving` from `CharacterMovementComponent`. Pulls `CharacterState`/`bIsSliding`/`bIsTurning`/`bIsDead` from cached `UPlayerRuntimeState*` (cached in `NativeInitializeAnimation`, avoids per-frame `GetSubsystem`). Computes `MoveDirectionAngle` (velocity vs actor forward).
+**Data cache** (per-frame `NativeUpdateAnimation`): Pulls `Speed`/`GroundSpeed`/`bIsInAir`/`bIsMoving` from `CharacterMovementComponent`. Pulls `CharacterState`/`bIsCoyoteTime`/`bIsSliding`/`bIsTurning`/`bIsDead` from cached `UPlayerRuntimeState*` (cached in `NativeInitializeAnimation`, avoids per-frame `GetSubsystem`). Computes `MoveDirectionAngle` (velocity vs actor forward).
 
 **Hit reaction trigger**: Binds `PRS->OnHitReaction` → sets `bPlayHitReaction + HitReactionDamageType` — ABP reads these.
 
@@ -249,6 +259,7 @@ DamageDealerComponent::OnOverlap
 - `OnCharacterDied` (BlueprintAssignable) — broadcast inside `Die()`, also on `UPlayerRuntimeState`
 - Death montages configured on `URunGameAnimInstance::DeathMontages` (moved from Character)
 - `PRS->OnDeathAnimationFinished` — dispatch point for dissolve, bound in Character `BeginPlay`
+- **Double jump**: `bAirJumpAvailable` flag managed by `OnCharacterStateChangedCallback` (granted on CoyoteTime/ground-jump/landing, consumed on air-jump). `CanJumpInternal_Implementation` overridden to allow jump during CoyoteTime or Airborne with flag set. `DoJumpStart` bypasses buffer for Airborne double-jump.
 
 ### Skill System
 
@@ -408,10 +419,9 @@ See `CODING_STYLE.md` for detailed formatting rules. Key highlights:
 - **Include paths** — relative to module root (e.g. `#include "Actor/Component/HealthComponent.h"`); forward-declare in headers
 - **`FGameplayTag`** — include `GameplayTagContainer.h`
 - **Logging** — `UE_LOG(LogRunGame, Warning/Error, TEXT("ClassName: message"), *Args)`. Category declared in `RunGame.h`.
+- **Bilingual comments** — All comments must be **Chinese first, English second**, separated by a space. Existing code is grandfathered; new/modified code must comply. Applies to function doc comments, inline comments, and tag markers (TODO/FIXME/HACK/NOTE). Example: `// 土狼时间缓冲期内允许跳跃 CoyoteTime grace period`
 
 ## Scope
 
 - Only modify `ARunGameCharacter` and non-variant classes
 - Never touch `Variant_Combat/`, `Variant_Platforming/`, `Variant_SideScrolling/`
-- 2选择方案A，给出#3的解决方案，#4再探讨一下，更新#1#2的错误描述
-- 2选择方案A，给出#3的解决方案，#4再探讨一下，更新#1#2的错误描述

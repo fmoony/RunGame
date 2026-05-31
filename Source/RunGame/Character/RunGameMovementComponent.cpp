@@ -39,6 +39,8 @@ void URunGameMovementComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 {
 	if (UWorld* World = GetWorld())
 	{
+		World->GetTimerManager().ClearTimer(CoyoteTimer);
+
 		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
 		{
 			PRS->OnCharacterStateChanged.RemoveDynamic(this, &URunGameMovementComponent::OnCharacterStateChanged);
@@ -74,7 +76,7 @@ void URunGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const FVector ForwardDir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	Owner->AddMovementInput(ForwardDir, 1.0f);
 
-	// 方向修正 + 空中检测 Direction correction + airborne detection
+	// 方向修正 Direction correction
 	UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
 	if (!PRS) return;
 
@@ -128,6 +130,8 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 		SpeedModifiers.Empty();
 		CachedCompositeSpeedMultiplier = 1.0f;
 
+		GetWorld()->GetTimerManager().ClearTimer(CoyoteTimer);
+
 		SetMovementMode(MOVE_None);
 		DisableMovement();
 	}
@@ -161,16 +165,49 @@ void URunGameMovementComponent::SetMovementMode(EMovementMode NewMovementMode, u
 	const EMovementMode OldMode = MovementMode;
 	Super::SetMovementMode(NewMovementMode, NewCustomMode);
 
-	// 事件驱动：进入 Falling → Airborne。替代 Tick 中每帧 IsFalling 轮询
+	// 事件驱动：进入 Falling → CoyoteTime（土狼时间缓冲，而非直接 Airborne）
+	// Event-driven: entering Falling → CoyoteTime (grace period, not immediate Airborne)
 	if (OldMode != MOVE_Falling && NewMovementMode == MOVE_Falling)
 	{
 		UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-		if (PRS && PRS->GetCharacterState() == ERunGameCharacterState::Idle)
+		if (PRS)
 		{
-			if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
+			const ERunGameCharacterState CurrentState = PRS->GetCharacterState();
+			if (CurrentState == ERunGameCharacterState::Idle || CurrentState == ERunGameCharacterState::Turning)
 			{
-				Char->SetCharacterState(ERunGameCharacterState::Airborne);
+				if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
+				{
+					Char->SetCharacterState(ERunGameCharacterState::CoyoteTime);
+
+					// 启动 CoyoteTime 定时器——到期后自动转入 Airborne
+					// Arm coyote timer — auto-transition to Airborne on expiry
+					GetWorld()->GetTimerManager().SetTimer(
+						CoyoteTimer,
+						this,
+						&URunGameMovementComponent::OnCoyoteTimeExpired,
+						CoyoteTimeDuration,
+						false
+					);
+				}
 			}
+		}
+	}
+
+	// 着陆检测——清除 CoyoteTimer 和空中跳跃标志 Landing detection — clear coyote timer + air jump flag
+	if (OldMode == MOVE_Falling && NewMovementMode != MOVE_Falling)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CoyoteTimer);
+	}
+}
+
+void URunGameMovementComponent::OnCoyoteTimeExpired()
+{
+	UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
+	if (PRS && PRS->GetCharacterState() == ERunGameCharacterState::CoyoteTime)
+	{
+		if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
+		{
+			Char->SetCharacterState(ERunGameCharacterState::Airborne);
 		}
 	}
 }

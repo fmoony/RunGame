@@ -139,6 +139,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
+	/** 空中跳跃是否可用——进入 CoyoteTime 或跳离地面时设 true，消耗后设 false，落地重置 */
+	bool bAirJumpAvailable = false;
+
+	/** 起跳前状态——OnJumped 用它区分「地面跳」和「土狼时间跳」 Pre-jump state — OnJumped uses it to distinguish ground jump vs coyote-time jump */
+	ERunGameCharacterState PreJumpState = ERunGameCharacterState::Idle;
+
 	void StartSlide();
 
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
@@ -160,6 +166,13 @@ public:
 	virtual float GetMaxHP_Implementation() const override;
 	virtual bool IsDead_Implementation() const override;
 	// ~end IDamagable interface
+
+	/** 覆写：CoyoteTime 或 Airborne + bAirJumpAvailable 时允许跳跃 Override: allow jump during CoyoteTime or Airborne with double jump available */
+	virtual bool CanJumpInternal_Implementation() const override;
+
+	/** 跳跃物理生效后回调 —— 在此统筹二段跳扣除和 CoyoteTime→Airborne 状态切换
+	 *  Called after jump physics is applied — handles air jump consumption and CoyoteTime→Airborne transition */
+	virtual void OnJumped_Implementation() override;
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
 	FORCEINLINE USkillComponent* GetSkillComponent() const { return SkillComponent; }

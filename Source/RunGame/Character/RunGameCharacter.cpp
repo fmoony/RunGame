@@ -199,7 +199,21 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 	}
 }
 
-void ARunGameCharacter::DoJumpStart() { InputBuffer->BufferInput(ERunGameInputCommand::Jump); }
+void ARunGameCharacter::DoJumpStart()
+{
+	// CanJump 通过 → 执行跳跃（副作用在 OnJumped）；不通过 → 缓冲（滑铲中等场景）
+	// CanJump passes → execute jump (side effects in OnJumped); fails → buffer (e.g. during slide)
+	if (CanJump())
+	{
+		PreJumpState = GetCharacterState();
+		Jump();
+	}
+	else
+	{
+		InputBuffer->BufferInput(ERunGameInputCommand::Jump);
+	}
+}
+
 void ARunGameCharacter::DoJumpEnd() { StopJumping(); }
 
 void ARunGameCharacter::StartSlide() { InputBuffer->BufferInput(ERunGameInputCommand::Slide); }
@@ -209,7 +223,8 @@ void ARunGameCharacter::OnBufferedInputReady(ERunGameInputCommand Command)
 	switch (Command)
 	{
 	case ERunGameInputCommand::Jump:
-		Jump();
+		PreJumpState = GetCharacterState();
+		Jump();  // CanJumpInternal validates; OnJumped handles side effects
 		break;
 	case ERunGameInputCommand::Slide:
 		SetCharacterState(ERunGameCharacterState::Sliding);
@@ -361,6 +376,53 @@ bool ARunGameCharacter::IsDead_Implementation() const { return HealthComponent ?
 
 // ~end IDamagable
 
+// -- Jump Override --
+
+bool ARunGameCharacter::CanJumpInternal_Implementation() const
+{
+	// 默认地面检查 Default ground check
+	if (Super::CanJumpInternal_Implementation())
+	{
+		return true;
+	}
+
+	// CoyoteTime — 土狼时间缓冲期内允许跳跃 CoyoteTime grace period
+	const ERunGameCharacterState State = GetCharacterState();
+	if (State == ERunGameCharacterState::CoyoteTime)
+	{
+		return true;
+	}
+
+	// Airborne + 二段跳可用 Double jump available
+	if (State == ERunGameCharacterState::Airborne && bAirJumpAvailable)
+	{
+		return true;
+	}
+
+	return false;
+}
+
+void ARunGameCharacter::OnJumped_Implementation()
+{
+	Super::OnJumped_Implementation();
+
+	if (PreJumpState == ERunGameCharacterState::CoyoteTime)
+	{
+		// 土狼时间中起跳 → 消耗空中资格 + 转入 Airborne
+		// Jumped during coyote time → consume air jump + transition to Airborne
+		bAirJumpAvailable = false;
+		SetCharacterState(ERunGameCharacterState::Airborne);
+	}
+	else if (PreJumpState == ERunGameCharacterState::Airborne)
+	{
+		// 二段跳 → 消耗空中资格
+		// Double jump → consume air jump
+		bAirJumpAvailable = false;
+	}
+	// PreJumpState == Idle: 地面跳——空中资格由 OnCharacterStateChangedCallback 在 Idle→CoyoteTime 时授予
+	// PreJumpState == Idle: ground jump — air jump granted by OnCharacterStateChangedCallback on Idle→CoyoteTime
+}
+
 // -- State Machine --
 
 void ARunGameCharacter::SetCharacterState(ERunGameCharacterState NewState)
@@ -392,13 +454,23 @@ bool ARunGameCharacter::IsCharacterStateTransitionAllowed(ERunGameCharacterState
 
 void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
-	// Character 黑板仅处理自身级别数据：
-	// 运动物理 → MovementComponent 自响应
-	// 动画表现 → AnimationComponent 自响应
-	// Character blackboard only handles its own data:
-	// Movement physics → MovementComponent self-reacts
-	// Animation → AnimationComponent self-reacts
-	// InputBuffer 自行监听 Dead → 清空缓冲
+	// 进入 CoyoteTime 或从地面跳起 → 授予空中跳跃资格 Entering CoyoteTime or ground jump → grant air jump
+	if (NewState == ERunGameCharacterState::CoyoteTime)
+	{
+		bAirJumpAvailable = true;
+	}
+
+	// 地面起跳 → Airborne → 授予空中跳跃资格 Ground jump → Airborne → grant air jump
+	if (NewState == ERunGameCharacterState::Airborne && OldState == ERunGameCharacterState::Idle)
+	{
+		bAirJumpAvailable = true;
+	}
+
+	// 着陆 → 重置空中跳跃资格 Landing → reset air jump
+	if (NewState == ERunGameCharacterState::Idle)
+	{
+		bAirJumpAvailable = true;
+	}
 }
 
 void ARunGameCharacter::Landed(const FHitResult& Hit)
@@ -408,7 +480,8 @@ void ARunGameCharacter::Landed(const FHitResult& Hit)
 	UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
 	if (!RS) return;
 
-	if (RS->GetCharacterState() == ERunGameCharacterState::Airborne)
+	const ERunGameCharacterState State = RS->GetCharacterState();
+	if (State == ERunGameCharacterState::Airborne || State == ERunGameCharacterState::CoyoteTime)
 	{
 		SetCharacterState(ERunGameCharacterState::Idle);
 		// InputBuffer 自行监听状态变化 → Idle → 自动消费缓冲的 Slide

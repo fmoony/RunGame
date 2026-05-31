@@ -56,8 +56,12 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
-	/** 事件驱动空中检测：移动模式变为 Falling → 设 Airborne 状态 */
+	/** 事件驱动空中检测：移动模式变为 Falling → 设 CoyoteTime（土狼时间缓冲），定时器到期转 Airborne */
 	virtual void SetMovementMode(EMovementMode NewMovementMode, uint8 NewCustomMode = 0) override;
+
+	/** CoyoteTime 持续时间（秒）——走下边缘后仍可跳跃的缓冲窗口 Duration of coyote time window after walking off ledge */
+	UPROPERTY(EditAnywhere, Category = "Movement|CoyoteTime")
+	float CoyoteTimeDuration = 0.15f;
 
 private:
 	/** 响应角色状态变化 React to character state changes */
@@ -80,4 +84,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
+
+	/** CoyoteTime 到期回调——状态仍为 CoyoteTime 则转入 Airborne Coyote time expiry — if still in CoyoteTime, transition to Airborne */
+	void OnCoyoteTimeExpired();
+
+	FTimerHandle CoyoteTimer;
 };

@@ -62,10 +62,16 @@ bool UPlayerRuntimeState::IsCharacterStateTransitionAllowed(ERunGameCharacterSta
 	case ERunGameCharacterState::Idle:
 		return CurrentCharacterState == ERunGameCharacterState::Sliding
 			|| CurrentCharacterState == ERunGameCharacterState::Airborne
+			|| CurrentCharacterState == ERunGameCharacterState::CoyoteTime
+			|| CurrentCharacterState == ERunGameCharacterState::Turning;
+
+	case ERunGameCharacterState::CoyoteTime:
+		return CurrentCharacterState == ERunGameCharacterState::Idle
 			|| CurrentCharacterState == ERunGameCharacterState::Turning;
 
 	case ERunGameCharacterState::Airborne:
 		return CurrentCharacterState == ERunGameCharacterState::Idle
+			|| CurrentCharacterState == ERunGameCharacterState::CoyoteTime
 			|| CurrentCharacterState == ERunGameCharacterState::Turning;
 
 	case ERunGameCharacterState::Sliding:
