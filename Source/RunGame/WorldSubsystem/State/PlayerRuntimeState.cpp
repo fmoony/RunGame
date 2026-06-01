@@ -1,4 +1,5 @@
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
+#include "GameplayTagContainer.h"
 #include "RunGame.h"
 
 void UPlayerRuntimeState::Initialize(FSubsystemCollectionBase& Collection)
@@ -14,6 +15,27 @@ void UPlayerRuntimeState::Deinitialize()
 void UPlayerRuntimeState::ResetForNewGame()
 {
 	CurrentCharacterState = ERunGameCharacterState::Idle;
+	ActiveEffectTags.Reset();
+}
+
+// ---- Effect Tags ----
+
+void UPlayerRuntimeState::AddEffectTag(FGameplayTag Tag)
+{
+	if (!Tag.IsValid() || ActiveEffectTags.HasTag(Tag)) return;
+
+	ActiveEffectTags.AddTag(Tag);
+	UE_LOG(LogRunGame, Warning, TEXT("PlayerRuntimeState:AddEffectTag Tag:%s, Count:%d"), *Tag.ToString(), ActiveEffectTags.Num());
+	OnEffectTagChanged.Broadcast(Tag, true);
+}
+
+void UPlayerRuntimeState::RemoveEffectTag(FGameplayTag Tag)
+{
+	if (!Tag.IsValid() || !ActiveEffectTags.HasTag(Tag)) return;
+
+	ActiveEffectTags.RemoveTag(Tag);
+	UE_LOG(LogRunGame, Warning, TEXT("PlayerRuntimeState:RemoveEffectTag Tag:%s, Count:%d"), *Tag.ToString(), ActiveEffectTags.Num());
+	OnEffectTagChanged.Broadcast(Tag, false);
 }
 
 // ---- Animation Events ----

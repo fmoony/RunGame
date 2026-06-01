@@ -1,5 +1,4 @@
 #include "Character/RunGameEffectComponent.h"
-#include "Actor/Component/HealthComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "NiagaraSystem.h"
 #include "NiagaraComponent.h"
@@ -18,20 +17,12 @@ void URunGameEffectComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	AActor* Owner = GetOwner();
-	if (!Owner) return;
-
-	// 绑定无敌状态 Bind to invincibility
-	HealthComp = Owner->FindComponentByClass<UHealthComponent>();
-	if (HealthComp)
+	// 缓存 PRS + 绑定效果标签变化和死亡溶解 Cache PRS + bind effect tag changes and death dissolve
+	CachedPRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
+	if (CachedPRS)
 	{
-		HealthComp->OnInvincibilityChanged.AddDynamic(this, &URunGameEffectComponent::OnInvincibilityChanged);
-	}
-
-	// 绑定死亡动画完成 → 溶解 Bind to death animation finished → dissolve
-	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
-	{
-		PRS->OnDeathAnimationFinished.AddDynamic(this, &URunGameEffectComponent::OnDissolveTriggered);
+		CachedPRS->OnEffectTagChanged.AddDynamic(this, &URunGameEffectComponent::OnEffectTagChanged);
+		CachedPRS->OnDeathAnimationFinished.AddDynamic(this, &URunGameEffectComponent::OnDissolveTriggered);
 	}
 }
 
@@ -48,18 +39,11 @@ void URunGameEffectComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	DissolveMaterials.Empty();
 
-	if (HealthComp)
+	if (CachedPRS)
 	{
-		HealthComp->OnInvincibilityChanged.RemoveDynamic(this, &URunGameEffectComponent::OnInvincibilityChanged);
-		HealthComp = nullptr;
-	}
-
-	if (UWorld* World = GetWorld())
-	{
-		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			PRS->OnDeathAnimationFinished.RemoveDynamic(this, &URunGameEffectComponent::OnDissolveTriggered);
-		}
+		CachedPRS->OnEffectTagChanged.RemoveDynamic(this, &URunGameEffectComponent::OnEffectTagChanged);
+		CachedPRS->OnDeathAnimationFinished.RemoveDynamic(this, &URunGameEffectComponent::OnDissolveTriggered);
+		CachedPRS = nullptr;
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -67,16 +51,47 @@ void URunGameEffectComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 // ---- Invincibility ----
 
-void URunGameEffectComponent::OnInvincibilityChanged(bool bNewInvincible)
+void URunGameEffectComponent::OnEffectTagChanged(FGameplayTag Tag, bool bAdded)
 {
-	if (bNewInvincible)
+	if (!IsTagVisualRelevant(Tag)) return;
+
+	if (bAdded)
 	{
 		SpawnEffect(InvincibilityNiagara, InvincibilityFX);
 	}
 	else
 	{
-		DestroyEffect(InvincibilityFX);
+		// 检查是否还有其他无敌标签在活跃 Check if other invincibility tags are still active
+		bool bStillActive = false;
+		if (CachedPRS)
+		{
+			FGameplayTagContainer SingleTagContainer;
+			for (const FGameplayTag& ActiveTag : CachedPRS->ActiveEffectTags)
+			{
+				if (ActiveTag == Tag) continue;  // skip the one being removed
+				SingleTagContainer.Reset();
+				SingleTagContainer.AddTag(ActiveTag);
+				if (SingleTagContainer.MatchesQuery(InvincibilityTagQuery))
+				{
+					bStillActive = true;
+					break;
+				}
+			}
+		}
+		if (!bStillActive)
+		{
+			DestroyEffect(InvincibilityFX);
+		}
 	}
+}
+
+bool URunGameEffectComponent::IsTagVisualRelevant(FGameplayTag Tag) const
+{
+	if (InvincibilityTagQuery.IsEmpty()) return false;
+
+	FGameplayTagContainer SingleTagContainer;
+	SingleTagContainer.AddTag(Tag);
+	return SingleTagContainer.MatchesQuery(InvincibilityTagQuery);
 }
 
 // ---- Dissolve ----

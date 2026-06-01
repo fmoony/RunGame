@@ -8,6 +8,8 @@
 #include "RunGameType.h"
 #include "HealthComponent.generated.h"
 
+class UPlayerRuntimeState;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentHP, float, MaxHP, float, Delta);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDamageTaken, float, Damage, FGameplayTag, DamageType, AActor*, DamageCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, FGameplayTag, DamageType, AActor*, DeathCauser);
@@ -67,20 +69,29 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Health")
 	bool IsDead() const { return CurrentHP <= 0.0f; }
 
-	UFUNCTION(BlueprintCallable, Category = "Health")
-	void SetInvincible(bool bNewInvincible);
-
 	UFUNCTION(BlueprintPure, Category = "Health")
-	bool IsInvincible() const { return bIsInvincible; }
+	bool IsInvincible() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Revive(float RestoreHP);
+
+	/** 匹配后即视为无敌的标签查询 Tags matching this query grant invincibility */
+	UPROPERTY(EditAnywhere, Category = "Health")
+	FGameplayTagQuery InvincibilityTagQuery;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	UFUNCTION()
+	void OnEffectTagChanged(FGameplayTag Tag, bool bAdded);
+
+	bool IsTagInvincibilityRelevant(FGameplayTag Tag) const;
+
+	UPROPERTY()
+	TObjectPtr<UPlayerRuntimeState> CachedPRS;
+
 	float CurrentHP = 0.0f;
-	bool bIsInvincible = false;
+	int32 InvincibilityTagCount = 0;
 };

@@ -2,19 +2,19 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "GameplayTagContainer.h"
 #include "RunGameType.h"
 #include "RunGameEffectComponent.generated.h"
 
 class UNiagaraSystem;
 class UNiagaraComponent;
 class UMaterialInstanceDynamic;
-class UHealthComponent;
 class UPlayerRuntimeState;
 
 /**
  * 角色特效组件 —— 自治单元，统管所有视觉特效
  *
- * 无敌：监听 HealthComponent::OnInvincibilityChanged，附着/销毁 Niagara 粒子。
+ * 无敌：监听 PlayerRuntimeState::OnEffectTagsChanged，匹配标签后附着/销毁 Niagara 粒子。
  * 溶解：监听 PlayerRuntimeState::OnDeathAnimationFinished，材质溶解动画 + 可选 Niagara 粒子 → 到期销毁角色。
  */
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
@@ -29,6 +29,10 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "Effect|Invincibility")
 	TObjectPtr<UNiagaraSystem> InvincibilityNiagara;
+
+	/** 匹配后触发无敌视觉的标签查询 Tags matching this query trigger invincibility visual */
+	UPROPERTY(EditAnywhere, Category = "Effect|Invincibility")
+	FGameplayTagQuery InvincibilityTagQuery;
 
 	// ---- 溶解 Dissolve ----
 
@@ -56,7 +60,9 @@ private:
 	// -- 无敌 Invincibility --
 
 	UFUNCTION()
-	void OnInvincibilityChanged(bool bNewInvincible);
+	void OnEffectTagChanged(FGameplayTag Tag, bool bAdded);
+
+	bool IsTagVisualRelevant(FGameplayTag Tag) const;
 
 	// -- 溶解 Dissolve --
 
@@ -73,7 +79,7 @@ private:
 	void DestroyEffect(TObjectPtr<UNiagaraComponent>& Component);
 
 	UPROPERTY()
-	TObjectPtr<UHealthComponent> HealthComp;
+	TObjectPtr<UPlayerRuntimeState> CachedPRS;
 
 	UPROPERTY()
 	TObjectPtr<UNiagaraComponent> InvincibilityFX;

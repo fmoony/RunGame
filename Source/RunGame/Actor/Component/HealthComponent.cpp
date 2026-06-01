@@ -1,5 +1,7 @@
 #include "Actor/Component/HealthComponent.h"
+#include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
+#include "RunGame.h"
 
 UHealthComponent::UHealthComponent()
 {
@@ -10,15 +12,26 @@ void UHealthComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 初始化生命值为满血 Initialize HP to full
 	CurrentHP = MaxHP;
 
-	// 广播初始生命值 Broadcast initial health
+	// 缓存 PRS + 监听效果标签变化 Cache PRS + listen to effect tag changes
+	CachedPRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
+	if (CachedPRS)
+	{
+		CachedPRS->OnEffectTagChanged.AddDynamic(this, &UHealthComponent::OnEffectTagChanged);
+	}
+
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
 }
 
 void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (CachedPRS)
+	{
+		CachedPRS->OnEffectTagChanged.RemoveDynamic(this, &UHealthComponent::OnEffectTagChanged);
+		CachedPRS = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -26,7 +39,7 @@ void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor* DamageCauser)
 {
-	if (CurrentHP <= 0.0f || Damage <= 0.0f || bIsInvincible)
+	if (CurrentHP <= 0.0f || Damage <= 0.0f || IsInvincible())
 	{
 		return;
 	}
@@ -74,9 +87,7 @@ void UHealthComponent::ForceKill(FGameplayTag DamageType, AActor* Killer)
 		return;
 	}
 
-	bIsInvincible = false;
 	CurrentHP = 0.0f;
-
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, -MaxHP);
 	OnDeath.Broadcast(DamageType, Killer);
 }
@@ -86,12 +97,38 @@ float UHealthComponent::GetHealthPercentage() const
 	return MaxHP > 0.0f ? CurrentHP / MaxHP : 0.0f;
 }
 
-void UHealthComponent::SetInvincible(bool bNewInvincible)
+bool UHealthComponent::IsInvincible() const
 {
-	if (bIsInvincible != bNewInvincible)
+	return InvincibilityTagCount > 0;
+}
+
+bool UHealthComponent::IsTagInvincibilityRelevant(FGameplayTag Tag) const
+{
+	if (InvincibilityTagQuery.IsEmpty()) return false;
+
+	FGameplayTagContainer SingleTagContainer;
+	SingleTagContainer.AddTag(Tag);
+	return SingleTagContainer.MatchesQuery(InvincibilityTagQuery);
+}
+
+void UHealthComponent::OnEffectTagChanged(FGameplayTag Tag, bool bAdded)
+{
+	UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:OnEffectTagChanged Tag:%s, bAdded:%d"), *Tag.ToString(), bAdded);
+	if (!IsTagInvincibilityRelevant(Tag))
 	{
-		bIsInvincible = bNewInvincible;
-		OnInvincibilityChanged.Broadcast(bIsInvincible);
+		UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:Tag not relevant for invincibility"));
+		return;
+	}
+
+	const int32 OldCount = InvincibilityTagCount;
+	InvincibilityTagCount = bAdded ? InvincibilityTagCount + 1 : FMath::Max(InvincibilityTagCount - 1, 0);
+
+	UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:InvincibilityTagCount Old:%d → New:%d"), OldCount, InvincibilityTagCount);
+
+	// 只有 0↔1 变化时才广播 Only broadcast on 0↔1 transition
+	if ((OldCount == 0 && InvincibilityTagCount > 0) || (OldCount > 0 && InvincibilityTagCount == 0))
+	{
+		OnInvincibilityChanged.Broadcast(InvincibilityTagCount > 0);
 	}
 }
 

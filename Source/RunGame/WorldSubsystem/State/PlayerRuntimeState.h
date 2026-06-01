@@ -12,6 +12,7 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterStateChanged, ERunGa
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnCharacterDied, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnHitReaction, float, Damage, FGameplayTag, DamageType);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FPR_OnDeathAnimationFinished);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FPR_OnEffectTagChanged, FGameplayTag, Tag, bool, bAdded);
 
 /**
  * 角色状态机——纯事件总线。
@@ -58,7 +59,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Animation")
 	void NotifyDeathAnimationFinished();
 
-	/** 重置为新游戏——清除角色状态 Reset for new game: clear character state to Idle */
+	// ---- Effect Tags (事件总线) ----
+
+	/** 活跃效果标签容器——增删时广播 OnEffectTagsChanged Active effect tags — broadcast OnEffectTagsChanged on add/remove */
+	UPROPERTY(BlueprintReadOnly, Category = "Player|Effects")
+	FGameplayTagContainer ActiveEffectTags;
+
+	UPROPERTY(BlueprintAssignable, Category = "Player|Events")
+	FPR_OnEffectTagChanged OnEffectTagChanged;
+
+	UFUNCTION(BlueprintCallable, Category = "Player|Effects")
+	void AddEffectTag(FGameplayTag Tag);
+
+	UFUNCTION(BlueprintCallable, Category = "Player|Effects")
+	void RemoveEffectTag(FGameplayTag Tag);
+
+	/** 重置为新游戏——清除角色状态和效果标签 Reset for new game: clear character state and effect tags */
 	void ResetForNewGame();
 
 	// ---- Lifecycle ----
