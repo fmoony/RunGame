@@ -164,7 +164,7 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	CurrentEnergy = FMath::Clamp(CurrentEnergy - SkillDef->EnergyCost, 0.0f, MaxEnergy);
 	OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 
-	ActiveExecution = ExecObj;
+	ActiveExecutions.Add(ExecObj);
 
 	if (ExecObj)
 	{
@@ -290,12 +290,15 @@ void USkillComponent::SetEnergyRegenMultiplier(float Mult)
 
 void USkillComponent::ClearAllCooldowns()
 {
-	// 取消当前活跃技能执行（如 Unstoppable 的 RevertTimer）Cancel active skill execution timer
-	if (ActiveExecution.IsValid())
+	// 取消所有活跃技能执行 Cancel all active skill executions
+	for (auto& Exec : ActiveExecutions)
 	{
-		ActiveExecution->Cancel(GetOwner());
-		ActiveExecution.Reset();
+		if (Exec.IsValid())
+		{
+			Exec->Cancel(GetOwner());
+		}
 	}
+	ActiveExecutions.Empty();
 
 	if (UWorld* World = GetWorld())
 	{

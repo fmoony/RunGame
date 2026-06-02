@@ -9,8 +9,6 @@
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "RunGame.h"
 
-PRAGMA_DISABLE_OPTIMIZATION
-
 void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
 {
 	ACharacter* Character = Cast<ACharacter>(Instigator);
@@ -156,4 +154,4 @@ void USkillExecution_Unstoppable::RevertInvincibility(AActor* Instigator)
 	}
 }
 
-PRAGMA_ENABLE_OPTIMIZATION
+

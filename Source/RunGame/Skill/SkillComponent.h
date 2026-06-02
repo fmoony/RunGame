@@ -135,8 +135,8 @@ private:
 	UPROPERTY()
 	TMap<FGameplayTag, FSkillRuntimeState> SkillStates;
 
-	/** 当前活跃的技能执行对象——死亡时取消其定时器 Active skill execution tracked for cancellation on death */
-	TWeakObjectPtr<USkillExecutionBase> ActiveExecution;
+	/** 活跃的技能执行对象——支持多技能叠加，死亡时遍历 Cancel Active executions — supports stacking, cancelled on death */
+	TArray<TWeakObjectPtr<USkillExecutionBase>> ActiveExecutions;
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
 
