@@ -83,7 +83,12 @@ void ARunGameGameMode::OnFloorSystemReadyCallback()
 			StartTransform = PC->GetPawn()->GetTransform();
 		}
 
-		FloorSystem->SpawnInitialFloors(StartTransform);
+		// 延迟 0.4s 生成——等 Lumen 表面缓存构建完。否则第一块地板全黑。
+		FTimerHandle DelayHandle;
+		GetWorld()->GetTimerManager().SetTimer(DelayHandle, [FloorSystem, StartTransform]()
+		{
+			FloorSystem->SpawnInitialFloors(StartTransform);
+		}, 1.f, false);
 	}
 }
 

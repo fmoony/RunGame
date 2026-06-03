@@ -18,6 +18,7 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameMovementComponent;
 class URunGameEffectComponent;
+class URunGameCollisionAbilityComponent;
 class UNiagaraSystem;
 class UNiagaraComponent;
 struct FInputActionValue;
@@ -50,6 +51,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameEffectComponent> EffectComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameCollisionAbilityComponent> CollisionAbility;
 
 protected:
 

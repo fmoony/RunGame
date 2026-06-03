@@ -5,6 +5,7 @@
 #include "Character/RunGameMovementComponent.h"
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameEffectComponent.h"
+#include "Character/RunGameCollisionAbilityComponent.h"
 #include "Animation/RunGameAnimInstance.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
@@ -57,6 +58,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
 	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));
+	CollisionAbility = CreateDefaultSubobject<URunGameCollisionAbilityComponent>(TEXT("CollisionAbility"));
 
 	// 注入 Native AnimInstance 类 Inject native AnimInstance class
 	GetMesh()->SetAnimInstanceClass(URunGameAnimInstance::StaticClass());

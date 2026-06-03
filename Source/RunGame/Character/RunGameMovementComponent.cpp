@@ -17,8 +17,8 @@ void URunGameMovementComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	BaseMaxWalkSpeed = MaxWalkSpeed;
-	SmoothedMaxWalkSpeed = MaxWalkSpeed;
+	MaxWalkSpeed = BaseMaxWalkSpeed;
+	SmoothedMaxWalkSpeed = BaseMaxWalkSpeed;
 	DefaultGroundFriction = GroundFriction;
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
 

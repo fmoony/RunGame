@@ -27,6 +27,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Movement|Speed")
 	TObjectPtr<UCurveFloat> MaxSpeedCurve;
 
+	/** 基础最大行走速度 Base max walk speed — editable in Blueprint */
+	UPROPERTY(EditAnywhere, Category = "Movement|Speed")
+	float BaseMaxWalkSpeed = 2000.0f;
+
 	/** Duration in seconds to reach target speed via smooth interpolation */
 	UPROPERTY(EditAnywhere, Category = "Movement|Speed")
 	float SpeedTransitionDuration = 0.5f;
@@ -70,8 +74,7 @@ private:
 
 	// -- Speed --
 
-	float SmoothedMaxWalkSpeed = 1200.0f;
-	float BaseMaxWalkSpeed = 1200.0f;
+	float SmoothedMaxWalkSpeed = 2000.0f;
 	float DefaultGroundFriction = 8.0f;
 	TMap<FGameplayTag, float> SpeedModifiers;
 	float CachedCompositeSpeedMultiplier = 1.0f;
