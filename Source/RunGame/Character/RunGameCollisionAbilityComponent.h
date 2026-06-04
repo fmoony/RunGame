@@ -7,6 +7,7 @@
 
 class UNiagaraSystem;
 class UPlayerRuntimeState;
+class UCapsuleComponent;
 
 /**
  * 碰撞管理组件 —— 自治单元，利用角色自身胶囊体做碰撞检测。
@@ -53,7 +54,7 @@ private:
 	TObjectPtr<UPlayerRuntimeState> CachedPRS;
 
 	UPROPERTY()
-	TObjectPtr<class UCapsuleComponent> Capsule;
+	TObjectPtr<UCapsuleComponent> Capsule;
 
 	int32 ActiveTagCount = 0;
 	FGameplayTag ActiveSkillTag;

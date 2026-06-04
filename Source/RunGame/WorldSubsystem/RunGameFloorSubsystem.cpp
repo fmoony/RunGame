@@ -222,6 +222,9 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 	Floor->SetActorEnableCollision(true);
 	Floor->UpdateComponentTransforms();
 
+	// 通知子 Actor（Trap 等）Floor 已从池子激活 Notify child actors (Trap etc.) that Floor was activated from pool
+	Floor->OnFloorActivated.Broadcast(Floor);
+
 	BindFloorDelegates(Floor);
 
 	NextSpawnTransform = Floor->GetAttachToTransform(Location);
@@ -254,6 +257,9 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 	{
 		Spawner->DespawnCoins();
 	}
+
+	// 通知子 Actor（Trap 等）Floor 即将归还池子 Notify child actors (Trap etc.) that Floor is returning to pool
+	Floor->OnFloorDeactivated.Broadcast(Floor);
 
 	ActiveFloors.RemoveSwap(Floor);
 	UnbindFloorDelegates(Floor);

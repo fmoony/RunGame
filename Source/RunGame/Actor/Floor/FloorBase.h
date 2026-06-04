@@ -16,6 +16,7 @@ class USplineComponent;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorPlayerEnteredSignature, AFloorBase*, Floor);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorRecycleRequestedSignature, AFloorBase*, Floor);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnFloorPoolLifecycleSignature, AFloorBase*, Floor);
 
 UCLASS()
 class RUNGAME_API AFloorBase : public AActor
@@ -76,6 +77,14 @@ public:
 	/** Broadcast when the recycle delay timer expires and the floor is ready to return to pool */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
 	FOnFloorRecycleRequestedSignature OnRecycleRequested;
+
+	/** 池子激活 — FloorSubsystem 从池子取出时广播 Pool activate — broadcast when FloorSubsystem takes from pool */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
+	FOnFloorPoolLifecycleSignature OnFloorActivated;
+
+	/** 池子停用 — FloorSubsystem 归还池子时广播 Pool deactivate — broadcast when FloorSubsystem returns to pool */
+	UPROPERTY(BlueprintAssignable, Category = "RunGame|Floor")
+	FOnFloorPoolLifecycleSignature OnFloorDeactivated;
 
 	/** Coin spawner component. CoinClass == nullptr means no coins on this floor */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Coins")
