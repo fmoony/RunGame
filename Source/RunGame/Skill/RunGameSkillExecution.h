@@ -7,6 +7,8 @@
 #include "GameplayTagContainer.h"
 #include "RunGameSkillExecution.generated.h"
 
+class UHealthComponent;
+
 /**
  * Base class for skill execution behavior.
  *
@@ -114,4 +116,33 @@ private:
 
 	/** 速度插值完成 → 撤无敌 Tag Speed interpolation complete → remove defense tag */
 	void RevertInvincibility(AActor* Instigator);
+};
+
+
+/**
+ * Shield skill — 一次性护盾，吸收伤害直至耗尽 One-time shield, absorbs damage until depleted.
+ * 护盾存在期间 OnShieldBroken 触发时自动清 ShieldTag。
+ * Shield tag auto-removed when shield breaks via OnShieldBroken.
+ */
+UCLASS(Blueprintable, BlueprintType)
+class RUNGAME_API USkillExecution_Shield : public USkillExecutionBase
+{
+	GENERATED_BODY()
+
+public:
+	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
+	virtual void Cancel_Implementation(AActor* Instigator) override;
+	virtual void Reset_Implementation() override;
+	virtual void SetupEffectTags_Implementation(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag) override;
+
+private:
+	/** 护盾 Tag — 由 SkillComponent 从 DefenseEffectTag 传入，匹配 HealthComponent 的 ShieldTagQuery Shield tag — passed from DefenseEffectTag, matches HealthComponent ShieldTagQuery */
+	FGameplayTag ShieldTag;
+
+	/** 破盾回调 — 自动撤 Tag Auto-remove tag when shield breaks */
+	UFUNCTION()
+	void OnShieldBrokenCallback();
+
+	UPROPERTY()
+	TObjectPtr<UHealthComponent> BoundHealthComponent;
 };

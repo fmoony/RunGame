@@ -78,6 +78,12 @@ private:
 	UFUNCTION()
 	void OnCollisionStateChangedCallback();
 
+	UFUNCTION()
+	void OnShieldChangedCallback(float CurrentShield);
+
+	UFUNCTION()
+	void OnShieldBrokenCallback();
+
 	// Widgets
 	UPROPERTY()
 	UTextBlock* TitleText;

@@ -14,6 +14,8 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnHealthChanged, float, CurrentH
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnDamageTaken, float, Damage, FGameplayTag, DamageType, AActor*, DamageCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnDeath, FGameplayTag, DamageType, AActor*, DeathCauser);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInvincibilityChangedSignature, bool, bNewInvincible);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnShieldChangedSignature, float, CurrentShield);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnShieldBrokenSignature);
 
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API UHealthComponent : public UActorComponent
@@ -75,9 +77,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Health")
 	void Revive(float RestoreHP);
 
+	// ---- 标签查询 Tag queries ----
+
 	/** 匹配后即视为无敌的标签查询 Tags matching this query grant invincibility */
-	UPROPERTY(EditAnywhere, Category = "Health")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Tags")
 	FGameplayTagQuery InvincibilityTagQuery;
+
+	/** 匹配后即激活护盾的标签查询 Tags matching this query activate shield */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Tags")
+	FGameplayTagQuery ShieldTagQuery;
+
+	/** 护盾激活时的默认吸收量 Default shield absorption amount when shield tag becomes active */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Shield")
+	float DefaultShieldAmount = 50.0f;
+
+	// ---- 护盾 Shield ----
+
+	/** 添加护盾 — 伤害优先扣盾再扣血 Add shield — damage absorbs shield before HP */
+	UFUNCTION(BlueprintCallable, Category = "Health|Shield")
+	void AddShield(float Amount);
+
+	/** 移除护盾 — 清空剩余盾量 Remove shield — clear remaining shield */
+	UFUNCTION(BlueprintCallable, Category = "Health|Shield")
+	void RemoveShield();
+
+	UFUNCTION(BlueprintPure, Category = "Health|Shield")
+	float GetShieldHP() const { return ShieldHP; }
+
+	/** 护盾值变化时广播 Broadcast when shield amount changes */
+	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
+	FOnShieldChangedSignature OnShieldChanged;
+
+	/** 护盾被击破时广播 Broadcast when shield breaks */
+	UPROPERTY(BlueprintAssignable, Category = "Health|Delegates")
+	FOnShieldBrokenSignature OnShieldBroken;
 
 protected:
 	virtual void BeginPlay() override;
@@ -87,11 +120,13 @@ private:
 	UFUNCTION()
 	void OnEffectTagChanged(FGameplayTag Tag, bool bAdded);
 
-	bool IsTagInvincibilityRelevant(FGameplayTag Tag) const;
+	bool IsTagRelevantToQuery(FGameplayTag Tag, const FGameplayTagQuery& Query) const;
 
 	UPROPERTY()
 	TObjectPtr<UPlayerRuntimeState> CachedPRS;
 
 	float CurrentHP = 0.0f;
+	float ShieldHP = 0.0f;
 	int32 InvincibilityTagCount = 0;
+	int32 ShieldTagCount = 0;
 };

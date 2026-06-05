@@ -44,6 +44,22 @@ void UHealthComponent::ApplyDamage(float Damage, FGameplayTag DamageType, AActor
 		return;
 	}
 
+	// 护盾先吸收 — 破盾时广播 Shield absorbs first — broadcast on break
+	if (ShieldHP > 0.0f)
+	{
+		if (Damage <= ShieldHP)
+		{
+			ShieldHP -= Damage;
+			OnShieldChanged.Broadcast(ShieldHP);
+			return;
+		}
+
+		Damage -= ShieldHP;
+		ShieldHP = 0.0f;
+		OnShieldChanged.Broadcast(0.0f);
+		OnShieldBroken.Broadcast();
+	}
+
 	const float OldHP = CurrentHP;
 	CurrentHP = FMath::Clamp(CurrentHP - Damage, 0.0f, MaxHP);
 	const float Delta = CurrentHP - OldHP;
@@ -102,33 +118,48 @@ bool UHealthComponent::IsInvincible() const
 	return InvincibilityTagCount > 0;
 }
 
-bool UHealthComponent::IsTagInvincibilityRelevant(FGameplayTag Tag) const
+bool UHealthComponent::IsTagRelevantToQuery(FGameplayTag Tag, const FGameplayTagQuery& Query) const
 {
-	if (InvincibilityTagQuery.IsEmpty()) return false;
+	if (Query.IsEmpty()) return false;
 
 	FGameplayTagContainer SingleTagContainer;
 	SingleTagContainer.AddTag(Tag);
-	return SingleTagContainer.MatchesQuery(InvincibilityTagQuery);
+	return SingleTagContainer.MatchesQuery(Query);
 }
 
 void UHealthComponent::OnEffectTagChanged(FGameplayTag Tag, bool bAdded)
 {
-	UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:OnEffectTagChanged Tag:%s, bAdded:%d"), *Tag.ToString(), bAdded);
-	if (!IsTagInvincibilityRelevant(Tag))
+	// ---- 无敌判定 Invincibility check ----
+	if (IsTagRelevantToQuery(Tag, InvincibilityTagQuery))
 	{
-		UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:Tag not relevant for invincibility"));
-		return;
+		const int32 OldCount = InvincibilityTagCount;
+		InvincibilityTagCount = bAdded ? InvincibilityTagCount + 1 : FMath::Max(InvincibilityTagCount - 1, 0);
+
+		if ((OldCount == 0 && InvincibilityTagCount > 0) || (OldCount > 0 && InvincibilityTagCount == 0))
+		{
+			OnInvincibilityChanged.Broadcast(InvincibilityTagCount > 0);
+		}
 	}
 
-	const int32 OldCount = InvincibilityTagCount;
-	InvincibilityTagCount = bAdded ? InvincibilityTagCount + 1 : FMath::Max(InvincibilityTagCount - 1, 0);
-
-	UE_LOG(LogRunGame, Warning, TEXT("HealthComponent:InvincibilityTagCount Old:%d → New:%d"), OldCount, InvincibilityTagCount);
-
-	// 只有 0↔1 变化时才广播 Only broadcast on 0↔1 transition
-	if ((OldCount == 0 && InvincibilityTagCount > 0) || (OldCount > 0 && InvincibilityTagCount == 0))
+	// ---- 护盾判定 Shield check ----
+	if (IsTagRelevantToQuery(Tag, ShieldTagQuery))
 	{
-		OnInvincibilityChanged.Broadcast(InvincibilityTagCount > 0);
+		if (bAdded)
+		{
+			ShieldTagCount++;
+			if (ShieldTagCount == 1)
+			{
+				AddShield(DefaultShieldAmount);
+			}
+		}
+		else
+		{
+			ShieldTagCount = FMath::Max(ShieldTagCount - 1, 0);
+			if (ShieldTagCount == 0)
+			{
+				RemoveShield();
+			}
+		}
 	}
 }
 
@@ -136,4 +167,23 @@ void UHealthComponent::Revive(float RestoreHP)
 {
 	CurrentHP = FMath::Clamp(RestoreHP, 1.0f, MaxHP);
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
+}
+
+// ---- Shield ----
+
+void UHealthComponent::AddShield(float Amount)
+{
+	ShieldHP += Amount;
+	OnShieldChanged.Broadcast(ShieldHP);
+}
+
+void UHealthComponent::RemoveShield()
+{
+	const bool bHadShield = ShieldHP > 0.0f;
+	ShieldHP = 0.0f;
+	if (bHadShield)
+	{
+		OnShieldChanged.Broadcast(0.0f);
+		OnShieldBroken.Broadcast();
+	}
 }

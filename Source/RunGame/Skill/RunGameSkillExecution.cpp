@@ -3,6 +3,7 @@
 #include "Skill/RunGameSkillExecution.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Actor/Component/HealthComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Character/RunGameCharacter.h"
 #include "Character/RunGameMovementComponent.h"
@@ -180,5 +181,81 @@ void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
 			World->GetTimerManager().ClearTimer(RevertTimer);
 		}
 		RevertTimer.Invalidate();
+	}
+}
+
+// ===== Shield =====
+
+void USkillExecution_Shield::SetupEffectTags_Implementation(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag)
+{
+	ShieldTag = InDefenseTag;
+}
+
+void USkillExecution_Shield::Reset_Implementation()
+{
+	Cancel_Implementation(nullptr);
+}
+
+void USkillExecution_Shield::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
+{
+	// 发布护盾 Tag → HealthComponent::OnEffectTagChanged → AddShield(DefaultShieldAmount)
+	// Publish shield tag → HealthComponent auto-grants shield
+	if (!ShieldTag.IsValid()) return;
+
+	ACharacter* Character = Cast<ACharacter>(Instigator);
+	if (!Character) return;
+
+	UHealthComponent* HC = Character->FindComponentByClass<UHealthComponent>();
+	if (!HC || HC->IsDead()) return;
+
+	// 绑定破盾回调 — 盾破了自动撤 Tag Bind shield-break → auto-remove tag
+	HC->OnShieldBroken.AddDynamic(this, &USkillExecution_Shield::OnShieldBrokenCallback);
+	BoundHealthComponent = HC;
+
+	if (UPlayerRuntimeState* PRS = Character->GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->AddEffectTag(ShieldTag);
+	}
+}
+
+void USkillExecution_Shield::Cancel_Implementation(AActor* Instigator)
+{
+	// 解绑 + 撤 Tag Unbind + remove tag
+	if (BoundHealthComponent)
+	{
+		BoundHealthComponent->OnShieldBroken.RemoveDynamic(this, &USkillExecution_Shield::OnShieldBrokenCallback);
+		BoundHealthComponent = nullptr;
+	}
+
+	if (ShieldTag.IsValid())
+	{
+		if (UWorld* World = Instigator ? Instigator->GetWorld() : GetWorld())
+		{
+			if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+			{
+				PRS->RemoveEffectTag(ShieldTag);
+			}
+		}
+	}
+}
+
+void USkillExecution_Shield::OnShieldBrokenCallback()
+{
+	// 盾被击破 — 撤 Tag Shield broken — remove tag
+	if (BoundHealthComponent)
+	{
+		BoundHealthComponent->OnShieldBroken.RemoveDynamic(this, &USkillExecution_Shield::OnShieldBrokenCallback);
+		BoundHealthComponent = nullptr;
+	}
+
+	if (ShieldTag.IsValid())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+			{
+				PRS->RemoveEffectTag(ShieldTag);
+			}
+		}
 	}
 }

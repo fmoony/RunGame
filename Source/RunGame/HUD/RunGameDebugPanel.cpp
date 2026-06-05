@@ -164,6 +164,8 @@ void URunGameDebugPanel::NativeDestruct()
 			HC->OnHealthChanged.RemoveDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
 			HC->OnDeath.RemoveDynamic(this, &URunGameDebugPanel::OnDeathCallback);
 			HC->OnInvincibilityChanged.RemoveDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+			HC->OnShieldChanged.RemoveDynamic(this, &URunGameDebugPanel::OnShieldChangedCallback);
+			HC->OnShieldBroken.RemoveDynamic(this, &URunGameDebugPanel::OnShieldBrokenCallback);
 		}
 
 		if (USkillComponent* SC = Char->GetSkillComponent())
@@ -216,6 +218,8 @@ void URunGameDebugPanel::OnGameStateChangedCallback(ERunGameGameState OldState, 
 				HC->OnHealthChanged.AddDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
 				HC->OnDeath.AddDynamic(this, &URunGameDebugPanel::OnDeathCallback);
 				HC->OnInvincibilityChanged.AddDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+				HC->OnShieldChanged.AddDynamic(this, &URunGameDebugPanel::OnShieldChangedCallback);
+				HC->OnShieldBroken.AddDynamic(this, &URunGameDebugPanel::OnShieldBrokenCallback);
 			}
 
 			if (USkillComponent* SC = Char->GetSkillComponent())
@@ -240,6 +244,8 @@ void URunGameDebugPanel::OnGameStateChangedCallback(ERunGameGameState OldState, 
 				HC->OnHealthChanged.RemoveDynamic(this, &URunGameDebugPanel::OnHealthChangedCallback);
 				HC->OnDeath.RemoveDynamic(this, &URunGameDebugPanel::OnDeathCallback);
 				HC->OnInvincibilityChanged.RemoveDynamic(this, &URunGameDebugPanel::OnInvincibilityChangedCallback);
+				HC->OnShieldChanged.RemoveDynamic(this, &URunGameDebugPanel::OnShieldChangedCallback);
+				HC->OnShieldBroken.RemoveDynamic(this, &URunGameDebugPanel::OnShieldBrokenCallback);
 			}
 
 			if (USkillComponent* SC = Char->GetSkillComponent())
@@ -305,6 +311,16 @@ void URunGameDebugPanel::OnEffectTagChangedCallback(FGameplayTag Tag, bool bAdde
 void URunGameDebugPanel::OnCollisionStateChangedCallback()
 {
 	RefreshSkillTags();
+}
+
+void URunGameDebugPanel::OnShieldChangedCallback(float CurrentShield)
+{
+	RefreshCombatData();
+}
+
+void URunGameDebugPanel::OnShieldBrokenCallback()
+{
+	RefreshCombatData();
 }
 
 // ---- Refresh methods ----
@@ -409,12 +425,14 @@ void URunGameDebugPanel::RefreshCombatData()
 	const FString Text = FString::Printf(
 		TEXT("[Combat]\n")
 		TEXT("  HP         : %.1f / %.1f  (%.0f%%)\n")
+		TEXT("  Shield     : %.1f\n")
 		TEXT("  Dead       : %s\n")
 		TEXT("  Invincible : %s\n")
 		TEXT("  Energy     : %.1f / %.1f"),
 		HC ? HC->GetCurrentHP() : 0.0f,
 		HC ? HC->GetMaxHP() : 0.0f,
 		HC ? HC->GetHealthPercentage() * 100.0f : 0.0f,
+		HC ? HC->GetShieldHP() : 0.0f,
 		HC ? *BoolStr(HC->IsDead()) : TEXT("?"),
 		HC ? *BoolStr(HC->IsInvincible()) : TEXT("?"),
 		SC ? SC->GetCurrentEnergy() : 0.0f,
