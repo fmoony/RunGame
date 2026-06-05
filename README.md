@@ -2,26 +2,29 @@
 
 [![Unreal Engine](https://img.shields.io/badge/Unreal%20Engine-5.6-orange)](https://www.unrealengine.com/)
 
-基于 UE5.6 的 3D 跑酷游戏，C++ 原生开发。采用反应式状态机架构，支持 Combat / Platforming / SideScrolling 三种玩法变体，集成 MCP 自动化桥接与外部 AI 编程助手深度协作。
+基于 UE5.6 的 3D 跑酷游戏，C++ 原生开发。采用反应式状态机架构，集成 MCP 自动化桥接与外部 AI 编程助手深度协作。
 
 ## 架构概览
 
 ```
-┌──────────────────────────────────────────────────┐
-│                  GameState                        │
-│           (Single Source of Truth)                │
-│    MainMenu → CountDown → InGame ⇄ Pause → Over  │
-└──────────┬───────────────────────────────────────┘
-           │ OnGameStateChanged (委托广播)
-    ┌──────┼──────┬──────────┬──────────┬──────────┐
-    ▼      ▼      ▼          ▼          ▼          ▼
-  Timer  HUD    Controller  Player    GameMode
-  Subsys                            (Floor/Coin Pool)
-           │
-    ┌──────┼──────┬──────────┬──────────┐
-    ▼      ▼      ▼          ▼          ▼
-  Health  Skill  Movement  Collision  Damage
-  Comp    Comp   Comp      Ability    Dealer
+┌─────────────────────────────────────────────────────────┐
+│                       GameState                         │
+│               (Single Source of Truth)                  │
+│     MainMenu → CountDown → InGame ⇄ Pause → GameOver   │
+└────────────────────┬────────────────────────────────────┘
+                     │ OnGameStateChanged 委托广播
+       ┌──────┬──────┼──────┬──────────┬──────────┐
+       ▼      ▼      ▼      ▼          ▼          ▼
+     Timer  HUD    Player  Player    GameMode   Floor
+     Subsys        Ctlr    State               Subsystem
+                              │
+                       SpawnPlayer()
+                              │
+                         ┌────▼──────────────────────┐
+                         │   ARunGameCharacter       │
+                         │   Health / Skill / Move   │
+                         │   Collision / Damage      │
+                         └───────────────────────────┘
 ```
 
 **核心设计原则：**
@@ -34,18 +37,18 @@
 ```
 Source/RunGame/
 ├── Game/              # ARunGameGameState / ARunGameGameMode
-├── Character/         # ARunGameCharacter + 运动/碰撞/动画组件
+├── Character/         # ARunGameCharacter + 运动/碰撞/动画/效果组件
 ├── Player/            # PlayerController / PlayerState
-├── HUD/               # 纯 C++ UMG 控件的多状态 UI + Debug 面板
+├── HUD/               # 纯 C++ UMG 多状态 UI + Debug 面板
 ├── Skill/             # 技能组件 + 可扩展执行对象 + 数据资产配置
 ├── Actor/
-│   ├── Floor/         # FloorBase — 地板池基类
+│   ├── Floor/         # FloorBase — 地板池基类（直道/弯道/上下坡）
 │   ├── Trap/          # ATrap — 可破坏陷阱（IImpactReceiver）
+│   ├── Collectible/   # Coin — 可回收拾取物
 │   ├── Component/     # Health / DamageDealer / CoinSpawner
 │   └── Volume/        # 交互体 + 死亡体
-├── Interfaces/        # IDamagable / IImpactReceiver
-├── WorldSubsystem/    # Timer / Floor / Coin 子系统
-└── Variant_* /        # Combat / Platforming / SideScrolling 变体
+├── Interfaces/        # IDamagable / IImpactReceiver / ICombatDamageable
+└── WorldSubsystem/    # Timer / Floor / Coin / PlayerRuntimeState
 ```
 
 ## 关键系统
@@ -62,26 +65,26 @@ Source/RunGame/
 
 ### 地板对象池
 
-- 数据资产驱动（`UFloorConfigData`）：直道/弯道/上下坡类型 + 生成权重 + 保底数量
+- 数据资产驱动（`UFloorConfigData`）：类型 + 生成权重 + 保底数量
 - 异步加载 → 预分配池 → 加权随机出池 → 玩家通过后定时回收
 - 回收时广播 `OnFloorDeactivated` 委托，子 Actor（Trap/Coin）自行复位
 
 ### 技能系统
 
 - 数据资产配置（`USkillConfigData`）：Tag 标识 / 冷却 / 能量消耗 / 执行类
-- 可扩展执行对象（`USkillExecutionBase`）：Unstoppable（加速+无敌）、PlayMontageAndImpulse 等
+- 可扩展执行对象（`USkillExecutionBase`）
 - 双 Tag 效果发布：Duration 到期撤速度 Tag → 速度插值完成撤无敌 Tag
 
 ### 碰撞系统
 
 - `URunGameCollisionAbilityComponent` 监听 GameplayTag 激活胶囊体 Overlap
 - IImpactReceiver 接口通知被命中 Actor
-- 浮点时间戳冷却制（0.5s 可配），替代 Timer 黑名单
+- 浮点时间戳冷却制，替代 Timer 黑名单
 - 死亡状态自动清冷却 + 阻止碰撞
 
 ### MCP 自动化桥
 
-通过 `McpAutomationBridge` 插件（22 个工具类，200+ 自动化操作），外部 AI 编程助手可直接操控 Unreal Editor 的蓝图/资产/AI/战斗/特效全流程。
+通过 `McpAutomationBridge` 插件，外部 AI 编程助手可直接操控 Unreal Editor 的蓝图/资产/AI/战斗/特效全流程。
 
 ## 编码规范
 
