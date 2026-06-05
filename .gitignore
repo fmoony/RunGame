@@ -391,3 +391,6 @@ Packaged/
 
 # Continue AI 助手配置目录
 .continue/
+
+# VSCode 配置目录
+.vscode/
