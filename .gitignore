@@ -394,3 +394,6 @@ Packaged/
 
 # VSCode 配置目录
 .vscode/
+
+# VS 组件清单
+.vsconfig
