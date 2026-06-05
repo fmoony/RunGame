@@ -388,3 +388,6 @@ Packaged/
 
 # Reasonix AI 助手配置目录
 .reasonix/
+
+# Continue AI 助手配置目录
+.continue/
