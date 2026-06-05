@@ -35,6 +35,7 @@ private:
 	void RefreshGameFlowData();
 	void RefreshPlayerData();
 	void RefreshCombatData();
+	void RefreshSkillTags();
 
 	ARunGameCharacter* GetCachedCharacter() const;
 
@@ -71,6 +72,12 @@ private:
 	UFUNCTION()
 	void OnDeathCallback(FGameplayTag DamageType, AActor* DeathCauser);
 
+	UFUNCTION()
+	void OnEffectTagChangedCallback(FGameplayTag Tag, bool bAdded);
+
+	UFUNCTION()
+	void OnCollisionStateChangedCallback();
+
 	// Widgets
 	UPROPERTY()
 	UTextBlock* TitleText;
@@ -83,4 +90,7 @@ private:
 
 	UPROPERTY()
 	UTextBlock* CombatText;
+
+	UPROPERTY()
+	UTextBlock* SkillTagsText;
 };

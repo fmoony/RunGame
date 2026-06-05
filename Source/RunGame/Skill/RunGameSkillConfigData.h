@@ -46,6 +46,14 @@ struct RUNGAME_API FSkillDefinition
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Execution")
 	TSubclassOf<USkillExecutionBase> ExecutionClass;
 
+	/** 加速效果 Tag — 发布到 PRS，MovementComponent 监听后自动调速 Speed effect tag — published to PRS, MovementComponent reacts to auto-adjust speed */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Tags")
+	FGameplayTag SpeedEffectTag;
+
+	/** 无敌效果 Tag — 发布到 PRS，HealthComponent 监听后自动无敌 Defense effect tag — published to PRS, HealthComponent reacts to grant invincibility */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Tags")
+	FGameplayTag DefenseEffectTag;
+
 	/** Input action bound dynamically by the character in SetupPlayerInputComponent */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Skill|Input")
 	TObjectPtr<UInputAction> InputAction;

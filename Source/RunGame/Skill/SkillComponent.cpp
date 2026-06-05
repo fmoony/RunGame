@@ -169,6 +169,11 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	if (ExecObj)
 	{
 		ExecObj->Reset();       // 清零逐次激活状态 Clear per-activation state
+
+		// 传入配置的效果 Tag — 执行对象据此管理 PRS Tag 生命周期
+		// Pass effect tags from config — execution object uses these to manage PRS tag lifecycle
+		ExecObj->SetupEffectTags(SkillDef->SpeedEffectTag, SkillDef->DefenseEffectTag);
+
 		ExecObj->Execute(Owner, SkillTag);
 	}
 

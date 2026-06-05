@@ -2,21 +2,21 @@
 #include "Components/StaticMeshComponent.h"
 #include "Actor/Component/HealthComponent.h"
 #include "Actor/Component/DamageDealerComponent.h"
-#include "Actor/Floor/FloorBase.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "RunGame.h"
 
 ATrap::ATrap()
 {
 	PrimaryActorTick.bCanEverTick = false;
 
-	// 网格体即根组件 — 视觉 + IImpactReceiver 碰撞触发器 Mesh as root — visuals + IImpactReceiver collision trigger
+	// 网格体即根组件 — 视觉 + ImpactReceiver 触发 + 伤害碰撞 Mesh as root — visuals + ImpactReceiver trigger + damage collision
 	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	RootComponent = Mesh;
 
-	// 仅查询模式 — 只与 Pawn 重叠，供 CollisionAbilityComponent 检测 Only query — overlap Pawn for CollisionAbilityComponent detection
+	// 仅查询模式 — 只与 Pawn 重叠 Only query — overlap Pawn only
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 	Mesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	Mesh->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
@@ -25,9 +25,8 @@ ATrap::ATrap()
 	// 生命值组件 — 统一管理 HP / 受伤 / 死亡委托 Health component — unified HP / damage / death delegation
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("Health"));
 
-	// 伤害组件 — 角色触碰时对角色造成伤害 Damage dealer — damages characters on contact
+	// 伤害组件 — 绑定 Mesh Overlap，角色触碰时造成伤害 Damage dealer — binds to Mesh overlap, damages characters on contact
 	DamageDealer = CreateDefaultSubobject<UDamageDealerComponent>(TEXT("DamageDealer"));
-	DamageDealer->SetupAttachment(RootComponent);
 }
 
 void ATrap::BeginPlay()
@@ -52,20 +51,18 @@ void ATrap::ActivateTrap()
 	Mesh->SetVisibility(true);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
-	// 恢复伤害组件碰撞 — 角色触碰时造成伤害 Restore damage dealer collision — damage characters on contact
-	DamageDealer->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-
+	// 显示 Actor Show actor — 子组件随 Mesh 自动可见
 	SetActorHiddenInGame(false);
 }
 
 void ATrap::DeactivateTrap()
 {
-	// 隐藏 + 禁用所有碰撞 Hide + disable all collision
+	// 隐藏 + 禁用碰撞 Hide + disable collision
 	// 不修改 HP — 由 ActivateTrap 在下次激活时 Revive 重置
-	// Don't touch HP — ActivateTrap will Revive on next activation
 	Mesh->SetVisibility(false);
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	DamageDealer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	// 隐藏 Actor Hide actor — 子组件随 Mesh 自动隐藏
 	SetActorHiddenInGame(true);
 }
 
@@ -74,14 +71,23 @@ void ATrap::DeactivateTrap()
 void ATrap::ReceiveImpact_Implementation(FGameplayTag SkillTag, const FImpactInfo& Impact)
 {
 	// 已死亡则忽略 — HealthComponent 会拒绝 0 HP 以下的伤害
-	// Ignore if already dead — HealthComponent rejects damage below 0 HP
 	if (HealthComponent->IsDead())
 	{
 		return;
 	}
 
+	// 标签过滤 — RequiredSkillTagQuery 不为空时只有匹配的技能才能摧毁此陷阱
+	if (!RequiredSkillTagQuery.IsEmpty())
+	{
+		FGameplayTagContainer SingleTag;
+		SingleTag.AddTag(SkillTag);
+		if (!SingleTag.MatchesQuery(RequiredSkillTagQuery))
+		{
+			return;
+		}
+	}
+
 	// 转发到 HealthComponent — 统一 HP 管理
-	// Forward to HealthComponent — unified HP management
 	HealthComponent->ApplyDamage(Impact.Force, SkillTag, Impact.Instigator.Get());
 }
 
@@ -89,7 +95,7 @@ void ATrap::ReceiveImpact_Implementation(FGameplayTag SkillTag, const FImpactInf
 
 void ATrap::OnTrapDeath(FGameplayTag DamageType, AActor* DeathCauser)
 {
-	// 使用 DeathCauser 位置作为 VFX 生成点 Use death causer location as VFX spawn point
+	// 使用 DeathCauser 位置作为 VFX 生成点
 	const FVector SpawnPoint = DeathCauser ? DeathCauser->GetActorLocation() : GetActorLocation();
 	BreakTrap(SpawnPoint);
 }
@@ -98,14 +104,13 @@ void ATrap::OnTrapDeath(FGameplayTag DamageType, AActor* DeathCauser)
 
 void ATrap::BreakTrap(const FVector& ImpactPoint)
 {
-	// 禁用所有碰撞 — 防止短时间内重复触发 Disable all collision — prevent rapid re-triggering
+	// 禁用碰撞 — 防止短时间内重复触发
 	Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	DamageDealer->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-	// 隐藏网格体 Hide mesh
+	// 隐藏网格体
 	Mesh->SetVisibility(false);
 
-	// 在碰撞点生成摧毁特效 Spawn destruction VFX at impact point
+	// 在碰撞点生成摧毁特效
 	if (DestroyEffect)
 	{
 		UNiagaraFunctionLibrary::SpawnSystemAtLocation(
@@ -115,12 +120,12 @@ void ATrap::BreakTrap(const FVector& ImpactPoint)
 		);
 	}
 
-	// 播放摧毁音效 Play destruction sound
+	// 播放摧毁音效
 	if (DestroySound)
 	{
 		UGameplayStatics::PlaySoundAtLocation(GetWorld(), DestroySound, ImpactPoint);
 	}
 
-	// 通知蓝图子类（掉落物、计分等）Notify Blueprint subclass (drops, scoring, etc.)
+	// 通知蓝图子类（掉落物、计分等）
 	OnTrapDestroyed();
 }

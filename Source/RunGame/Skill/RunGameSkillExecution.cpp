@@ -31,10 +31,31 @@ void USkillExecution_PlayMontageAndImpulse::Execute_Implementation(AActor* Insti
 	}
 }
 
+// ===== Unstoppable =====
+
+void USkillExecution_Unstoppable::SetupEffectTags_Implementation(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag)
+{
+	SpeedTag = InSpeedTag;
+	DefenseTag = InDefenseTag;
+}
+
 void USkillExecution_Unstoppable::Reset_Implementation()
 {
-	UE_LOG(LogRunGame, Warning, TEXT("[Unstoppable] Reset"));
-	CachedSkillTag = FGameplayTag();
+	UE_LOG(LogRunGame, Warning, TEXT("[Unstoppable] Reset SpeedTag:%s DefenseTag:%s"), *SpeedTag.ToString(), *DefenseTag.ToString());
+
+	// 清除 PRS 中残留的效果标签 Clean up leftover effect tags in PRS
+	if (UWorld* World = GetWorld())
+	{
+		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		{
+			if (SpeedTag.IsValid())   PRS->RemoveEffectTag(SpeedTag);
+			if (DefenseTag.IsValid()) PRS->RemoveEffectTag(DefenseTag);
+		}
+	}
+
+	SpeedTag   = FGameplayTag();
+	DefenseTag = FGameplayTag();
+
 	if (RevertTimer.IsValid())
 	{
 		if (UWorld* World = GetWorld())
@@ -47,36 +68,32 @@ void USkillExecution_Unstoppable::Reset_Implementation()
 
 void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag)
 {
-	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Execute Tag:%s, Duration:%.1f"), *SkillTag.ToString(), Duration);
+	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Execute SpeedTag:%s DefenseTag:%s Duration:%.1f"),
+		*SpeedTag.ToString(), *DefenseTag.ToString(), Duration);
+
 	ACharacter* Character = Cast<ACharacter>(Instigator);
-	if (!Character)
-	{
-		return;
-	}
+	if (!Character) return;
 
-	// Speed boost via character's modifier map — persists across Tick curve overwrites
-	CachedSkillTag = SkillTag;
-	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Character))
+	// 速度修改器 — 用 SpeedTag 做 key，归并到 MovementComponent 的复合乘数 Speed modifier — keyed by SpeedTag
+	if (SpeedTag.IsValid())
 	{
-		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
+		if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Character))
+		{
+			if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
 			{
-				MoveComp->AddSpeedModifier(CachedSkillTag, SpeedMultiplier);
+				MoveComp->AddSpeedModifier(SpeedTag, SpeedMultiplier);
 			}
+		}
 	}
 
-	// 通过 PRS Tag 总线通知无敌 Notify invincibility via PRS tag bus
+	// 发布效果 Tag 到 PRS — 各子系统自行响应 Publish effect tags to PRS — subsystems self-react
 	if (UPlayerRuntimeState* PRS = Character->GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
-		PRS->AddEffectTag(SkillTag);
-		UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:AddEffectTag Tag:%s"), *SkillTag.ToString());
-	}
-	else
-	{
-		UE_LOG(LogRunGame, Error, TEXT("USkillExecution_Unstoppable:Failed to get PRS"));
+		if (SpeedTag.IsValid())   PRS->AddEffectTag(SpeedTag);
+		if (DefenseTag.IsValid()) PRS->AddEffectTag(DefenseTag);
 	}
 
-	// Schedule revert after Duration——先清旧定时器防止重复 Execute 泄漏
-	// Clear old timer first to prevent leak on double-execute
+	// Duration 定时器 → RevertEffect Duration timer → RevertEffect
 	if (UWorld* World = Instigator->GetWorld())
 	{
 		if (RevertTimer.IsValid())
@@ -90,52 +107,32 @@ void USkillExecution_Unstoppable::Execute_Implementation(AActor* Instigator, FGa
 
 void USkillExecution_Unstoppable::RevertEffect(AActor* Instigator)
 {
-	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:RevertEffect (timer expired) Tag:%s"), *CachedSkillTag.ToString());
+	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:RevertEffect SpeedTag:%s"), *SpeedTag.ToString());
 
-	// 先移除速度——触发插值回落 Remove speed first — triggers interpolation
+	// 第一步：撤速度 + 撤速度 Tag Step 1: remove speed + speed tag
 	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
 	{
 		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
 		{
-			MoveComp->RemoveSpeedModifier(CachedSkillTag);
+			MoveComp->RemoveSpeedModifier(SpeedTag);
 
-			// 等速度回落后再撤 Tag Delay tag removal until speed interpolates back
-			if (UWorld* World = Instigator->GetWorld())
+			// 撤速度 Tag — 速度开始插值回落 Remove speed tag — speed starts interpolating back
+			if (UPlayerRuntimeState* PRS = Instigator->GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 			{
-				World->GetTimerManager().ClearTimer(RevertTimer);
-				const float Delay = MoveComp->SpeedTransitionDuration * 1.8f;
-				FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertInvincibility, Instigator);
-				World->GetTimerManager().SetTimer(RevertTimer, RevertDel, Delay, false);
-				UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Timer Delay:%f"), Delay);
+				PRS->RemoveEffectTag(SpeedTag);
 			}
-		}
-	}
-}
 
-void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
-{
-	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Cancel Tag:%s"), *CachedSkillTag.ToString());
-	// 移除速度修改器——触发速度插值回落
-	// Remove speed modifier — triggers speed interpolation back to normal
-	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
-	{
-		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
-		{
-			MoveComp->RemoveSpeedModifier(CachedSkillTag);
-
-			// 用实际 SpeedTransitionDuration 重设定时器——运行时值，蓝图覆写自动生效
-			// Use actual SpeedTransitionDuration — runtime value, Blueprint overrides are respected
-			if (UWorld* World = Instigator->GetWorld())
+			// 第二步：等速度插值完成后撤无敌 Tag Step 2: wait for speed interpolation, then remove defense tag
+			if (DefenseTag.IsValid())
 			{
-				World->GetTimerManager().ClearTimer(RevertTimer);
-				const float Delay = MoveComp->SpeedTransitionDuration * 1.8f;
-				FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertInvincibility, Instigator);
-				World->GetTimerManager().SetTimer(RevertTimer, RevertDel, Delay, false);
-				UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Timer Delay:%f"), Delay);
-			}
-			else
-			{
-				UE_LOG(LogRunGame, Error, TEXT("USkillExecution_Unstoppable:Fail to GetWorld"));
+				if (UWorld* World = Instigator->GetWorld())
+				{
+					World->GetTimerManager().ClearTimer(RevertTimer);
+					const float Delay = MoveComp->SpeedTransitionDuration * 1.8f;
+					FTimerDelegate RevertDel = FTimerDelegate::CreateUObject(this, &USkillExecution_Unstoppable::RevertInvincibility, Instigator);
+					World->GetTimerManager().SetTimer(RevertTimer, RevertDel, Delay, false);
+					UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:DefenseTag removal delayed %.2fs"), Delay);
+				}
 			}
 		}
 	}
@@ -143,15 +140,45 @@ void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
 
 void USkillExecution_Unstoppable::RevertInvincibility(AActor* Instigator)
 {
-	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:RevertInvincibility Tag:%s"), *CachedSkillTag.ToString());
-	// 速度插值已完成——通过 Tag 总线关闭无敌 Speed interpolation complete — disable invincibility via tag bus
-	if (UWorld* World = Instigator ? Instigator->GetWorld() : nullptr)
+	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:RevertInvincibility DefenseTag:%s"), *DefenseTag.ToString());
+
+	if (DefenseTag.IsValid())
 	{
-		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		if (UWorld* World = Instigator ? Instigator->GetWorld() : nullptr)
 		{
-			PRS->RemoveEffectTag(CachedSkillTag);
+			if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+			{
+				PRS->RemoveEffectTag(DefenseTag);
+			}
 		}
 	}
 }
 
+void USkillExecution_Unstoppable::Cancel_Implementation(AActor* Instigator)
+{
+	UE_LOG(LogRunGame, Warning, TEXT("USkillExecution_Unstoppable:Cancel SpeedTag:%s DefenseTag:%s"), *SpeedTag.ToString(), *DefenseTag.ToString());
 
+	// 立即清所有效果 — 死亡/强制中断不等待速度插值 Clear all effects immediately — death/interrupt don't wait for interpolation
+	if (ARunGameCharacter* RunCharacter = Cast<ARunGameCharacter>(Instigator))
+	{
+		if (URunGameMovementComponent* MoveComp = RunCharacter->GetRunGameMovementComponent())
+		{
+			MoveComp->RemoveSpeedModifier(SpeedTag);
+		}
+	}
+
+	if (UWorld* World = Instigator ? Instigator->GetWorld() : nullptr)
+	{
+		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+		{
+			if (SpeedTag.IsValid())   PRS->RemoveEffectTag(SpeedTag);
+			if (DefenseTag.IsValid()) PRS->RemoveEffectTag(DefenseTag);
+		}
+
+		if (RevertTimer.IsValid())
+		{
+			World->GetTimerManager().ClearTimer(RevertTimer);
+		}
+		RevertTimer.Invalidate();
+	}
+}

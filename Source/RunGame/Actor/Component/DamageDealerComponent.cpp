@@ -1,30 +1,57 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Actor/Component/DamageDealerComponent.h"
+#include "Components/PrimitiveComponent.h"
 #include "RunGame.h"
 #include "Interfaces/Damagable.h"
 
 UDamageDealerComponent::UDamageDealerComponent()
 {
-	SetCollisionProfileName(TEXT("Trigger"));
-
-	InitBoxExtent(FVector(50.0f, 50.0f, 50.0f));
-
-	SetGenerateOverlapEvents(true);
+	PrimaryComponentTick.bCanEverTick = false;
 }
 
 void UDamageDealerComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	OnComponentBeginOverlap.AddDynamic(this, &UDamageDealerComponent::OnTrapOverlap);
+	BindToOwnerMesh();
 }
 
 void UDamageDealerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	OnComponentBeginOverlap.RemoveDynamic(this, &UDamageDealerComponent::OnTrapOverlap);
+	UnbindFromOwnerMesh();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void UDamageDealerComponent::BindToOwnerMesh()
+{
+	AActor* Owner = GetOwner();
+	if (!Owner)
+	{
+		return;
+	}
+
+	// 拿根组件作为碰撞体——Trap 的 Mesh 就是根，其他 Actor 同理
+	// Use root component as collision primitive — Trap's Mesh is root, same for other actors
+	UPrimitiveComponent* Prim = Cast<UPrimitiveComponent>(Owner->GetRootComponent());
+	if (!Prim)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("UDamageDealerComponent: Owner %s has no UPrimitiveComponent as root"), *Owner->GetName());
+		return;
+	}
+
+	Prim->OnComponentBeginOverlap.AddDynamic(this, &UDamageDealerComponent::OnTrapOverlap);
+	BoundPrimitive = Prim;
+}
+
+void UDamageDealerComponent::UnbindFromOwnerMesh()
+{
+	if (BoundPrimitive)
+	{
+		BoundPrimitive->OnComponentBeginOverlap.RemoveDynamic(this, &UDamageDealerComponent::OnTrapOverlap);
+		BoundPrimitive = nullptr;
+	}
 }
 
 void UDamageDealerComponent::OnTrapOverlap(

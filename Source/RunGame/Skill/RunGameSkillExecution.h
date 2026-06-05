@@ -40,11 +40,17 @@ public:
 	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
 	void Reset();
 
+	/** SkillComponent 在 Execute 前传入技能配置的效果 Tag — 子类覆写保存用于后续撤 Tag
+	 *  SkillComponent passes effect tags from skill config before Execute — subclasses override to cache for later removal */
+	UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Skill Execution")
+	void SetupEffectTags(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag);
+
 protected:
 	bool CanExecute_Implementation(AActor* Instigator, FGameplayTag SkillTag) const { return true; }
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) {}
 	virtual void Cancel_Implementation(AActor* Instigator) {}
 	virtual void Reset_Implementation() {}
+	virtual void SetupEffectTags_Implementation(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag) {}
 };
 
 
@@ -90,22 +96,22 @@ public:
 	float Duration = 3.0f;
 
 	virtual void Execute_Implementation(AActor* Instigator, FGameplayTag SkillTag) override;
-
-	/** Cancel unstoppable — 仅移除速度修改器，无敌保持到定时器到期 Only removes speed modifier; invincibility persists until timer fires */
 	virtual void Cancel_Implementation(AActor* Instigator) override;
-
-	/** 清零逐次激活状态——CachedSkillTag + RevertTimer Clear per-activation state */
 	virtual void Reset_Implementation() override;
+	virtual void SetupEffectTags_Implementation(FGameplayTag InSpeedTag, FGameplayTag InDefenseTag) override;
 
 private:
-	/** Skill tag cached during Execute for use in RevertEffect timer callback */
-	FGameplayTag CachedSkillTag;
+	/** 加速效果 Tag — 由 SkillComponent 从技能配置传入 Speed effect tag — passed from skill config by SkillComponent */
+	FGameplayTag SpeedTag;
+
+	/** 无敌效果 Tag — 由 SkillComponent 从技能配置传入 Defense effect tag — passed from skill config by SkillComponent */
+	FGameplayTag DefenseTag;
 
 	FTimerHandle RevertTimer;
 
-	/** 定时器到期回调——移除速度修改器 + 关闭无敌（正常流程）Timer expiry — remove speed modifier + disable invincibility */
+	/** Duration 到期 → 撤速度+速度 Tag Duration expiry → remove speed + speed tag */
 	void RevertEffect(AActor* Instigator);
 
-	/** 仅关闭无敌——Cancel 后等速度插值完成再调用 Invincibility-only revert — called after speed interpolation completes post-Cancel */
+	/** 速度插值完成 → 撤无敌 Tag Speed interpolation complete → remove defense tag */
 	void RevertInvincibility(AActor* Instigator);
 };

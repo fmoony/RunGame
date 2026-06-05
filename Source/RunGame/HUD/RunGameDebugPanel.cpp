@@ -4,6 +4,7 @@
 #include "Player/RunGamePlayerState.h"
 #include "Character/RunGameCharacter.h"
 #include "Character/RunGameMovementComponent.h"
+#include "Character/RunGameCollisionAbilityComponent.h"
 #include "Actor/Component/HealthComponent.h"
 #include "Skill/SkillComponent.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
@@ -58,9 +59,10 @@ bool URunGameDebugPanel::Initialize()
 	TitleText->SetFont(TitleFont);
 	VBox->AddChildToVerticalBox(TitleText);
 
-	// GameFlow 区域
 	FSlateFontInfo ContentFont = FAppStyle::Get().GetFontStyle("NormalFont");;
 	ContentFont.Size = 18;
+
+	// GameFlow 区域
 	GameFlowText = NewObject<UTextBlock>(this);
 	GameFlowText->SetColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.85f, 1.0f, 1.0f)));
 	GameFlowText->SetFont(ContentFont);
@@ -77,6 +79,12 @@ bool URunGameDebugPanel::Initialize()
 	CombatText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.8f, 0.8f, 1.0f)));
 	CombatText->SetFont(ContentFont);
 	VBox->AddChildToVerticalBox(CombatText);
+
+	// SkillTags 区域
+	SkillTagsText = NewObject<UTextBlock>(this);
+	SkillTagsText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 1.0f, 0.6f, 1.0f)));
+	SkillTagsText->SetFont(ContentFont);
+	VBox->AddChildToVerticalBox(SkillTagsText);
 
 	return true;
 }
@@ -101,10 +109,11 @@ void URunGameDebugPanel::NativeConstruct()
 		TS->OnTimeChanged.AddDynamic(this, &URunGameDebugPanel::OnTimeChangedCallback);
 	}
 
-	// 绑定 PlayerRuntimeState 委托（角色状态） Bind PlayerRuntimeState (character state only)
+	// 绑定 PlayerRuntimeState 委托（角色状态 + 效果标签）Bind PlayerRuntimeState delegates (character state + effect tags)
 	if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
 	{
 		PRS->OnCharacterStateChanged.AddDynamic(this, &URunGameDebugPanel::OnCharacterStateChangedCallback);
+		PRS->OnEffectTagChanged.AddDynamic(this, &URunGameDebugPanel::OnEffectTagChangedCallback);
 	}
 
 	// 角色委托绑定推迟到 OnGameStateChanged(InGame) —— NativeConstruct 时角色尚未生成
@@ -145,6 +154,7 @@ void URunGameDebugPanel::NativeDestruct()
 	if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
 	{
 		PRS->OnCharacterStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnCharacterStateChangedCallback);
+		PRS->OnEffectTagChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEffectTagChangedCallback);
 	}
 
 	if (ARunGameCharacter* Char = GetCachedCharacter())
@@ -159,6 +169,11 @@ void URunGameDebugPanel::NativeDestruct()
 		if (USkillComponent* SC = Char->GetSkillComponent())
 		{
 			SC->OnEnergyChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
+		}
+
+		if (URunGameCollisionAbilityComponent* CAC = Char->FindComponentByClass<URunGameCollisionAbilityComponent>())
+		{
+			CAC->OnCollisionStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnCollisionStateChangedCallback);
 		}
 	}
 
@@ -183,14 +198,6 @@ ARunGameCharacter* URunGameDebugPanel::GetCachedCharacter() const
 		{
 			return Cast<ARunGameCharacter>(PC->GetPawn());
 		}
-		else
-		{
-			UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get PlayerController in GetCachedCharacter"));
-		}
-	}
-	else
-	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get World in GetCachedCharacter"));
 	}
 	return nullptr;
 }
@@ -215,10 +222,11 @@ void URunGameDebugPanel::OnGameStateChangedCallback(ERunGameGameState OldState, 
 			{
 				SC->OnEnergyChanged.AddDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
 			}
-		}
-		else
-		{
-			UE_LOG(LogRunGame, Error, TEXT("RunGameDebugPanel: Failed to get character on GameState InGame"));
+
+			if (URunGameCollisionAbilityComponent* CAC = Char->FindComponentByClass<URunGameCollisionAbilityComponent>())
+			{
+				CAC->OnCollisionStateChanged.AddDynamic(this, &URunGameDebugPanel::OnCollisionStateChangedCallback);
+			}
 		}
 	}
 
@@ -237,6 +245,11 @@ void URunGameDebugPanel::OnGameStateChangedCallback(ERunGameGameState OldState, 
 			if (USkillComponent* SC = Char->GetSkillComponent())
 			{
 				SC->OnEnergyChanged.RemoveDynamic(this, &URunGameDebugPanel::OnEnergyChangedCallback);
+			}
+
+			if (URunGameCollisionAbilityComponent* CAC = Char->FindComponentByClass<URunGameCollisionAbilityComponent>())
+			{
+				CAC->OnCollisionStateChanged.RemoveDynamic(this, &URunGameDebugPanel::OnCollisionStateChangedCallback);
 			}
 		}
 	}
@@ -284,6 +297,16 @@ void URunGameDebugPanel::OnDeathCallback(FGameplayTag DamageType, AActor* DeathC
 	RefreshCombatData();
 }
 
+void URunGameDebugPanel::OnEffectTagChangedCallback(FGameplayTag Tag, bool bAdded)
+{
+	RefreshSkillTags();
+}
+
+void URunGameDebugPanel::OnCollisionStateChangedCallback()
+{
+	RefreshSkillTags();
+}
+
 // ---- Refresh methods ----
 
 void URunGameDebugPanel::RefreshAllData()
@@ -291,6 +314,7 @@ void URunGameDebugPanel::RefreshAllData()
 	RefreshGameFlowData();
 	RefreshPlayerData();
 	RefreshCombatData();
+	RefreshSkillTags();
 }
 
 void URunGameDebugPanel::RefreshGameFlowData()
@@ -398,6 +422,66 @@ void URunGameDebugPanel::RefreshCombatData()
 	);
 
 	CombatText->SetText(FText::FromString(Text));
+}
+
+void URunGameDebugPanel::RefreshSkillTags()
+{
+	if (!SkillTagsText) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>();
+	ARunGameCharacter* Char = GetCachedCharacter();
+
+	// 活跃效果标签 Active effect tags from PRS
+	FString TagList;
+	if (PRS)
+	{
+		const FGameplayTagContainer& Tags = PRS->ActiveEffectTags;
+		if (Tags.IsEmpty())
+		{
+			TagList = TEXT("  (none)");
+		}
+		else
+		{
+			TArray<FGameplayTag> TagArray;
+			Tags.GetGameplayTagArray(TagArray);
+			for (const FGameplayTag& Tag : TagArray)
+			{
+				TagList += FString::Printf(TEXT("  %s\n"), *Tag.ToString());
+			}
+			// 去掉末尾换行 Remove trailing newline
+			TagList.RemoveFromEnd(TEXT("\n"));
+		}
+	}
+	else
+	{
+		TagList = TEXT("  (no PRS)");
+	}
+
+	// 碰撞组件激活标签 + 冷却计数 Collision ability active tag + cooldown count
+	FString CollisionInfo;
+	if (Char)
+	{
+		if (URunGameCollisionAbilityComponent* CAC = Char->FindComponentByClass<URunGameCollisionAbilityComponent>())
+		{
+			CollisionInfo = FString::Printf(
+				TEXT("\n  [Collision] ActiveTag: %s  Cooldowns: %d"),
+				*CAC->ActiveSkillTag.ToString(),
+				CAC->HitCooldowns.Num()
+			);
+		}
+	}
+
+	const FString Text = FString::Printf(
+		TEXT("[Skill Tags]\n")
+		TEXT("%s%s"),
+		*TagList,
+		*CollisionInfo
+	);
+
+	SkillTagsText->SetText(FText::FromString(Text));
 }
 
 // ---- Static formatters ----
