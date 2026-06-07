@@ -173,14 +173,15 @@ void URunGameTimerSubsystem::FinishCountdown()
 {
 	StopCountdown();
 
+	// 先解冻引擎 — HUD 切到 InGame 时世界已在运行
+	// Unfreeze engine first — world is already running when HUD switches to InGame
+	OnCountdownComplete.Broadcast();
+
 	ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>();
 	if (GS)
 	{
 		GS->SetGameState(ERunGameGameState::InGame);
-		GS->OnCountdownComplete.Broadcast();
 	}
-
-	OnCountdownComplete.Broadcast();
 }
 
 // ---- 内部游戏计时 Internal Game Timer ----
