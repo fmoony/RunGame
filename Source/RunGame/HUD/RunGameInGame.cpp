@@ -109,9 +109,9 @@ void URunGameInGame::NativeConstruct()
 		UE_LOG(LogRunGame, Error, TEXT("RunGameInGame: Failed to get TimerSubsystem!"));
 	}
 
-	// Skill bar setup——角色可能尚未生成（竞态），失败时自动重试
-	// Player may not be spawned yet (race); retry automatically on failure
-	SetupSkillBar();
+	// 延迟技能栏构建到下一帧 — 先让世界跑起来，避免解冻首帧 Widget 创建阻塞
+	// Defer skill bar to next frame — let the world start first, avoid blocking first frame after unfreeze
+	GetWorld()->GetTimerManager().SetTimerForNextTick(this, &URunGameInGame::SetupSkillBar);
 }
 
 void URunGameInGame::SetupSkillBar()

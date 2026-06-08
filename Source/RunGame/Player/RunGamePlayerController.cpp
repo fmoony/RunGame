@@ -210,7 +210,9 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 		break;
 	case ERunGameGameState::CountDown:
 		bShowMouseCursor = false;
-		SetInputMode(FInputModeUIOnly());
+		// GameAndUI 而非 UIOnly — 保持 EnhancedInput 按键状态跟踪，避免恢复后首键丢失
+		// GameAndUI instead of UIOnly — preserve EnhancedInput key tracking to avoid losing first press after resume
+		SetInputMode(FInputModeGameAndUI());
 		if (OldState != ERunGameGameState::MainMenu && OldState != ERunGameGameState::Pause)
 		{
 			SetViewTargetToMainMenuCamera();

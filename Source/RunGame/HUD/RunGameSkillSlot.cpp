@@ -68,6 +68,35 @@ void URunGameSkillSlot::SetupSlot(const FSkillDefinition& SkillDef, FGameplayTag
 
 		// Apply initial energy state
 		UpdateEnergyAvailability(Comp->GetCurrentEnergy());
+
+		// 查询当前冷却状态 — Widget 可能在冷却中重建（暂停→恢复时 HUD 重建），需要恢复显示
+		// Query current cooldown state — widget may be recreated mid-cooldown (pause→resume), restore display
+		if (!Comp->IsSkillReady(SkillTag))
+		{
+			CachedCooldownDuration = SkillDef.CooldownSeconds;
+
+			if (CooldownMID && CooldownOverlay)
+			{
+				const float Remaining = Comp->GetCooldownRemaining(SkillTag);
+				const float Percent = CachedCooldownDuration > 0.0f
+					? FMath::Clamp(Remaining / CachedCooldownDuration, 0.0f, 1.0f)
+					: 0.0f;
+
+				CooldownMID->SetScalarParameterValue(CooldownPercentParamName, Percent);
+				CooldownOverlay->SetVisibility(ESlateVisibility::Visible);
+
+				if (UWorld* World = GetWorld())
+				{
+					World->GetTimerManager().SetTimer(
+						CooldownDisplayTimer,
+						this,
+						&URunGameSkillSlot::UpdateCooldownDisplay,
+						0.05f,
+						true
+					);
+				}
+			}
+		}
 	}
 }
 
