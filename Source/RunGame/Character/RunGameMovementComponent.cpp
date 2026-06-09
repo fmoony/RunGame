@@ -138,8 +138,15 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 	// 从 Dead 恢复 → 重启移动 + 复原碰撞 Leaving Dead → re-enable movement + restore collision
 	if (OldState == ERunGameCharacterState::Dead)
 	{
-		UE_LOG(LogRunGame, Warning, TEXT("MovementComponent: Re-enabling movement + collision from Dead"));
+		UE_LOG(LogRunGame, Warning, TEXT("MovementComponent: Re-enabling movement + resetting facing"));
 		SetMovementMode(MOVE_Walking);
+
+		// 重生时重置朝向 — 对齐 Actor 当前旋转（由 SpawnPlayer 设置）
+		// Reset facing on respawn — align with Actor's current rotation (set by SpawnPlayer)
+		if (Owner)
+		{
+			DesireRotation = Owner->GetActorRotation();
+		}
 	}
 }
 

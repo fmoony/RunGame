@@ -125,16 +125,18 @@ void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERu
 		SwitchToMainMenuCamera();
 		break;
 	case ERunGameGameState::CountDown:
+		// 重启时：切主菜单视点 + 挂回 SpringArm → InGame 时仅需 Blend
+		// On restart: switch to menu view + reattach SpringArm → InGame only needs Blend
 		if (OldState != ERunGameGameState::MainMenu && OldState != ERunGameGameState::Pause)
 		{
 			SwitchToMainMenuCamera();
+			if (bCameraDetached)
+			{
+				ReattachCameraToOwner();
+			}
 		}
 		break;
 	case ERunGameGameState::InGame:
-		if (bCameraDetached)
-		{
-			ReattachCameraToOwner();
-		}
 		SwitchToFollowCamera();
 		break;
 	default:

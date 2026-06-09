@@ -181,8 +181,14 @@ void URunGameEffectComponent::ResetDissolveMaterials()
 {
 	UE_LOG(LogRunGame, Warning, TEXT("EffectComponent::ResetDissolveMaterials — Count=%d"), DissolveMaterials.Num());
 
-	// 恢复原始材质 — 溶解期间创建的 DMI 可能无法正确复位，直接还原
-	// Restore original materials — DMI created during dissolve may not reset correctly
+	// 停掉所有溶解定时器 — 重启过快时清除残留 Stop all dissolve timers — clear on fast restart
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(DissolveTickTimer);
+		World->GetTimerManager().ClearTimer(DissolveDestroyTimer);
+	}
+
+	// 恢复原始材质 Restore original materials
 	if (DissolveMaterials.Num() > 0)
 	{
 		if (ACharacter* Char = Cast<ACharacter>(GetOwner()))
@@ -198,6 +204,7 @@ void URunGameEffectComponent::ResetDissolveMaterials()
 	}
 
 	DissolveMaterials.Empty();
+	DissolveElapsed = 0.0f;
 }
 
 void URunGameEffectComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)

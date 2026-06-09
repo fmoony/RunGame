@@ -386,8 +386,14 @@ void USkillComponent::OnRS_CharacterStateChanged(ERunGameCharacterState OldState
 	if (NewState == ERunGameCharacterState::Dead)
 	{
 		ClearAllCooldowns();
-
 		CurrentEnergy = 0.0f;
+		OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
+	}
+
+	// 重生 → 重置能量 Respawning → reset energy to initial
+	if (OldState == ERunGameCharacterState::Dead && NewState != ERunGameCharacterState::Dead)
+	{
+		CurrentEnergy = InitialEnergy;
 		OnEnergyChanged.Broadcast(CurrentEnergy, MaxEnergy);
 	}
 }

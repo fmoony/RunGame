@@ -104,10 +104,15 @@ void URunGameAnimInstance::OnCharacterStateChanged(ERunGameCharacterState OldSta
 		EndSlide();
 	}
 
-	// 从 Dead 恢复 — 解冻骨骼 + 强制恢复可见 Leaving Dead — unfreeze skeleton + force visibility
+	// 从 Dead 恢复 — 停死亡动画 + 解冻骨骼 + 恢复可见
 	if (OldState == ERunGameCharacterState::Dead)
 	{
-		UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Unfreezing skeleton — Owner=%s"), *GetNameSafe(Owner));
+		UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Leaving Dead — cleaning up"));
+
+		// 停掉可能还在播的死亡蒙太奇 Stop any in-progress death montage
+		OnMontageBlendingOut.RemoveDynamic(this, &URunGameAnimInstance::OnDeathMontageBlendingOut);
+		Montage_Stop(0.0f);
+
 		if (Owner)
 		{
 			if (USkeletalMeshComponent* SkelMesh = Owner->GetMesh())
@@ -118,7 +123,7 @@ void URunGameAnimInstance::OnCharacterStateChanged(ERunGameCharacterState OldSta
 				SkelMesh->SetHiddenInGame(false);
 				SkelMesh->bRecentlyRendered = true;
 				SkelMesh->MarkRenderStateDirty();
-				UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Skeleton unfrozen + forced visible + render dirty"));
+				UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Skeleton unfrozen + forced visible"));
 			}
 		}
 	}

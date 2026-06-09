@@ -7,6 +7,7 @@
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Game/RunGameGameState.h"
+#include "Character/RunGameMovementComponent.h"
 #include "Player/RunGamePlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "RunGame.h"
@@ -149,6 +150,9 @@ void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ER
 	case ERunGameGameState::MainMenu:
 		bResumingFromPause = false;
 		break;
+	case ERunGameGameState::CountDown:
+		SpawnPlayer();
+		break;
 	case ERunGameGameState::InGame:
 		if (OldState == ERunGameGameState::Pause || bResumingFromPause)
 		{
@@ -156,7 +160,14 @@ void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ER
 		}
 		else
 		{
-			SpawnPlayer();
+			// 恢复运动 — CountDown 时 SetActive(false) 了 Resume movement — paused during CountDown
+			if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+			{
+				if (ACharacter* Char = Cast<ACharacter>(PC->GetPawn()))
+				{
+					Char->GetCharacterMovement()->SetActive(true);
+				}
+			}
 		}
 		break;
 	case ERunGameGameState::Pause:
@@ -208,11 +219,15 @@ void ARunGameGameMode::SpawnPlayer()
 		Pawn->SetActorEnableCollision(true);
 		PC->Possess(Pawn);
 
-		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SetActorTransform Character:%f,%f,%f"),SpawnTransform.GetLocation().X, SpawnTransform.GetLocation().Y, SpawnTransform.GetLocation().Z);
-
 		if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 		{
 			PRS->ResetForNewGame();
+		}
+
+		// CountDown 期间停运动 — InGame 时恢复
+		if (ACharacter* Char = Cast<ACharacter>(Pawn))
+		{
+			Char->GetCharacterMovement()->SetActive(false);
 		}
 
 		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Reused pre-spawned Character"));
