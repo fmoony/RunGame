@@ -120,6 +120,9 @@ private:
 	UFUNCTION()
 	void OnEffectTagChanged(FGameplayTag Tag, bool bAdded);
 
+	UFUNCTION()
+	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
 	bool IsTagRelevantToQuery(FGameplayTag Tag, const FGameplayTagQuery& Query) const;
 
 	UPROPERTY()

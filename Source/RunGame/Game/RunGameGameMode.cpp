@@ -74,16 +74,43 @@ void ARunGameGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ARunGameGameMode::OnFloorSystemReadyCallback()
 {
-	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+
+	// 提前生成 Character — MainMenu 时就存在，CameraComponent 可切主菜单镜头
+	// Spawn Character early — exists during MainMenu, CameraComponent can switch to menu camera
+	if (PC && GameCharacterClass)
 	{
-		FTransform StartTransform = FTransform::Identity;
-		APlayerController* PC = GetWorld()->GetFirstPlayerController();
-		if (PC && PC->GetPawn())
+		// 销毁 GameMode 自动生成的 Spectator Destroy auto-spawned Spectator from GameMode
+		if (APawn* ExistingPawn = PC->GetPawn())
 		{
-			StartTransform = PC->GetPawn()->GetTransform();
+			if (ExistingPawn->IsA(ASpectatorPawn::StaticClass()))
+			{
+				PC->UnPossess();
+				ExistingPawn->Destroy();
+			}
 		}
 
-		// 延迟 0.4s 生成——等 Lumen 表面缓存构建完。否则第一块地板全黑。
+		AActor* StartSpot = ChoosePlayerStart(PC);
+		const FTransform SpawnTransform = StartSpot ? StartSpot->GetActorTransform() : FTransform::Identity;
+
+		if (!PC->GetPawn())
+		{
+			FActorSpawnParameters SpawnParams;
+			SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+			if (APawn* Player = GetWorld()->SpawnActor<APawn>(GameCharacterClass, SpawnTransform, SpawnParams))
+			{
+				PC->Possess(Player);
+				Player->SetActorHiddenInGame(true);
+				Player->SetActorEnableCollision(false);
+				UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Character pre-spawned in MainMenu"));
+			}
+		}
+	}
+
+	if (URunGameFloorSubsystem* FloorSystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>())
+	{
+		const FTransform StartTransform = (PC && PC->GetPawn()) ? PC->GetPawn()->GetTransform() : FTransform::Identity;
+
 		FTimerHandle DelayHandle;
 		GetWorld()->GetTimerManager().SetTimer(DelayHandle, [FloorSystem, StartTransform]()
 		{
@@ -148,53 +175,69 @@ void ARunGameGameMode::OnGameStateChangedCallback(ERunGameGameState OldState, ER
 
 void ARunGameGameMode::SpawnPlayer()
 {
-	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SpawnPlayer called - spawning player character"));
-
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (PC)
+	if (!PC) return;
+
+	// Character 已在 OnFloorSystemReady 时预生成 — 只需重启状态 + 显示
+	// Character already pre-spawned in OnFloorSystemReady — just reset state + show
+	AActor* StartSpot = ChoosePlayerStart(PC);
+	if (!StartSpot)
 	{
-		// 寻找合适的PlayerStart
-		AActor* StartSpot = ChoosePlayerStart(PC);
-		FTransform SpawnTransform = StartSpot ? StartSpot->GetActorTransform() : FTransform::Identity;
+		UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: SpawnPlayer — ChoosePlayerStart returned NULL! No PlayerStart in level!"));
+	}
+	const FTransform SpawnTransform = StartSpot
+		? FTransform(StartSpot->GetActorRotation(), StartSpot->GetActorLocation())
+		: FTransform::Identity;
 
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	APawn* Pawn = PC->GetPawn();
+	if (StartSpot) { UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: StartSpot Location=%s"), *StartSpot->GetActorLocation().ToString()); }
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SpawnPlayer — Pawn=%s, StartSpot=%s"),
+		*GetNameSafe(Pawn), *GetNameSafe(StartSpot));
 
-		// 重置玩家运行时状态，确保新角色以干净状态开始 Reset player runtime state for clean start
+	if (Pawn && Pawn->IsA(GameCharacterClass))
+	{
+		ERunGameCharacterState PRSState = ERunGameCharacterState::MAX;
+		if (UPlayerRuntimeState* P = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+		{
+			PRSState = P->GetCharacterState();
+		}
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SpawnPlayer — PRS State=%d"), (int32)PRSState);
+
+		Pawn->SetActorTransform(SpawnTransform);
+		Pawn->SetActorHiddenInGame(false);
+		Pawn->SetActorEnableCollision(true);
+		PC->Possess(Pawn);
+
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: SetActorTransform Character:%f,%f,%f"),SpawnTransform.GetLocation().X, SpawnTransform.GetLocation().Y, SpawnTransform.GetLocation().Z);
+
 		if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 		{
 			PRS->ResetForNewGame();
 		}
 
-		if (GameCharacterClass)
-		{
-			if (APawn* RealPlayer = GetWorld()->SpawnActor<APawn>(GameCharacterClass, SpawnTransform, SpawnParams))
-			{
-				// 拥有玩家
-				PC->Possess(RealPlayer);
-				// 视角从死亡摄像机切回角色
-				PC->SetViewTargetWithBlend(RealPlayer, 0.3f);
-				PC->bAutoManageActiveCameraTarget = true;
-
-				// 输入模式由 Controller 自行监听 GameState 状态变化来管理
-
-				UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Player spawned and possessed successfully"));
-
-				// InitializeGameTimer removed: SetGameState(InGame) triggers StartTimer reactively
-			}
-			else
-			{
-				UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: Failed to spawn player character"));
-			}
-		}
-		else
-		{
-			UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: GameCharacterClass is NOT set in GameMode! Cannot spawn player."));
-		}
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Reused pre-spawned Character"));
+		return;
 	}
-	else
-		{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: Failed to get PlayerController"));
+
+	// 预生成未就绪 → 回退原始生成 Pre-spawn not ready → fallback spawn
+	if (!GameCharacterClass)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameGameMode: GameCharacterClass is NOT set in GameMode! Cannot spawn player."));
+		return;
+	}
+
+	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		PRS->ResetForNewGame();
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	if (APawn* RealPlayer = GetWorld()->SpawnActor<APawn>(GameCharacterClass, SpawnTransform, SpawnParams))
+	{
+		PC->Possess(RealPlayer);
+		UE_LOG(LogRunGame, Warning, TEXT("RunGameGameMode: Fallback spawn — pre-spawn was not ready"));
 	}
 }
 
@@ -269,16 +312,7 @@ void ARunGameGameMode::RequestRestartFromPause()
 {
 	UGameplayStatics::SetGamePaused(GetWorld(), false);
 
-	// 清理角色
-	if (ARunGamePlayerController* PC = Cast<ARunGamePlayerController>(GetWorld()->GetFirstPlayerController()))
-	{
-		if (APawn* CurrentPawn = PC->GetPawn())
-		{
-			CurrentPawn->Destroy();
-		}
-		PC->SetViewTargetToMainMenuCamera();
-	}
-
-	// 直接调用 StartNewGame 来重置游戏状态并进入倒计时
+	// 不再销毁角色 — CameraComponent 需要角色存活以管理镜头
+	// Don't destroy pawn — CameraComponent needs Character alive for camera management
 	StartNewGame();
 }

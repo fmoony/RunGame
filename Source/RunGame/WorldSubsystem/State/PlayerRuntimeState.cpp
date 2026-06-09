@@ -14,8 +14,20 @@ void UPlayerRuntimeState::Deinitialize()
 
 void UPlayerRuntimeState::ResetForNewGame()
 {
-	CurrentCharacterState = ERunGameCharacterState::Idle;
+	// 强制重置——绕过 Dead 守卫，且广播通知所有子系统
+	// Force reset — bypass Dead guard, broadcast to all subsystems
 	ActiveEffectTags.Reset();
+
+	const ERunGameCharacterState OldState = CurrentCharacterState;
+	CurrentCharacterState = ERunGameCharacterState::Idle;
+
+	UE_LOG(LogRunGame, Warning, TEXT("PRS::ResetForNewGame: OldState=%d → Idle, broadcasting=%d"),
+		(int32)OldState, OldState != CurrentCharacterState);
+
+	if (OldState != CurrentCharacterState)
+	{
+		OnCharacterStateChanged.Broadcast(OldState, CurrentCharacterState);
+	}
 }
 
 // ---- Effect Tags ----

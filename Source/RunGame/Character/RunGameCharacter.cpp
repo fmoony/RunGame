@@ -6,12 +6,12 @@
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameEffectComponent.h"
 #include "Character/RunGameCollisionAbilityComponent.h"
+#include "Character/RunGameCameraComponent.h"
 #include "Animation/RunGameAnimInstance.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
-#include "Camera/CameraActor.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -37,7 +37,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	GetCharacterMovement()->bUseControllerDesiredRotation = false;
 
 	GetCharacterMovement()->JumpZVelocity = 500.f;
-	GetCharacterMovement()->AirControl = 0.35f;
+	GetCharacterMovement()->AirControl = 0.8f;  // 空中左右移动更自如 Better air strafing
 	GetCharacterMovement()->MaxWalkSpeed = 1200.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
@@ -59,6 +59,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
 	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));
 	CollisionAbility = CreateDefaultSubobject<URunGameCollisionAbilityComponent>(TEXT("CollisionAbility"));
+	CameraComponent = CreateDefaultSubobject<URunGameCameraComponent>(TEXT("CameraComponent"));
 
 	// 注入 Native AnimInstance 类 Inject native AnimInstance class
 	GetMesh()->SetAnimInstanceClass(URunGameAnimInstance::StaticClass());
@@ -73,7 +74,7 @@ void ARunGameCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// 状态机响应——自身逻辑 + 转发给蓝图 Reactive to state machine: self logic + forward to BP
+	// 状态机响应 Reactive to state machine
 	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
 		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
@@ -243,25 +244,10 @@ void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeig
 
 void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor* DeathCauser)
 {
-	// 1. 先切死亡摄像机（在状态变更前——广播同步，动画组件会立即播蒙太奇）
-	// Camera first (before state change — broadcast is sync, animation starts immediately)
-	if (APlayerController* PC = Cast<APlayerController>(GetController()))
-	{
-		const FVector CamLoc = FollowCamera ? FollowCamera->GetComponentLocation() : GetActorLocation();
-		const FRotator CamRot = FollowCamera ? FollowCamera->GetComponentRotation() : GetActorRotation();
+	// 镜头由 CameraComponent 的 OnCharacterStateChanged(Dead) → DetachCameraToWorld 接管
+	// Camera handled by CameraComponent::OnCharacterStateChanged(Dead) → DetachCameraToWorld
 
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		if (ACameraActor* DeathCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), CamLoc, CamRot, SpawnParams))
-		{
-			PC->SetViewTargetWithBlend(DeathCamera, 0.1f);
-			PC->bAutoManageActiveCameraTarget = false;
-			UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Death camera spawned."));
-		}
-	}
-
-	// 2. 关闭碰撞 → 设置 Dead → 全组件同步响应
+	// 关闭碰撞 → 设置 Dead → 全组件同步响应
 	// Disable collision → set Dead → all components react synchronously
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SetCharacterState(ERunGameCharacterState::Dead);
@@ -292,7 +278,14 @@ void ARunGameCharacter::OnHealthDamageTaken(float Damage, FGameplayTag DamageTyp
 void ARunGameCharacter::OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
 {
 	if (OldState == NewState) return;
-	if (NewState == ERunGameGameState::MainMenu) Destroy();
+
+	// 回到主菜单 → 隐藏（GameMode::SpawnPlayer 负责在 InGame 时显示）
+	// Back to MainMenu → hide (GameMode::SpawnPlayer handles showing on InGame)
+	if (NewState == ERunGameGameState::MainMenu)
+	{
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+	}
 }
 
 // ---- RS forward ----

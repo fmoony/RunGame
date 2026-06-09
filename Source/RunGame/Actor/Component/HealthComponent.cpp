@@ -19,6 +19,7 @@ void UHealthComponent::BeginPlay()
 	if (CachedPRS)
 	{
 		CachedPRS->OnEffectTagChanged.AddDynamic(this, &UHealthComponent::OnEffectTagChanged);
+		CachedPRS->OnCharacterStateChanged.AddDynamic(this, &UHealthComponent::OnCharacterStateChanged);
 	}
 
 	OnHealthChanged.Broadcast(CurrentHP, MaxHP, CurrentHP);
@@ -29,6 +30,7 @@ void UHealthComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (CachedPRS)
 	{
 		CachedPRS->OnEffectTagChanged.RemoveDynamic(this, &UHealthComponent::OnEffectTagChanged);
+		CachedPRS->OnCharacterStateChanged.RemoveDynamic(this, &UHealthComponent::OnCharacterStateChanged);
 		CachedPRS = nullptr;
 	}
 
@@ -160,6 +162,17 @@ void UHealthComponent::OnEffectTagChanged(FGameplayTag Tag, bool bAdded)
 				RemoveShield();
 			}
 		}
+	}
+}
+
+void UHealthComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+{
+	UE_LOG(LogRunGame, Warning, TEXT("HealthComponent::OnCharacterStateChanged: %d → %d"), (int32)OldState, (int32)NewState);
+	// 从 Dead 恢复 → 自动复活 Auto-revive when leaving Dead state
+	if (OldState == ERunGameCharacterState::Dead && NewState != ERunGameCharacterState::Dead)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("HealthComponent: Reviving to %.0f HP"), MaxHP);
+		Revive(MaxHP);
 	}
 }
 

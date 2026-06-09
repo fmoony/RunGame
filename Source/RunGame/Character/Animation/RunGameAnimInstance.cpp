@@ -91,6 +91,9 @@ void URunGameAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 
 void URunGameAnimInstance::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
+	UE_LOG(LogRunGame, Warning, TEXT("AnimInstance::OnCharacterStateChanged: %d → %d, Owner=%s"),
+		(int32)OldState, (int32)NewState, *GetNameSafe(Owner));
+
 	if (NewState == ERunGameCharacterState::Sliding)
 	{
 		PlaySlideMontage();
@@ -101,6 +104,24 @@ void URunGameAnimInstance::OnCharacterStateChanged(ERunGameCharacterState OldSta
 		EndSlide();
 	}
 
+	// 从 Dead 恢复 — 解冻骨骼 + 强制恢复可见 Leaving Dead — unfreeze skeleton + force visibility
+	if (OldState == ERunGameCharacterState::Dead)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Unfreezing skeleton — Owner=%s"), *GetNameSafe(Owner));
+		if (Owner)
+		{
+			if (USkeletalMeshComponent* SkelMesh = Owner->GetMesh())
+			{
+				SkelMesh->bPauseAnims = false;
+				SkelMesh->bNoSkeletonUpdate = false;
+				SkelMesh->SetVisibility(true);
+				SkelMesh->SetHiddenInGame(false);
+				SkelMesh->bRecentlyRendered = true;
+				SkelMesh->MarkRenderStateDirty();
+				UE_LOG(LogRunGame, Warning, TEXT("AnimInstance: Skeleton unfrozen + forced visible + render dirty"));
+			}
+		}
+	}
 }
 
 // ── Slide ──
@@ -149,15 +170,20 @@ void URunGameAnimInstance::OnSlideBlendingOut(UAnimMontage* Montage, bool bInter
 
 void URunGameAnimInstance::PlayDeathMontage(FGameplayTag DamageType)
 {
-	if (!Owner) return;
+	if (!Owner) { UE_LOG(LogRunGame, Warning, TEXT("AnimInstance::PlayDeathMontage — Owner is null!")); return; }
 
 	TObjectPtr<UAnimMontage>* Found = DeathMontages.Find(DamageType);
 	UAnimMontage* Montage = Found ? Found->Get() : nullptr;
 
 	if (Montage)
 	{
+		UE_LOG(LogRunGame, Warning, TEXT("AnimInstance::PlayDeathMontage — Playing montage for %s"), *DamageType.ToString());
 		OnMontageBlendingOut.AddUniqueDynamic(this, &URunGameAnimInstance::OnDeathMontageBlendingOut);
 		Montage_Play(Montage);
+	}
+	else
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("AnimInstance::PlayDeathMontage — No montage found for %s"), *DamageType.ToString());
 	}
 }
 
@@ -189,6 +215,8 @@ void URunGameAnimInstance::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool
 
 void URunGameAnimInstance::OnCharacterDied(FGameplayTag DamageType, ARunGameCharacter* DeadCharacter)
 {
+	UE_LOG(LogRunGame, Warning, TEXT("AnimInstance::OnCharacterDied — DamageType=%s, Owner=%s"),
+		*DamageType.ToString(), *GetNameSafe(Owner));
 	PlayDeathMontage(DamageType);
 }
 

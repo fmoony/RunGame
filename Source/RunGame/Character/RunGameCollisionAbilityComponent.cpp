@@ -155,4 +155,12 @@ void URunGameCollisionAbilityComponent::OnCharacterStateChanged(ERunGameCharacte
 		HitCooldowns.Empty();
 		OnCollisionStateChanged.Broadcast();
 	}
+
+	if(OldState == ERunGameCharacterState::Dead && NewState != ERunGameCharacterState::Dead)
+	{
+		if (Capsule)
+		{
+			Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		}
+	}
 }

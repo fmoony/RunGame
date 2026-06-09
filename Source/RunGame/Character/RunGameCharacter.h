@@ -18,6 +18,7 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameMovementComponent;
 class URunGameEffectComponent;
+class URunGameCameraComponent;
 class URunGameCollisionAbilityComponent;
 class UNiagaraSystem;
 class UNiagaraComponent;
@@ -54,6 +55,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameCollisionAbilityComponent> CollisionAbility;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameCameraComponent> CameraComponent;
 
 protected:
 

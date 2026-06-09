@@ -13,7 +13,6 @@
 #include "Character/RunGameCharacter.h"
 #include "Game/RunGameGameState.h"
 #include "EngineUtils.h"
-#include "Camera/CameraActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Widgets/Input/SVirtualJoystick.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
@@ -148,33 +147,6 @@ void ARunGamePlayerController::SetInputModeToUIOnly()
 	UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: Input mode set to UI Only"));
 }
 
-void ARunGamePlayerController::SetViewTargetToMainMenuCamera()
-{
-	ACameraActor* FoundCamera = nullptr;
-
-	// 1. 创建迭代器，限定只在 ACameraActor 及其子类中查找
-	for (TActorIterator<ACameraActor> It(GetWorld()); It; ++It)
-	{
-		// 2. 检查这个相机是否有我们需要的 Tag
-		if (It->ActorHasTag(MainMenuCameraTag))
-		{
-			FoundCamera = *It;
-			break; // 【核心优势】：找到了就立刻中止遍历，节省大量 CPU 算力！
-		}
-	}
-
-	// 3. 执行绑定逻辑
-	if (FoundCamera)
-	{
-		SetViewTargetWithBlend(FoundCamera, 0.3f);
-		UE_LOG(LogRunGame, Warning, TEXT("ARunGamePlayerController: View target set to camera with tag '%s' for MainMenu!"), *MainMenuCameraTag.ToString());
-	}
-	else
-	{
-		UE_LOG(LogRunGame, Error, TEXT("ARunGamePlayerController: No camera found with tag '%s' for MainMenu view target!"), *MainMenuCameraTag.ToString());
-	}
-}
-
 void ARunGamePlayerController::TogglePause()
 {
 	ARunGameGameState* GameState = GetWorld()->GetGameState<ARunGameGameState>();
@@ -206,17 +178,10 @@ void ARunGamePlayerController::OnGameStateChangedCallback(ERunGameGameState OldS
 	{
 	case ERunGameGameState::MainMenu:
 		SetInputModeToUIOnly();
-		SetViewTargetToMainMenuCamera();
 		break;
 	case ERunGameGameState::CountDown:
 		bShowMouseCursor = false;
-		// GameAndUI 而非 UIOnly — 保持 EnhancedInput 按键状态跟踪，避免恢复后首键丢失
-		// GameAndUI instead of UIOnly — preserve EnhancedInput key tracking to avoid losing first press after resume
 		SetInputMode(FInputModeGameAndUI());
-		if (OldState != ERunGameGameState::MainMenu && OldState != ERunGameGameState::Pause)
-		{
-			SetViewTargetToMainMenuCamera();
-		}
 		break;
 	case ERunGameGameState::InGame:
 		bShowMouseCursor = false;

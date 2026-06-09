@@ -9,8 +9,8 @@
 
 URunGameMovementComponent::URunGameMovementComponent()
 {
-	bOrientRotationToMovement = true;
-	bUseControllerDesiredRotation = false;
+	bOrientRotationToMovement = false;
+	bUseControllerDesiredRotation = true;
 }
 
 void URunGameMovementComponent::BeginPlay()
@@ -90,7 +90,6 @@ void URunGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 		const FRotator SmoothRotation = FMath::RInterpTo(CurrentRotation, DesireRotation, DeltaTime, 10.f);
 		Controller->SetControlRotation(SmoothRotation);
 	}
-
 }
 
 // ---- State reactions ----
@@ -134,6 +133,13 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 
 		SetMovementMode(MOVE_None);
 		DisableMovement();
+	}
+
+	// 从 Dead 恢复 → 重启移动 + 复原碰撞 Leaving Dead → re-enable movement + restore collision
+	if (OldState == ERunGameCharacterState::Dead)
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("MovementComponent: Re-enabling movement + collision from Dead"));
+		SetMovementMode(MOVE_Walking);
 	}
 }
 

@@ -58,14 +58,6 @@ protected:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Input")
 	void SetInputModeToUIOnly();
 
-	/** Tag used to find the MainMenuCamera placed in the level */
-	UPROPERTY(EditAnywhere, Category = "RunGame|Camera")
-	FName MainMenuCameraTag = FName("MainMenuCamera");
-
-public:
-	/** Finds the main menu camera by tag and blends the view to it */
-	void SetViewTargetToMainMenuCamera();
-
 private:
 	/** Reactively manages input mode and view target based on game state changes */
 	UFUNCTION()

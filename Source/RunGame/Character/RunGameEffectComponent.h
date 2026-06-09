@@ -69,9 +69,13 @@ private:
 	UFUNCTION()
 	void OnDissolveTriggered();
 
+	UFUNCTION()
+	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
 	void StartDissolveMaterial();
 	void TickDissolveMaterial();
 	void OnDissolveComplete();
+	void ResetDissolveMaterials();
 
 	// -- 内部 Internal --
 
@@ -89,6 +93,10 @@ private:
 
 	UPROPERTY()
 	TArray<TObjectPtr<UMaterialInstanceDynamic>> DissolveMaterials;
+
+	/** 缓存溶解前的原始材质 — 重生时复原 Cached original materials before dissolve — restored on respawn */
+	UPROPERTY()
+	TArray<TObjectPtr<UMaterialInterface>> OriginalMaterials;
 
 	FTimerHandle DissolveTickTimer;
 	FTimerHandle DissolveDestroyTimer;
