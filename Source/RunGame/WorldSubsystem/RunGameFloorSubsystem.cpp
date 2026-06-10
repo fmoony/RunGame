@@ -4,6 +4,7 @@
 #include "Engine/World.h"
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
+#include "State/PlayerRuntimeState.h"
 #include "RunGame.h"
 
 
@@ -463,6 +464,16 @@ void URunGameFloorSubsystem::UnbindFloorDelegates(AFloorBase* Floor)
 
 void URunGameFloorSubsystem::OnFloorPlayerEntered(AFloorBase* Floor)
 {
+	// 死亡/无碰撞状态不触发新地板 Dead/CoyoteTime don't trigger new floors
+	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
+	{
+		const ERunGameCharacterState State = PRS->GetCharacterState();
+		if (State == ERunGameCharacterState::Dead || State == ERunGameCharacterState::CoyoteTime)
+		{
+			return;
+		}
+	}
+
 	RequestNextFloor();
 }
 
