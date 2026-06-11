@@ -126,4 +126,8 @@ Source/RunGame/
 
 ## License
 
-MIT
+本项目代码采用 MIT 许可证。
+
+本项目基于 [Unreal® Engine](https://www.unrealengine.com/) 开发，须遵守 [Unreal Engine EULA](https://www.unrealengine.com/eula) 条款。部分游戏资产（角色、动画、材质）基于 Unreal Engine 官方示例资产修改，其版权归 Epic Games, Inc. 所有。
+
+`Source/RunGame/Variant_*/` 及 `Content/Variant_*/` 目录下的变体代码与资产来源于 Unreal Engine 官方模板，尚未完全重构，版权归 Epic Games, Inc. 所有。
