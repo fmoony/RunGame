@@ -217,3 +217,75 @@ FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 - 已有代码中的注释暂不要求补齐双语，后续修改时顺带补充
 - 标记词（TODO/FIXME/HACK/NOTE）同样适用此规则
 
+## 7. Git 提交规范（Commit Message Convention）
+
+### 格式
+
+```
+<主题概括>
+
+ - <具体改动1>
+ - <具体改动2>
+ - <具体改动3>
+```
+
+### 主题（Subject Line）
+
+- **中文**，一行概括本次提交做了什么
+- 格式：`<做了什么事> — <关键细节>` 或 `<做了什么事>`
+- 可选类型前缀：`feat:` / `fix:` / `refactor:` / `docs:` / `chore:`——新功能/修复/重构/文档/杂项，视改动性质而定
+- 不超过 72 字符，结尾不加句号
+
+**示例：**
+
+```
+CameraComponent 镜头系统 + Character 重生全链路修复
+Trap 自动绑定父 Floor 池子生命周期
+修复暂停恢复后的输入阻塞、首帧卡顿、技能冷却显示
+feat: CollisionAbility 组件 + IImpactReceiver 接口 + 速度配置蓝图化
+```
+
+### 正文（Body）
+
+- 每条改动以 ` - ` 开头（空格+短横+空格）
+- 每条描述一个**具体改动区域**，格式：`ClassName/SystemName: 具体改了什么`
+- **必须包含**：改了什么文件/类、怎么改的、达到什么目的
+- **排序**：核心改动在前，附属改动在后；新增在前，修复在后
+- 复杂改动可换行续写（续行缩进对齐正文首字符）
+- 纯中文，无需英文翻译
+
+**示例：**
+
+```
+CameraComponent 镜头系统 + Character 重生全链路修复
+
+ - GameMode: SpawnPlayer 提前到 CountDown 执行(定位+复位+PRS全复活)，
+   运动通过 SetActive(false/true) 由 InGame 控制启停
+ - CameraComponent: CountDown 时挂回 SpringArm 并切主菜单视点，
+   InGame 仅 Blend 无跳变
+ - 各子系统 Dead→Idle 自愈: Health(Revive)、Movement(DesireRotation+Walking)、
+   SKill(能量复位)、AnimInstance(停蒙太奇+解冻骨骼)、
+   EffectComponent(清定时器+还原材质+重置DissolveElapsed)
+```
+
+```
+Trap 可破坏 Actor + 碰撞冷却制 + 技能双 Tag 效果
+
+ - ATrap：IImpactReceiver + HealthComponent + DamageDealerComponent，
+   Tag Query 过滤、Floor 委托恢复、Mesh 绑定伤害形状
+ - CollisionAbilityComponent：float 冷却替代 Timer 黑名单，
+   死亡清冷却+阻止重叠、ActiveSkillTag 归零清空、
+   OnCollisionStateChanged 委托驱动 Debug UI 实时刷新
+ - Debug UI 新增 [Skill Tags] 面板，绑 PRS+碰撞双委托
+ - FSkillDefinition 新增 SpeedEffectTag/DefenseEffectTag，
+   Unstoppable 双 Tag 两步撤：Duration 到期撤速度→插值完成撤无敌
+```
+
+### 不要做的事
+
+- ❌ 笼统描述：`修复bug`、`更新代码`、`改了一些东西`
+- ❌ 只写 What 不写 Where：`新增了一个委托`——得说清哪个类、什么委托
+- ❌ 英文主题（本项目面向中文开发者）
+- ❌ Markdown 标题分段——正文用扁平 bullet list
+- ❌ 一条巨型 commit 塞多个不相关的改动——拆成多个 commit
+

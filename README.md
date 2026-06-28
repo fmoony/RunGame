@@ -116,7 +116,7 @@ Source/RunGame/
 - **反射宏紧凑**：`UFUNCTION`/`UPROPERTY` 紧贴声明
 - **意图注释**：注释说 Why 不说 What
 
-详见 `CODING_STYLE.md`。
+详见 `docs/_coding-style.md`。
 
 ## 构建 & 运行
 
