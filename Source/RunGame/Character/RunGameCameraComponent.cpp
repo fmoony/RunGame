@@ -28,13 +28,13 @@ void URunGameCameraComponent::BeginPlay()
 
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
-		GS->OnGameStateChanged.AddDynamic(this, &URunGameCameraComponent::OnGameStateChanged);
+		GS->OnGameStateChanged.AddUniqueDynamic(this, &URunGameCameraComponent::OnGameStateChanged);
 	}
 
 	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
-		PRS->OnCharacterStateChanged.AddDynamic(this, &URunGameCameraComponent::OnCharacterStateChanged);
-		PRS->OnCharacterDied.AddDynamic(this, &URunGameCameraComponent::OnCharacterDied);
+		PRS->OnCharacterStateChanged.AddUniqueDynamic(this, &URunGameCameraComponent::OnCharacterStateChanged);
+		PRS->OnCharacterDied.AddUniqueDynamic(this, &URunGameCameraComponent::OnCharacterDied);
 	}
 
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
@@ -123,6 +123,7 @@ void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERu
 	{
 	case ERunGameGameState::MainMenu:
 		SwitchToMainMenuCamera();
+		ReattachCameraToOwner();
 		break;
 	case ERunGameGameState::CountDown:
 		// 重启时：切主菜单视点 + 挂回 SpringArm → InGame 时仅需 Blend
@@ -130,11 +131,8 @@ void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERu
 		if (OldState != ERunGameGameState::MainMenu && OldState != ERunGameGameState::Pause)
 		{
 			SwitchToMainMenuCamera();
-			if (bCameraDetached)
-			{
-				ReattachCameraToOwner();
-			}
 		}
+		ReattachCameraToOwner();
 		break;
 	case ERunGameGameState::InGame:
 		SwitchToFollowCamera();
@@ -185,6 +183,7 @@ void URunGameCameraComponent::SwitchToFollowCamera()
 	APlayerController* PC = GetPC();
 	if (PC && GetOwner())
 	{
+		ReattachCameraToOwner();
 		PC->SetViewTargetWithBlend(GetOwner(), RestoreBlendTime);
 		PC->bAutoManageActiveCameraTarget = true;
 	}
