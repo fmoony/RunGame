@@ -3,6 +3,7 @@
 #include "WorldSubsystem/RunGameCoinSubsystem.h"
 #include "Actor/Collectible/Coin.h"
 #include "Engine/World.h"
+#include "HAL/PlatformTime.h"
 #include "RunGame.h"
 
 URunGameCoinSubsystem::URunGameCoinSubsystem()
@@ -32,8 +33,14 @@ void URunGameCoinSubsystem::PreAllocateCoins(TSubclassOf<ACoin> CoinClass, int32
 
 	TArray<ACoin*>& SubPool = PooledCoinsMap.FindOrAdd(CoinClass);
 
+	const double PreAllocateStartSeconds = FPlatformTime::Seconds();
 	for (int32 i = 0; i < Count; ++i)
 	{
+		if (bBenchmarkDisablePool)
+		{
+			break;
+		}
+
 		ACoin* Coin = CreateNewCoin(CoinClass);
 		if (Coin)
 		{
@@ -43,6 +50,7 @@ void URunGameCoinSubsystem::PreAllocateCoins(TSubclassOf<ACoin> CoinClass, int32
 			SubPool.Add(Coin);
 		}
 	}
+	BenchmarkStats.PreAllocateMs = (FPlatformTime::Seconds() - PreAllocateStartSeconds) * 1000.0;
 
 	UE_LOG(LogRunGame, Warning, TEXT("RunGameCoinSubsystem: Pre-allocated %d coins of class %s"),
 		Count, *GetNameSafe(CoinClass));
@@ -52,6 +60,11 @@ void URunGameCoinSubsystem::PreAllocateCoins(TSubclassOf<ACoin> CoinClass, int32
 
 ACoin* URunGameCoinSubsystem::AcquireCoinFromPool(TSubclassOf<ACoin> CoinClass)
 {
+	if (bBenchmarkDisablePool)
+	{
+		return nullptr;
+	}
+
 	TArray<ACoin*>* SubPool = PooledCoinsMap.Find(CoinClass);
 	if (SubPool && SubPool->Num() > 0)
 	{
@@ -72,6 +85,7 @@ ACoin* URunGameCoinSubsystem::CreateNewCoin(TSubclassOf<ACoin> CoinClass)
 	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
 	ACoin* Coin = World->SpawnActor<ACoin>(CoinClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+	BenchmarkStats.SpawnActorCount++;
 	if (!Coin)
 	{
 		UE_LOG(LogRunGame, Error, TEXT("RunGameCoinSubsystem: Failed to spawn coin of class %s"), *GetNameSafe(CoinClass));
@@ -109,6 +123,12 @@ void URunGameCoinSubsystem::ReturnCoin(ACoin* Coin)
 	}
 
 	ActiveCoins.RemoveSwap(Coin);
+
+	if (bBenchmarkDisablePool)
+	{
+		Coin->Destroy();
+		return;
+	}
 
 	TArray<ACoin*>& SubPool = PooledCoinsMap.FindOrAdd(Coin->GetClass());
 	SubPool.Add(Coin);
@@ -153,4 +173,14 @@ int32 URunGameCoinSubsystem::GetPooledCoinCount() const
 int32 URunGameCoinSubsystem::GetActiveCoinCount() const
 {
 	return ActiveCoins.Num();
+}
+
+void URunGameCoinSubsystem::SetBenchmarkDisablePool(bool bInDisablePool)
+{
+	bBenchmarkDisablePool = bInDisablePool;
+}
+
+void URunGameCoinSubsystem::ResetBenchmarkStats()
+{
+	BenchmarkStats = FRunGameCoinBenchmarkStats();
 }

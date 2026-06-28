@@ -5,6 +5,7 @@
 #include "Engine/AssetManager.h"
 #include "Engine/StreamableManager.h"
 #include "State/PlayerRuntimeState.h"
+#include "HAL/PlatformTime.h"
 #include "RunGame.h"
 
 
@@ -69,6 +70,18 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 	}
 
 	bIsLoading = true;
+	AsyncLoadStartSeconds = FPlatformTime::Seconds();
+
+	if (bBenchmarkUseSynchronousLoad)
+	{
+		FStreamableManager& Streamable = UAssetManager::GetStreamableManager();
+		for (const FSoftObjectPath& Path : PathsToLoad)
+		{
+			Streamable.LoadSynchronous(Path);
+		}
+		OnFloorClassesLoaded();
+		return;
+	}
 
 	FStreamableManager& Streamable = UAssetManager::GetStreamableManager();
 	Streamable.RequestAsyncLoad(PathsToLoad,
@@ -99,10 +112,19 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 void URunGameFloorSubsystem::OnFloorClassesLoaded()
 {
 	bIsLoading = false;
+	BenchmarkStats.AsyncLoadMs = (FPlatformTime::Seconds() - AsyncLoadStartSeconds) * 1000.0;
 
-	const int32 AllocateCount = FloorConfig ? FloorConfig->PreAllocateCount : 1;
+	const double PreAllocateStartSeconds = FPlatformTime::Seconds();
+	const int32 AllocateCount = BenchmarkPreAllocateOverride >= 0
+		? BenchmarkPreAllocateOverride
+		: (FloorConfig ? FloorConfig->PreAllocateCount : 1);
 	for (int32 i = 0; i < AllocateCount; ++i)
 	{
+		if (bBenchmarkDisablePool)
+		{
+			break;
+		}
+
 		TSubclassOf<AActor> RandomClass = WeightedRandomSelectFloorClass();
 		if (RandomClass)
 		{
@@ -114,6 +136,7 @@ void URunGameFloorSubsystem::OnFloorClassesLoaded()
 			}
 		}
 	}
+	BenchmarkStats.PreAllocateMs = (FPlatformTime::Seconds() - PreAllocateStartSeconds) * 1000.0;
 
 	bIsInitialized = true;
 
@@ -176,6 +199,25 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 
 	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Initial floor chain generated: %d guaranteed + %d random = %d floors"),
 		TotalGuaranteed, FloorConfig->InitialRandomFloorCount, TotalGuaranteed + FloorConfig->InitialRandomFloorCount);
+}
+
+void URunGameFloorSubsystem::BenchmarkSpawnFloorChain(const FTransform& StartTransform, int32 FloorCount)
+{
+	if (!bIsInitialized || !FloorConfig)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: BenchmarkSpawnFloorChain called before initialization."));
+		return;
+	}
+
+	NextSpawnTransform = StartTransform;
+	FVector InLocation = NextSpawnTransform.GetLocation();
+	InLocation += FloorConfig->SpawnStartOffset;
+	NextSpawnTransform.SetLocation(InLocation);
+
+	for (int32 i = 0; i < FloorCount; ++i)
+	{
+		RequestNextFloor();
+	}
 }
 
 AFloorBase* URunGameFloorSubsystem::RequestNextFloor()
@@ -268,6 +310,12 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 	Floor->SetActorHiddenInGame(true);
 	Floor->SetActorEnableCollision(false);
 
+	if (bBenchmarkDisablePool)
+	{
+		Floor->Destroy();
+		return;
+	}
+
 	PooledFloorsMap.FindOrAdd(Floor->GetClass()).Add(Floor);
 }
 
@@ -340,8 +388,25 @@ void URunGameFloorSubsystem::ClearAllFloors()
 
 	bIsInitialized = false;
 	bIsLoading = false;
+	AsyncLoadStartSeconds = 0.0;
 
 	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: All floors cleared"));
+}
+
+void URunGameFloorSubsystem::SetBenchmarkOptions(
+	bool bInDisablePool,
+	bool bInUseSynchronousLoad,
+	int32 InPreAllocateOverride)
+{
+	bBenchmarkDisablePool = bInDisablePool;
+	bBenchmarkUseSynchronousLoad = bInUseSynchronousLoad;
+	BenchmarkPreAllocateOverride = InPreAllocateOverride;
+}
+
+void URunGameFloorSubsystem::ResetBenchmarkStats()
+{
+	BenchmarkStats = FRunGameFloorBenchmarkStats();
+	AsyncLoadStartSeconds = 0.0;
 }
 
 // ===== 查询 =====
@@ -411,6 +476,11 @@ AFloorBase* URunGameFloorSubsystem::AcquireFloorFromPool(TSubclassOf<AActor> InC
 		return nullptr;
 	}
 
+	if (bBenchmarkDisablePool)
+	{
+		return nullptr;
+	}
+
 	TArray<AFloorBase*>* SubPool = PooledFloorsMap.Find(InClass);
 	if (SubPool && SubPool->Num() > 0)
 	{
@@ -431,6 +501,7 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 
 	const FVector OffScreenLocation = FloorConfig ? FloorConfig->PoolHideLocation : FVector(0.0f, 0.0f, -100000.0f);
 	AFloorBase* NewFloor = GetWorld()->SpawnActor<AFloorBase>(InClass, OffScreenLocation, FRotator::ZeroRotator, SpawnParams);
+	BenchmarkStats.SpawnActorCount++;
 
 	if (!NewFloor)
 	{

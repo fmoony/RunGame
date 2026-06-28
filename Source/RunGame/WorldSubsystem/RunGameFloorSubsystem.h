@@ -10,6 +10,21 @@ struct FFloorClassEntry;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnFloorSystemReadyDelegate);
 
+USTRUCT(BlueprintType)
+struct FRunGameFloorBenchmarkStats
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
+	int32 SpawnActorCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
+	double AsyncLoadMs = 0.0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
+	double PreAllocateMs = 0.0;
+};
+
 /** Internal entry holding a loaded floor class with its config metadata */
 struct FLoadedFloorEntry
 {
@@ -35,6 +50,10 @@ public:
 	/** Spawns the initial chain of floor segments using config-driven counts */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void SpawnInitialFloors(const FTransform& StartTransform);
+
+	/** 生成指定数量的地板用于性能测试 Spawn an exact floor count for performance tests */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem|Benchmark")
+	void BenchmarkSpawnFloorChain(const FTransform& StartTransform, int32 FloorCount);
 
 	/** Acquires the next random floor from the pool at the tracked spawn position */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
@@ -72,6 +91,18 @@ public:
 	/** Returns the current floor configuration data asset */
 	UFUNCTION(BlueprintPure, Category = "RunGame|FloorSystem")
 	UFloorConfigData* GetFloorConfig() const { return FloorConfig; }
+
+	/** 配置性能测试开关，默认不影响游戏路径 Configure benchmark toggles without changing normal gameplay defaults */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem|Benchmark")
+	void SetBenchmarkOptions(bool bInDisablePool, bool bInUseSynchronousLoad, int32 InPreAllocateOverride);
+
+	/** 重置性能统计 Reset benchmark counters */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem|Benchmark")
+	void ResetBenchmarkStats();
+
+	/** 获取性能统计 Return benchmark counters */
+	UFUNCTION(BlueprintPure, Category = "RunGame|FloorSystem|Benchmark")
+	FRunGameFloorBenchmarkStats GetBenchmarkStats() const { return BenchmarkStats; }
 
 	/** Delegate broadcast when floor subsystem finishes async loading */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|FloorSystem")
@@ -128,6 +159,14 @@ private:
 
 	bool bIsLoading;
 	bool bIsInitialized;
+
+	// 性能测试开关，默认关闭以保持正式路径不变 Benchmark toggles, disabled by default for normal gameplay
+	bool bBenchmarkDisablePool = false;
+	bool bBenchmarkUseSynchronousLoad = false;
+	int32 BenchmarkPreAllocateOverride = INDEX_NONE;
+
+	FRunGameFloorBenchmarkStats BenchmarkStats;
+	double AsyncLoadStartSeconds = 0.0;
 
 	// Object pool: per-type sub-pools
 	TMap<TSubclassOf<AActor>, TArray<AFloorBase*>> PooledFloorsMap;

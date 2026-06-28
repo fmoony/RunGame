@@ -10,6 +10,18 @@ class ACoin;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnCoinSubsystemReadySignature);
 
+USTRUCT(BlueprintType)
+struct FRunGameCoinBenchmarkStats
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
+	int32 SpawnActorCount = 0;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
+	double PreAllocateMs = 0.0;
+};
+
 UCLASS()
 class RUNGAME_API URunGameCoinSubsystem : public UWorldSubsystem
 {
@@ -40,6 +52,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RunGame|CoinSystem")
 	int32 GetActiveCoinCount() const;
 
+	/** 配置性能测试开关，默认不影响游戏路径 Configure benchmark toggles without changing normal gameplay defaults */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem|Benchmark")
+	void SetBenchmarkDisablePool(bool bInDisablePool);
+
+	/** 重置性能统计 Reset benchmark counters */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|CoinSystem|Benchmark")
+	void ResetBenchmarkStats();
+
+	/** 获取性能统计 Return benchmark counters */
+	UFUNCTION(BlueprintPure, Category = "RunGame|CoinSystem|Benchmark")
+	FRunGameCoinBenchmarkStats GetBenchmarkStats() const { return BenchmarkStats; }
+
 	/** Broadcast when PreAllocateCoins finishes */
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|CoinSystem")
 	FOnCoinSubsystemReadySignature OnCoinSubsystemReady;
@@ -61,4 +85,7 @@ private:
 	/** All currently active coins in the world */
 	UPROPERTY()
 	TArray<TObjectPtr<ACoin>> ActiveCoins;
+
+	bool bBenchmarkDisablePool = false;
+	FRunGameCoinBenchmarkStats BenchmarkStats;
 };
