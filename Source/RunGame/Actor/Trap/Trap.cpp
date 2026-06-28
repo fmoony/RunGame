@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Actor/Component/HealthComponent.h"
 #include "Actor/Component/DamageDealerComponent.h"
+#include "Actor/Floor/FloorBase.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
 #include "Kismet/GameplayStatics.h"
@@ -35,6 +36,14 @@ void ATrap::BeginPlay()
 
 	// 死亡委托 — HP 归零时触发视觉损毁 Death delegate — trigger visual destruction when HP reaches zero
 	HealthComponent->OnDeath.AddDynamic(this, &ATrap::OnTrapDeath);
+
+	// 绑父 Floor 池子生命周期 — 自动激活/停用
+	// Bind parent Floor pool lifecycle — auto activate/deactivate
+	if (AFloorBase* ParentFloor = Cast<AFloorBase>(GetAttachParentActor()))
+	{
+		ParentFloor->OnFloorActivated.AddDynamic(this, &ATrap::OnFloorActivatedCallback);
+		ParentFloor->OnFloorDeactivated.AddDynamic(this, &ATrap::OnFloorDeactivatedCallback);
+	}
 
 	// 初始激活 Activate on first spawn
 	ActivateTrap();

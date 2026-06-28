@@ -9,6 +9,7 @@
 class UStaticMeshComponent;
 class UHealthComponent;
 class UDamageDealerComponent;
+class AFloorBase;
 class UNiagaraSystem;
 class USoundBase;
 
@@ -87,4 +88,10 @@ private:
 
 	/** 执行视觉损毁 — 隐藏网格 + 禁用碰撞 + 播放特效 Perform visual destruction — hide mesh + disable collision + play FX */
 	void BreakTrap(const FVector& ImpactPoint);
+
+	UFUNCTION()
+	void OnFloorActivatedCallback(AFloorBase* Floor) { ActivateTrap(); }
+
+	UFUNCTION()
+	void OnFloorDeactivatedCallback(AFloorBase* Floor) { DeactivateTrap(); }
 };
