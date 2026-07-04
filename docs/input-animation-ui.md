@@ -10,14 +10,14 @@
 
 `URunGameInputBufferComponent` (`Character/RunGameInputBufferComponent.h/.cpp`) — ActorComponent on Character.
 
-Character binds EnhancedInput → broadcasts `OnInputCommandRequested`. `URunGameInputBufferComponent` subscribes, decides immediate execution vs buffering from `UPlayerRuntimeState`, and broadcasts ready commands through `ARunGameCharacter::OnInputCommandReady`. `URunGameMovementComponent` subscribes to ready commands and owns Jump / Slide execution. FIFO queue with 0.3s timeout. Same-type deduplication.
+Character binds EnhancedInput → forwards to `URunGameInputBufferComponent::BufferInput`. The input buffer decides immediate execution vs buffering from `UPlayerRuntimeState`, then asks `URunGameMovementComponent::TryConsumeInputCommand` to consume Jump / Slide. Successful consumption removes the input signal immediately; blocked commands remain queued until timeout or the next Idle consumption attempt. FIFO queue with 0.3s timeout. Same-type deduplication.
 
 | Command | Buffer when | Execute immediately when |
 |---------|-----------|---------------------------|
 | `Slide` | Airborne, CoyoteTime | Idle |
 | `Jump` | Sliding | Idle, Turning, CoyoteTime, Airborne |
 
-Move goes directly to MovementComponent, never buffered. `Character` only emits input / UE lifecycle events; MovementComponent reacts and marks ready command requests as handled after successful execution.
+Move goes directly to MovementComponent, never buffered. Character only forwards EnhancedInput and UE-required callbacks; RuntimeState owns semantic state changes and broadcasts successful transitions.
 
 ## Animation
 

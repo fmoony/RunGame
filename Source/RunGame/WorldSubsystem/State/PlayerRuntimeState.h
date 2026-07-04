@@ -31,6 +31,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Player|Character")
 	void SetCharacterState(ERunGameCharacterState NewState);
 
+	/** 尝试切换角色状态，成功或已处于目标状态时返回 true Try to change character state; returns true when target state is active */
+	UFUNCTION(BlueprintCallable, Category = "Player|Character")
+	bool TrySetCharacterState(ERunGameCharacterState NewState);
+
 	UFUNCTION(BlueprintPure, Category = "Player|Character")
 	ERunGameCharacterState GetCharacterState() const { return CurrentCharacterState; }
 

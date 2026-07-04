@@ -66,22 +66,28 @@ void UPlayerRuntimeState::NotifyDeathAnimationFinished()
 
 void UPlayerRuntimeState::SetCharacterState(ERunGameCharacterState NewState)
 {
+	TrySetCharacterState(NewState);
+}
+
+bool UPlayerRuntimeState::TrySetCharacterState(ERunGameCharacterState NewState)
+{
 	if (CurrentCharacterState == NewState)
 	{
-		return;
+		return true;
 	}
 
 	if (!IsCharacterStateTransitionAllowed(NewState))
 	{
 		UE_LOG(LogRunGame, Warning, TEXT("PlayerRuntimeState: Blocked invalid character state transition from %d to %d"),
 			static_cast<int32>(CurrentCharacterState), static_cast<int32>(NewState));
-		return;
+		return false;
 	}
 
 	const ERunGameCharacterState OldState = CurrentCharacterState;
 	CurrentCharacterState = NewState;
 
 	OnCharacterStateChanged.Broadcast(OldState, CurrentCharacterState);
+	return true;
 }
 
 bool UPlayerRuntimeState::IsCharacterStateTransitionAllowed(ERunGameCharacterState NewState) const

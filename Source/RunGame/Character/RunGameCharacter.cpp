@@ -96,8 +96,8 @@ void ARunGameCharacter::BeginPlay()
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
 	}
 
-	// 输入命令由 OnInputCommandRequested → InputBuffer → OnInputCommandReady 分发
-	// Input commands flow through OnInputCommandRequested → InputBuffer → OnInputCommandReady
+	// 输入生命周期由 InputBuffer 管理，Character 仅转发 EnhancedInput
+	// Input lifetime is owned by InputBuffer; Character only forwards EnhancedInput
 }
 
 void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -192,28 +192,26 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 
 void ARunGameCharacter::DoJumpStart()
 {
-	RequestInputCommand(ERunGameInputCommand::Jump);
+	if (InputBuffer)
+	{
+		InputBuffer->BufferInput(ERunGameInputCommand::Jump);
+	}
 }
 
 void ARunGameCharacter::DoJumpEnd()
 {
-	OnJumpInputReleased.Broadcast();
+	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	{
+		MoveComp->HandleJumpInputReleased();
+	}
 }
 
 void ARunGameCharacter::StartSlide()
 {
-	RequestInputCommand(ERunGameInputCommand::Slide);
-}
-
-void ARunGameCharacter::RequestInputCommand(ERunGameInputCommand Command)
-{
-	FRunGameInputCommandRequest Request(Command);
-	OnInputCommandRequested.Broadcast(Request);
-}
-
-void ARunGameCharacter::NotifyInputCommandReady(FRunGameInputCommandRequest& Request)
-{
-	OnInputCommandReady.Broadcast(Request);
+	if (InputBuffer)
+	{
+		InputBuffer->BufferInput(ERunGameInputCommand::Slide);
+	}
 }
 void ARunGameCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
@@ -316,9 +314,9 @@ bool ARunGameCharacter::IsDead_Implementation() const { return HealthComponent ?
 bool ARunGameCharacter::CanJumpInternal_Implementation() const
 {
 	const bool bDefaultCanJump = Super::CanJumpInternal_Implementation();
-	if (CanStartJumpQuery.IsBound())
+	if (const URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
 	{
-		return CanStartJumpQuery.Execute(bDefaultCanJump);
+		return MoveComp->CanStartJump(bDefaultCanJump);
 	}
 
 	return bDefaultCanJump;
@@ -328,7 +326,10 @@ void ARunGameCharacter::OnJumped_Implementation()
 {
 	Super::OnJumped_Implementation();
 
-	OnCharacterJumped.Broadcast();
+	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	{
+		MoveComp->HandleOwnerJumped();
+	}
 }
 
 // -- State Machine --
@@ -340,7 +341,7 @@ void ARunGameCharacter::SetCharacterState(ERunGameCharacterState NewState)
 
 	// Character 只作为 RuntimeState 转发门面；校验由 RuntimeState/组件域规则负责
 	// Character is only a RuntimeState forwarding facade; validation belongs to RuntimeState/component-domain rules
-	RS->SetCharacterState(NewState);
+	RS->TrySetCharacterState(NewState);
 }
 
 bool ARunGameCharacter::IsCharacterStateTransitionAllowed(ERunGameCharacterState NewState) const
@@ -353,7 +354,10 @@ void ARunGameCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
-	OnCharacterLanded.Broadcast(Hit);
+	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	{
+		MoveComp->HandleOwnerLanded(Hit);
+	}
 }
 
 ERunGameCharacterState ARunGameCharacter::GetCharacterState() const

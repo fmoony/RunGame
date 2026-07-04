@@ -7,7 +7,6 @@
 #include "Logging/LogMacros.h"
 #include "RunGameType.h"
 #include "Interfaces/Damagable.h"
-#include "Character/RunGameInputBufferComponent.h"
 #include "RunGameCharacter.generated.h"
 
 class USpringArmComponent;
@@ -16,6 +15,7 @@ class UInputAction;
 class URunGameTimerSubsystem;
 class UHealthComponent;
 class USkillComponent;
+class URunGameInputBufferComponent;
 class URunGameMovementComponent;
 class URunGameEffectComponent;
 class URunGameCameraComponent;
@@ -27,10 +27,6 @@ struct FInputActionValue;
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterDiedSignature, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterStateChangedSignature, ERunGameCharacterState, OldState, ERunGameCharacterState, NewState);
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameInputCommandRequestSignature, FRunGameInputCommandRequest&);
-DECLARE_MULTICAST_DELEGATE(FRunGameCharacterNativeEvent);
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameCharacterLandedEvent, const FHitResult&);
-DECLARE_DELEGATE_RetVal_OneParam(bool, FRunGameCanStartJumpQuery, bool);
 
 UCLASS(abstract)
 class ARunGameCharacter : public ACharacter, public IDamagable
@@ -100,24 +96,6 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|State")
 	FOnCharacterStateChangedSignature OnCharacterStateChanged;
 
-	/** 输入意图事件：Character 只发布，InputBuffer 决定立即执行或缓存 / Input intent event: Character only publishes; InputBuffer decides execute vs buffer */
-	FRunGameInputCommandRequestSignature OnInputCommandRequested;
-
-	/** 命令就绪事件：InputBuffer 发布，能力组件自行订阅处理 / Ready command event: InputBuffer publishes; ability components react */
-	FRunGameInputCommandRequestSignature OnInputCommandReady;
-
-	/** 跳跃按键释放事件 / Jump input released event */
-	FRunGameCharacterNativeEvent OnJumpInputReleased;
-
-	/** UE 跳跃物理生效事件 / UE jump-physics-applied event */
-	FRunGameCharacterNativeEvent OnCharacterJumped;
-
-	/** UE 落地事件 / UE landed event */
-	FRunGameCharacterLandedEvent OnCharacterLanded;
-
-	/** 跳跃许可查询：MovementComponent 绑定，Character 只转发 UE CanJumpInternal / Jump permission query bound by MovementComponent */
-	FRunGameCanStartJumpQuery CanStartJumpQuery;
-
 	/** RuntimeState 转发门面，状态校验由 RuntimeState 负责 / RuntimeState forwarding facade; RuntimeState owns validation */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
 	void SetCharacterState(ERunGameCharacterState NewState);
@@ -162,9 +140,6 @@ public:
 
 	void StartSlide();
 
-	/** InputBuffer 调用的命令就绪转发入口 Ready-command forwarding entry used by InputBuffer */
-	void NotifyInputCommandReady(FRunGameInputCommandRequest& Request);
-
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 
@@ -202,9 +177,6 @@ public:
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
 private:
-	/** 广播输入意图 Broadcast input intent */
-	void RequestInputCommand(ERunGameInputCommand Command);
-
 	UFUNCTION()
 	void OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
 

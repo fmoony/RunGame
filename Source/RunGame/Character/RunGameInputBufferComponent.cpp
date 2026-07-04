@@ -1,5 +1,6 @@
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameCharacter.h"
+#include "Character/RunGameMovementComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 #include "RunGame.h"
@@ -24,17 +25,12 @@ void URunGameInputBufferComponent::BeginPlay()
 	}
 
 	OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
-	if (OwnerCharacter)
-	{
-		OwnerCharacter->OnInputCommandRequested.AddUObject(this, &URunGameInputBufferComponent::HandleInputCommandRequested);
-	}
 }
 
 void URunGameInputBufferComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (OwnerCharacter)
 	{
-		OwnerCharacter->OnInputCommandRequested.RemoveAll(this);
 		OwnerCharacter = nullptr;
 	}
 
@@ -57,7 +53,7 @@ void URunGameInputBufferComponent::BufferInput(ERunGameInputCommand Command)
 	// Dead — 丢弃所有输入 Dead — discard all input
 	if (CurrentState == ERunGameCharacterState::Dead) return;
 
-	if (ShouldExecuteImmediately(CurrentState, Command) && TryDispatchReadyCommand(Command))
+	if (ShouldExecuteImmediately(CurrentState, Command) && TryConsumeCommand(Command))
 	{
 		return;
 	}
@@ -87,11 +83,6 @@ void URunGameInputBufferComponent::ClearBuffer()
 }
 
 // ---- State reaction ----
-
-void URunGameInputBufferComponent::HandleInputCommandRequested(FRunGameInputCommandRequest& Request)
-{
-	BufferInput(Request.Command);
-}
 
 void URunGameInputBufferComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
@@ -149,13 +140,12 @@ bool URunGameInputBufferComponent::ShouldBufferCommand(ERunGameCharacterState Cu
 	}
 }
 
-bool URunGameInputBufferComponent::TryDispatchReadyCommand(ERunGameInputCommand Command) const
+bool URunGameInputBufferComponent::TryConsumeCommand(ERunGameInputCommand Command) const
 {
 	if (!OwnerCharacter) return false;
 
-	FRunGameInputCommandRequest Request(Command);
-	OwnerCharacter->NotifyInputCommandReady(Request);
-	return Request.bHandled;
+	URunGameMovementComponent* MoveComp = OwnerCharacter->GetRunGameMovementComponent();
+	return MoveComp && MoveComp->TryConsumeInputCommand(Command);
 }
 
 void URunGameInputBufferComponent::ExpireStaleCommands()
@@ -181,12 +171,13 @@ void URunGameInputBufferComponent::TryConsumeBuffer()
 
 	// FIFO: 消费最早缓冲的命令 FIFO: consume oldest buffered command
 	const FBufferedCommand Cmd = CommandQueue[0];
-	CommandQueue.RemoveAt(0);
-
-	UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Consumed buffered command %d"), (int32)Cmd.Command);
-
-	if (!TryDispatchReadyCommand(Cmd.Command))
+	if (TryConsumeCommand(Cmd.Command))
 	{
-		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Ready command %d was not handled"), (int32)Cmd.Command);
+		CommandQueue.RemoveAt(0);
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Consumed buffered command %d"), (int32)Cmd.Command);
+	}
+	else
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffered command %d is still blocked"), (int32)Cmd.Command);
 	}
 }

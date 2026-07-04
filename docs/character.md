@@ -4,7 +4,7 @@
 
 Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save → Modify → Broadcast`.
 
-**`UPlayerRuntimeState`** owns the state via `SetCharacterState(NewState)`. The method follows `Guard → Validate → Save → Modify → Broadcast` — it validates the transition, updates `CurrentCharacterState`, and broadcasts `OnCharacterStateChanged(Old, New)`. **`ARunGameCharacter`** delegates state requests to `RS->SetCharacterState()` and only bridges input / UE callbacks. Movement side effects and jump rules live in **`URunGameMovementComponent`**.
+**`UPlayerRuntimeState`** owns the state via `TrySetCharacterState(NewState)`. The method follows `Guard → Validate → Save → Modify → Broadcast` — it validates the transition, updates `CurrentCharacterState`, broadcasts `OnCharacterStateChanged(Old, New)`, and returns whether the target state is active. **`ARunGameCharacter`** is a UE callback / Blueprint compatibility facade. Input lifetime lives in **`URunGameInputBufferComponent`**; movement rules and physics execution live in **`URunGameMovementComponent`**.
 
 | State | Description | Entry |
 |-------|-------------|-------|
@@ -35,13 +35,13 @@ Enforced by `IsCharacterStateTransitionAllowed`:
 
 - `URunGameMovementComponent::SetMovementMode` detects `MOVE_Falling` from Idle/Turning. Intentional jump launches transition directly to `Airborne`; ledge falls enter `CoyoteTime` and arm a 0.15s `CoyoteTimer`. On expiry → auto-transition to `Airborne`.
 - `URunGameMovementComponent::bAirJumpAvailable` represents double-jump availability, not CoyoteTime. It is available from grounded start / landing, stays available through coyote jump, and is consumed only by a real Airborne double jump.
-- `ARunGameCharacter::CanJumpInternal_Implementation` only executes `CanStartJumpQuery`; `URunGameMovementComponent` binds the query and owns the rule.
-- `ARunGameCharacter::Landed()` only broadcasts `OnCharacterLanded`; `URunGameMovementComponent` subscribes and handles both Airborne and CoyoteTime → Idle transitions.
+- `ARunGameCharacter::CanJumpInternal_Implementation` forwards UE's jump permission callback to `URunGameMovementComponent::CanStartJump`.
+- `ARunGameCharacter::Landed()` forwards UE's landed callback to `URunGameMovementComponent::HandleOwnerLanded`, which handles both Airborne and CoyoteTime → Idle transitions.
 - `RunGameInputBufferComponent`: Jump during CoyoteTime → immediate execute (not buffered). Slide during CoyoteTime → buffered (like Airborne).
 
 ## Movement Reaction
 
-`URunGameMovementComponent`: Self-binds to `OnCharacterStateChanged` and native Character events (`OnInputCommandReady`, `OnJumpInputReleased`, `OnCharacterJumped`, `OnCharacterLanded`). Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
+`URunGameMovementComponent`: Self-binds to `OnCharacterStateChanged`, consumes movement-domain input requests from `URunGameInputBufferComponent`, and handles UE jump / landed callbacks forwarded by Character. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
 
 ## Animation Reaction
 
@@ -49,7 +49,7 @@ Enforced by `IsCharacterStateTransitionAllowed`:
 
 ## Input Buffering
 
-`URunGameInputBufferComponent`: `PendingInputState` removed. Character bridges EnhancedInput → `OnInputCommandRequested`. InputBuffer subscribes, emits ready commands through `OnInputCommandReady`, and queues blocked commands with 0.3s timeout. State change back to `Idle` auto-consumes oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
+`URunGameInputBufferComponent`: `PendingInputState` removed. Character forwards EnhancedInput → `BufferInput()`. InputBuffer decides immediate execution vs queueing, asks `URunGameMovementComponent::TryConsumeInputCommand()` to consume movement-domain commands, and removes the signal only when consumption succeeds. State change back to `Idle` auto-attempts the oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
 
 ## Skill Gating
 

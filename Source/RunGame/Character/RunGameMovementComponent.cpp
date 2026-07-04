@@ -29,8 +29,6 @@ void URunGameMovementComponent::BeginPlay()
 		DesireRotation = Owner->GetActorRotation();
 	}
 
-	BindOwnerEvents();
-
 	// 绑状态机——运动状态自行响应 Bind state machine — movement self-reacts
 	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
@@ -40,8 +38,6 @@ void URunGameMovementComponent::BeginPlay()
 
 void URunGameMovementComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UnbindOwnerEvents();
-
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(CoyoteTimer);
@@ -170,59 +166,26 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 	}
 }
 
-void URunGameMovementComponent::BindOwnerEvents()
+bool URunGameMovementComponent::TryConsumeInputCommand(ERunGameInputCommand Command)
 {
-	ARunGameCharacter* Owner = Cast<ARunGameCharacter>(CharacterOwner.Get());
-	if (!Owner) return;
-
-	// Character 只广播事件；MovementComponent 订阅并处理移动域规则
-	// Character only broadcasts events; MovementComponent subscribes and owns movement-domain rules
-	Owner->OnInputCommandReady.AddUObject(this, &URunGameMovementComponent::OnInputCommandReady);
-	Owner->OnJumpInputReleased.AddUObject(this, &URunGameMovementComponent::OnJumpInputReleased);
-	Owner->OnCharacterJumped.AddUObject(this, &URunGameMovementComponent::HandleOwnerJumped);
-	Owner->OnCharacterLanded.AddUObject(this, &URunGameMovementComponent::HandleOwnerLanded);
-	Owner->CanStartJumpQuery.BindUObject(this, &URunGameMovementComponent::CanStartJump);
-}
-
-void URunGameMovementComponent::UnbindOwnerEvents()
-{
-	ARunGameCharacter* Owner = Cast<ARunGameCharacter>(CharacterOwner.Get());
-	if (!Owner) return;
-
-	Owner->OnInputCommandReady.RemoveAll(this);
-	Owner->OnJumpInputReleased.RemoveAll(this);
-	Owner->OnCharacterJumped.RemoveAll(this);
-	Owner->OnCharacterLanded.RemoveAll(this);
-	Owner->CanStartJumpQuery.Unbind();
-}
-
-void URunGameMovementComponent::OnInputCommandReady(FRunGameInputCommandRequest& Request)
-{
-	switch (Request.Command)
+	switch (Command)
 	{
 	case ERunGameInputCommand::Jump:
-		if (TryStartJump())
-		{
-			Request.MarkHandled();
-		}
-		break;
+		return TryStartJump();
 
 	case ERunGameInputCommand::Slide:
 		if (!IsFalling())
 		{
-			if (RequestCharacterState(ERunGameCharacterState::Sliding))
-			{
-				Request.MarkHandled();
-			}
+			return RequestCharacterState(ERunGameCharacterState::Sliding);
 		}
-		break;
+		return false;
 
 	default:
-		break;
+		return false;
 	}
 }
 
-void URunGameMovementComponent::OnJumpInputReleased()
+void URunGameMovementComponent::HandleJumpInputReleased()
 {
 	if (ACharacter* Owner = CharacterOwner.Get())
 	{
@@ -341,8 +304,7 @@ bool URunGameMovementComponent::RequestCharacterState(ERunGameCharacterState New
 		return true;
 	}
 
-	PRS->SetCharacterState(NewState);
-	return PRS->GetCharacterState() == NewState;
+	return PRS->TrySetCharacterState(NewState);
 }
 
 bool URunGameMovementComponent::ConsumePendingJumpLaunch()

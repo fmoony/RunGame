@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "RunGameType.h"
 #include "RunGameInputBufferComponent.generated.h"
 
 class UPlayerRuntimeState;
@@ -13,30 +14,6 @@ enum class ERunGameInputCommand : uint8
 	None,
 	Jump,
 	Slide,
-};
-
-/** 输入命令请求：事件监听者处理后标记 bHandled / Input command request: listeners mark bHandled after consuming it */
-USTRUCT()
-struct FRunGameInputCommandRequest
-{
-	GENERATED_BODY()
-
-	UPROPERTY()
-	ERunGameInputCommand Command = ERunGameInputCommand::None;
-
-	bool bHandled = false;
-
-	FRunGameInputCommandRequest() = default;
-
-	explicit FRunGameInputCommandRequest(ERunGameInputCommand InCommand)
-		: Command(InCommand)
-	{
-	}
-
-	void MarkHandled()
-	{
-		bHandled = true;
-	}
 };
 
 /** 缓冲条目：意图 + 时间戳 + 超时 Buffered entry: intent + timestamp + timeout */
@@ -59,13 +36,13 @@ struct FBufferedCommand
 /**
  * 输入缓冲组件 —— 自治单元
  *
- * Character 仅广播输入意图，组件订阅后决定立即执行或缓存。
- * 组件自行监听 PlayerRuntimeState 状态变化，在状态回到 Idle 时消费缓冲命令，并通过 Character 的命令就绪事件广播。
+ * Character 仅转发 EnhancedInput，组件决定立即执行或缓存。
+ * 组件自行监听 PlayerRuntimeState 状态变化，在状态回到 Idle 时尝试消费缓冲命令。
  * 超时自动丢弃。
  *
  * Input buffer component — self-contained
- * Character only broadcasts input intent; this component decides immediate execution vs buffering.
- * Listens to PlayerRuntimeState, consumes buffered commands when state returns to Idle, then broadcasts ready commands through Character.
+ * Character only forwards EnhancedInput; this component decides immediate execution vs buffering.
+ * Listens to PlayerRuntimeState and tries to consume buffered commands when state returns to Idle.
  * Stale commands auto-expire.
  */
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent)) 
@@ -97,9 +74,6 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
-	/** 响应 Character 输入意图事件 React to Character input-intent events */
-	void HandleInputCommandRequested(FRunGameInputCommandRequest& Request);
-
 	/** 当角色状态变化时——尝试消费缓冲 React to state changes — try consuming buffer */
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
@@ -110,8 +84,8 @@ private:
 	/** 当前状态是否应缓存命令 Whether the command should be buffered in current state */
 	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
 
-	/** 通过 Character 的事件汇聚点广播命令就绪 Broadcast ready command through Character event hub */
-	bool TryDispatchReadyCommand(ERunGameInputCommand Command) const;
+	/** 请求 Movement 消费输入命令 Request Movement to consume an input command */
+	bool TryConsumeCommand(ERunGameInputCommand Command) const;
 
 	/** 移除过期条目 Remove stale entries */
 	void ExpireStaleCommands();

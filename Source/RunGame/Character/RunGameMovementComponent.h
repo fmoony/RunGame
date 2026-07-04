@@ -3,12 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameplayTagContainer.h"
+#include "Character/RunGameInputBufferComponent.h"
 #include "RunGameType.h"
 #include "RunGameMovementComponent.generated.h"
 
 class UCurveFloat;
 class URunGameTimerSubsystem;
-struct FRunGameInputCommandRequest;
 
 /**
  * 角色运动组件 —— 自治单元，绑 PRS 状态变化自行管理运动物理。
@@ -56,6 +56,21 @@ public:
 
 	FORCEINLINE FRotator GetDesireRotation() const { return DesireRotation; }
 
+	/** 尝试消费输入命令，成功时 InputBuffer 可提前移除信号 Try to consume an input command; success lets InputBuffer remove it */
+	bool TryConsumeInputCommand(ERunGameInputCommand Command);
+
+	/** 处理跳跃按键释放 Handle jump input release */
+	void HandleJumpInputReleased();
+
+	/** 判断当前状态是否允许跳跃 Check whether the current state allows a jump */
+	bool CanStartJump(bool bDefaultCanJump) const;
+
+	/** 响应 Character 起跳回调 React to Character jump callback */
+	void HandleOwnerJumped();
+
+	/** 响应 Character 落地回调 React to Character landed callback */
+	void HandleOwnerLanded(const FHitResult& Hit);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -73,27 +88,8 @@ private:
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
-	/** 绑定/解绑 Character 原生事件 Bind/unbind native Character events */
-	void BindOwnerEvents();
-	void UnbindOwnerEvents();
-
-	/** 输入命令就绪后由组件自行处理 React to ready input commands */
-	void OnInputCommandReady(FRunGameInputCommandRequest& Request);
-
-	/** 跳跃按键释放后停止跳跃 Stop jumping when jump input is released */
-	void OnJumpInputReleased();
-
 	/** 尝试启动跳跃，成功时由组件记录跳跃上下文 / Try to start a jump and record jump context on success */
 	bool TryStartJump();
-
-	/** 判断当前状态是否允许跳跃，Character::CanJumpInternal 仅执行查询委托 / Check jump permission; Character::CanJumpInternal only executes query delegate */
-	bool CanStartJump(bool bDefaultCanJump) const;
-
-	/** 响应 Character 起跳事件，统一处理一段跳、土狼跳和二段跳 / React to Character jump event and handle ground, coyote, and double jumps */
-	void HandleOwnerJumped();
-
-	/** 响应 Character 落地事件，统一处理落地状态和二段跳重置 / React to Character landed event and reset grounded jump state */
-	void HandleOwnerLanded(const FHitResult& Hit);
 
 	// -- Speed --
 
