@@ -79,6 +79,7 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 		{
 			Streamable.LoadSynchronous(Path);
 		}
+		BuildLoadedFloorEntries();
 		OnFloorClassesLoaded();
 		return;
 	}
@@ -87,32 +88,55 @@ void URunGameFloorSubsystem::StartAsyncLoad()
 	Streamable.RequestAsyncLoad(PathsToLoad,
 		FStreamableDelegate::CreateWeakLambda(this, [this]()
 		{
-			LoadedFloorEntries.Empty();
-			for (const FFloorClassEntry& Entry : PendingFloorEntries)
-			{
-				if (TSubclassOf<AActor> Loaded = Entry.FloorClass.Get())
-				{
-					FLoadedFloorEntry LoadedEntry;
-					LoadedEntry.LoadedClass = Loaded;
-					LoadedEntry.SpawnWeight = Entry.SpawnWeight;
-					LoadedEntry.InitialGuaranteedCount = Entry.InitialGuaranteedCount;
-					LoadedEntry.bEnableCoinSpawn = Entry.bEnableCoinSpawn;
-					LoadedFloorEntries.Add(LoadedEntry);
-				}
-			}
-
-			UE_LOG(LogTemp, Warning, TEXT("RunGameFloorSubsystem: Loaded %d floor classes"),
-				LoadedFloorEntries.Num());
-
+			BuildLoadedFloorEntries();
 			OnFloorClassesLoaded();
 		})
 	);
+}
+
+void URunGameFloorSubsystem::BuildLoadedFloorEntries()
+{
+	LoadedFloorEntries.Empty();
+	for (const FFloorClassEntry& Entry : PendingFloorEntries)
+	{
+		UClass* LoadedClass = Entry.FloorClass.Get();
+		if (!IsValid(LoadedClass))
+		{
+			UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Skipping unresolved floor class in config."));
+			continue;
+		}
+
+		if (!LoadedClass->IsChildOf(AFloorBase::StaticClass()))
+		{
+			UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Config class %s is not an AFloorBase subclass."),
+				*GetNameSafe(LoadedClass));
+			continue;
+		}
+
+		FLoadedFloorEntry LoadedEntry;
+		LoadedEntry.LoadedClass = LoadedClass;
+		LoadedEntry.SpawnWeight = Entry.SpawnWeight;
+		LoadedEntry.InitialGuaranteedCount = Entry.InitialGuaranteedCount;
+		LoadedEntry.bEnableCoinSpawn = Entry.bEnableCoinSpawn;
+		LoadedFloorEntries.Add(LoadedEntry);
+	}
+
+	UE_LOG(LogRunGame, Warning, TEXT("RunGameFloorSubsystem: Loaded %d valid floor classes"),
+		LoadedFloorEntries.Num());
 }
 
 void URunGameFloorSubsystem::OnFloorClassesLoaded()
 {
 	bIsLoading = false;
 	BenchmarkStats.AsyncLoadMs = (FPlatformTime::Seconds() - AsyncLoadStartSeconds) * 1000.0;
+
+	if (LoadedFloorEntries.Num() == 0)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: No valid AFloorBase classes loaded."));
+		bIsInitialized = false;
+		OnFloorSystemReady.Broadcast();
+		return;
+	}
 
 	const double PreAllocateStartSeconds = FPlatformTime::Seconds();
 	const int32 AllocateCount = BenchmarkPreAllocateOverride >= 0
@@ -201,6 +225,20 @@ void URunGameFloorSubsystem::SpawnInitialFloors(const FTransform& StartTransform
 		TotalGuaranteed, FloorConfig->InitialRandomFloorCount, TotalGuaranteed + FloorConfig->InitialRandomFloorCount);
 }
 
+void URunGameFloorSubsystem::BeginBenchmarkFloorChain(const FTransform& StartTransform)
+{
+	if (!bIsInitialized || !FloorConfig)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: BeginBenchmarkFloorChain called before initialization."));
+		return;
+	}
+
+	NextSpawnTransform = StartTransform;
+	FVector InLocation = NextSpawnTransform.GetLocation();
+	InLocation += FloorConfig->SpawnStartOffset;
+	NextSpawnTransform.SetLocation(InLocation);
+}
+
 void URunGameFloorSubsystem::BenchmarkSpawnFloorChain(const FTransform& StartTransform, int32 FloorCount)
 {
 	if (!bIsInitialized || !FloorConfig)
@@ -209,10 +247,7 @@ void URunGameFloorSubsystem::BenchmarkSpawnFloorChain(const FTransform& StartTra
 		return;
 	}
 
-	NextSpawnTransform = StartTransform;
-	FVector InLocation = NextSpawnTransform.GetLocation();
-	InLocation += FloorConfig->SpawnStartOffset;
-	NextSpawnTransform.SetLocation(InLocation);
+	BeginBenchmarkFloorChain(StartTransform);
 
 	for (int32 i = 0; i < FloorCount; ++i)
 	{
@@ -386,6 +421,9 @@ void URunGameFloorSubsystem::ClearAllFloors()
 	}
 	ActiveFloors.Empty();
 
+	FloorConfig = nullptr;
+	PendingFloorEntries.Empty();
+	LoadedFloorEntries.Empty();
 	bIsInitialized = false;
 	bIsLoading = false;
 	AsyncLoadStartSeconds = 0.0;
@@ -493,6 +531,14 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 {
 	if (!InClass || !GetWorld())
 	{
+		return nullptr;
+	}
+
+	UClass* FloorClass = InClass.Get();
+	if (!IsValid(FloorClass) || !FloorClass->IsChildOf(AFloorBase::StaticClass()))
+	{
+		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Refusing to spawn invalid floor class %s."),
+			*GetNameSafe(FloorClass));
 		return nullptr;
 	}
 

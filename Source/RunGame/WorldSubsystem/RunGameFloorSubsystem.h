@@ -15,12 +15,15 @@ struct FRunGameFloorBenchmarkStats
 {
 	GENERATED_BODY()
 
+	/** 运行期间真实 SpawnActor 次数 / Number of real SpawnActor calls during benchmark */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
 	int32 SpawnActorCount = 0;
 
+	/** 地板类加载耗时，异步和同步测试共用该字段 / Floor class load time, shared by async and sync scenarios */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
 	double AsyncLoadMs = 0.0;
 
+	/** 地板预分配耗时 / Floor pre-allocation time */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
 	double PreAllocateMs = 0.0;
 };
@@ -51,7 +54,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem")
 	void SpawnInitialFloors(const FTransform& StartTransform);
 
-	/** 生成指定数量的地板用于性能测试 Spawn an exact floor count for performance tests */
+	/** 重置性能测试的连续生成起点 / Reset the continuous spawn start for benchmark runs */
+	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem|Benchmark")
+	void BeginBenchmarkFloorChain(const FTransform& StartTransform);
+
+	/** 生成指定数量的地板用于性能测试 / Spawn an exact floor count for performance tests */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|FloorSystem|Benchmark")
 	void BenchmarkSpawnFloorChain(const FTransform& StartTransform, int32 FloorCount);
 
@@ -142,6 +149,9 @@ private:
 	/** Initiates async loading of floor classes via the asset manager */
 	void StartAsyncLoad();
 
+	/** 从已加载的软引用重建地板类列表 / Rebuild loaded floor class entries from resolved soft references */
+	void BuildLoadedFloorEntries();
+
 	/** Callback when async load finishes; pre-allocates the pool */
 	UFUNCTION()
 	void OnFloorClassesLoaded();
@@ -161,11 +171,19 @@ private:
 	bool bIsInitialized;
 
 	// 性能测试开关，默认关闭以保持正式路径不变 Benchmark toggles, disabled by default for normal gameplay
+	/** 性能测试专用：禁用地板对象池 / Benchmark-only toggle that disables the floor pool */
 	bool bBenchmarkDisablePool = false;
+
+	/** 性能测试专用：使用同步加载作为异步加载对照 / Benchmark-only toggle that uses sync loading as async-load comparison */
 	bool bBenchmarkUseSynchronousLoad = false;
+
+	/** 性能测试专用：覆盖预分配数量 / Benchmark-only override for pre-allocation count */
 	int32 BenchmarkPreAllocateOverride = INDEX_NONE;
 
+	/** 性能测试统计数据 / Benchmark counters */
 	FRunGameFloorBenchmarkStats BenchmarkStats;
+
+	/** 加载开始时间戳，用于计算加载耗时 / Load start timestamp used to calculate load duration */
 	double AsyncLoadStartSeconds = 0.0;
 
 	// Object pool: per-type sub-pools

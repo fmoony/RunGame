@@ -8,6 +8,8 @@
 
 class ACoin;
 class USplineComponent;
+class UStaticMeshComponent;
+class UInstancedStaticMeshComponent;
 
 /** Fallback pattern when spline has no points */
 UENUM()
@@ -76,11 +78,18 @@ public:
 	UCoinSpawnerComponent();
 
 protected:
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
 public:
 	/** Applies coin spawn configuration from the data asset */
 	void ApplyConfig(const FCoinSpawnConfig& Config);
+
+	/** 刷新编辑器预览实例，由 Construction 或按钮调用 / Refresh editor preview instances from construction or buttons */
+	void RefreshEditorPreviewCoins(bool bLogWarnings = false);
 
 	/** Acquires coins from subsystem and places them on this floor */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|Coin")
@@ -91,6 +100,23 @@ public:
 	void DespawnCoins();
 
 protected:
+	/** 编辑器预览用金币配置；运行时仍由 FloorSubsystem 注入配置 / Coin config for editor preview; runtime config is still injected by FloorSubsystem */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Placement", meta = (DisplayName = "Preview Coin Config"))
+	FCoinSpawnConfig EditorPreviewCoinConfig;
+
+	/** 编辑器中自动创建 SpawnLine 样条 / Automatically create a SpawnLine spline in editor */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Placement")
+	bool bAutoCreateSpawnLine = true;
+
+	/** 自动创建或查找的样条组件名称 / Component name used when auto-creating or finding the spline */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Placement")
+	FName SpawnLineComponentName = TEXT("CoinSpawnLine");
+
+	/** Construction 刷新时自动显示编辑器预览 / Automatically show editor preview during construction refresh */
+	UPROPERTY(EditAnywhere, Category = "RunGame|Placement")
+	bool bEnableEditorPreview = true;
+
+	/** 金币自身缩放是否继承地板缩放 / Whether spawned coin scale should inherit owner floor scale */
 	TSubclassOf<ACoin> CoinClass;
 
 	int32 CoinCount = 3;
@@ -116,6 +142,25 @@ protected:
 	bool bEnableCoinSpawn = true;
 
 private:
+	/** 缓存 Owner 上的样条，供运行时和编辑器按钮共用 / Cache owner spline for runtime and editor tool calls */
+	void CacheOwnerSpline();
+
+	/** 查找或创建 SpawnLine 样条 / Find or create the SpawnLine spline */
+	USplineComponent* EnsureSpawnLineComponent(bool bAllowCreate);
+
+	/** 应用编辑器预览配置，保持预览与运行时地板配置一致 / Apply editor preview config so preview matches runtime floor config */
+	bool ApplyPreviewConfig(bool bLogWarnings);
+
+	/** 获取金币蓝图默认网格，供编辑器预览组件复用 / Get the coin class default mesh for editor preview components */
+	UStaticMeshComponent* GetPreviewCoinMeshTemplate() const;
+
+	FVector GetCoinDefaultActorScale() const;
+
+	/** 构造最终金币 Transform，位置已计算完成，仅统一补齐旋转和缩放 / Build final coin transform after position calculation, normalizing rotation and scale */
+	FTransform MakeCoinTransform(const FTransform& RelativeTransform, const FTransform& ParentTransform) const;
+
+	void ClearEditorPreviewCoins();
+
 	/** Computes world-space transforms: spline first, enum fallback, multi-row */
 	TArray<FTransform> CalculateCoinTransforms() const;
 
@@ -130,8 +175,12 @@ private:
 	void CalculateParabolic(TArray<FTransform>& OutTransforms) const;
 
 	/** Coins currently managed by this component */
-	UPROPERTY()
+	UPROPERTY(Transient)
 	TArray<TObjectPtr<ACoin>> SpawnedCoins;
+
+	/** 编辑器预览用临时网格组件，不保存到资产 / Transient mesh components used only for editor preview */
+	UPROPERTY(Transient)
+	TObjectPtr<UInstancedStaticMeshComponent> PreviewCoinInstances;
 
 	/** Cached spline from owner, populated in BeginPlay */
 	UPROPERTY()

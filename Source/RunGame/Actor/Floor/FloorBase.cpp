@@ -45,6 +45,16 @@ FTransform AFloorBase::GetAttachToTransform(const FVector& MyLocation)
 	return SpawnPointMiddle->GetComponentTransform();
 }
 
+void AFloorBase::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+
+	if (CoinSpawnerComponent)
+	{
+		CoinSpawnerComponent->RefreshEditorPreviewCoins(false);
+	}
+}
+
 void AFloorBase::BeginPlay()
 {
 	Super::BeginPlay();

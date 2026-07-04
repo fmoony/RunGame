@@ -1,4 +1,5 @@
 #include "Test_PoolAsyncPerformance.h"
+#include "Actor/Floor/FloorBase.h"
 #include "Actor/Trap/Trap.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -14,7 +15,7 @@
 
 ATest_PoolAsyncPerformance::ATest_PoolAsyncPerformance()
 {
-	TimeLimit = 120.0f;
+	TimeLimit = 180.0f;
 }
 
 void ATest_PoolAsyncPerformance::BeginPlay()
@@ -36,6 +37,14 @@ void ATest_PoolAsyncPerformance::StartTest()
 	}
 	bBenchmarkStarted = true;
 
+	ObservedGCCount = 0;
+	if (!GarbageCollectCompleteHandle.IsValid())
+	{
+		GarbageCollectCompleteHandle = FCoreUObjectDelegates::GarbageCollectComplete.AddUObject(
+			this,
+			&ATest_PoolAsyncPerformance::OnGarbageCollectComplete);
+	}
+
 	FloorSubsystem = GetWorld()->GetSubsystem<URunGameFloorSubsystem>();
 	CoinSubsystem = GetWorld()->GetSubsystem<URunGameCoinSubsystem>();
 
@@ -44,6 +53,7 @@ void ATest_PoolAsyncPerformance::StartTest()
 		return;
 	}
 
+	// 按固定顺序跑对象池/加载模式对照，便于 CSV 横向比较 / Run pool and loading scenarios in a stable order for CSV comparison
 	PendingScenarios.Reset();
 	PendingScenarios.Add({ TEXT("Pool_ON_AsyncLoad"), true, true });
 	PendingScenarios.Add({ TEXT("Pool_OFF_AsyncLoad"), false, true });
@@ -76,6 +86,11 @@ bool ATest_PoolAsyncPerformance::ValidateRequiredConfig()
 
 void ATest_PoolAsyncPerformance::StartNextScenario()
 {
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(ScenarioStepTimerHandle);
+	}
+
 	CleanupScenarioActors();
 
 	CurrentScenarioIndex++;
@@ -87,12 +102,15 @@ void ATest_PoolAsyncPerformance::StartNextScenario()
 
 	const FPendingScenario& Scenario = PendingScenarios[CurrentScenarioIndex];
 	LogStep(ELogVerbosity::Log, FString::Printf(TEXT("Starting benchmark scenario: %s"), *Scenario.Name));
+	ScenarioGCStartCount = ObservedGCCount;
 
 	FloorSubsystem->ClearAllFloors();
 	CoinSubsystem->ClearAllCoins();
 	FloorSubsystem->ResetBenchmarkStats();
 	CoinSubsystem->ResetBenchmarkStats();
-	FloorSubsystem->SetBenchmarkOptions(!Scenario.bPoolEnabled, !Scenario.bAsyncLoading, Scenario.bPoolEnabled ? FloorSegmentCount : 0);
+
+	// 预分配使用 FloorConfigData 的真实配置，测试目标数量只用于后续逐步生成 / Use real FloorConfigData pre-allocation; target count only drives stepped spawning
+	FloorSubsystem->SetBenchmarkOptions(!Scenario.bPoolEnabled, !Scenario.bAsyncLoading, INDEX_NONE);
 	CoinSubsystem->SetBenchmarkDisablePool(!Scenario.bPoolEnabled);
 
 	// 隔离 GameMode 的地板初始化回调，避免测试期间额外生成地板 Isolate GameMode floor-ready callbacks to prevent extra floor spawning during benchmark
@@ -111,6 +129,11 @@ void ATest_PoolAsyncPerformance::OnFloorSystemReadyCallback()
 	ExecuteCurrentScenario();
 }
 
+void ATest_PoolAsyncPerformance::OnGarbageCollectComplete()
+{
+	ObservedGCCount++;
+}
+
 void ATest_PoolAsyncPerformance::ExecuteCurrentScenario()
 {
 	if (!PendingScenarios.IsValidIndex(CurrentScenarioIndex))
@@ -120,55 +143,158 @@ void ATest_PoolAsyncPerformance::ExecuteCurrentScenario()
 	}
 
 	const FPendingScenario& Scenario = PendingScenarios[CurrentScenarioIndex];
-	FPoolAsyncBenchmarkRow Row;
-	Row.ScenarioName = Scenario.Name;
-	Row.bPoolEnabled = Scenario.bPoolEnabled;
-	Row.bAsyncLoading = Scenario.bAsyncLoading;
+	CurrentRow = FPoolAsyncBenchmarkRow();
+	CurrentRow.ScenarioName = Scenario.Name;
+	CurrentRow.bPoolEnabled = Scenario.bPoolEnabled;
+	CurrentRow.bAsyncLoading = Scenario.bAsyncLoading;
 
-	RecordMemorySample(Row);
+	// 先采样基线内存，后续阶段只记录峰值 / Take baseline memory sample; later samples only raise the peak
+	RecordMemorySample(CurrentRow);
 
-	RecordMemorySample(Row);
-
+	// 预分配阶段可能产生 SpawnActor，负载计数只统计逐步生成阶段增量 / Pre-allocation may spawn actors; workload count records only stepped-spawn delta
 	const FRunGameFloorBenchmarkStats FloorStatsBeforeWorkload = FloorSubsystem->GetBenchmarkStats();
 	const FRunGameCoinBenchmarkStats CoinStatsBeforeWorkload = CoinSubsystem->GetBenchmarkStats();
-	const int32 PreWorkloadSpawnActorCount = FloorStatsBeforeWorkload.SpawnActorCount + CoinStatsBeforeWorkload.SpawnActorCount;
+	CurrentPreWorkloadSpawnActorCount = FloorStatsBeforeWorkload.SpawnActorCount + CoinStatsBeforeWorkload.SpawnActorCount;
 
-	const double WorkloadStartSeconds = FPlatformTime::Seconds();
-	FloorSubsystem->BenchmarkSpawnFloorChain(FTransform::Identity, FloorSegmentCount);
+	// 地板驱动逐步生成：金币和陷阱跟随真实地板配置，不由测试直接生成 / Floor-driven stepped workload; coins and traps follow real floor config
+	CurrentGeneratedFloorCount = 0;
+	CurrentGameThreadSeconds = 0.0;
+	CurrentRecycleSeconds = 0.0;
+	CurrentScenarioStartSeconds = FPlatformTime::Seconds();
+	FloorSubsystem->BeginBenchmarkFloorChain(FTransform::Identity);
 
-	Row.GameThreadMs = (FPlatformTime::Seconds() - WorkloadStartSeconds) * 1000.0;
-	RecordMemorySample(Row);
+	const int32 SafeFloorCount = FMath::Max(1, FloorSegmentCount);
+	const float StepInterval = FMath::Max(0.001f, ScenarioDurationSeconds / SafeFloorCount);
+	LogStep(ELogVerbosity::Log, FString::Printf(
+		TEXT("%s: stepped workload started, TargetFloors=%d, Duration=%.3fs, StepInterval=%.3fs"),
+		*Scenario.Name,
+		FloorSegmentCount,
+		ScenarioDurationSeconds,
+		StepInterval));
 
-	Row.ActiveFloorCount = FloorSubsystem->GetActiveFloorCount();
-	Row.ActiveCoinCount = CoinSubsystem->GetActiveCoinCount();
-	Row.ActiveTrapCount = CountActiveTraps();
-	Row.ActiveActorCount = CountActiveActors();
+	if (!GetWorld())
+	{
+		FinishTest(EFunctionalTestResult::Failed, TEXT("Benchmark world is missing."));
+		return;
+	}
 
+	GetWorld()->GetTimerManager().SetTimer(
+		ScenarioStepTimerHandle,
+		this,
+		&ATest_PoolAsyncPerformance::RunScenarioStep,
+		StepInterval,
+		true,
+		0.0f);
+
+}
+
+void ATest_PoolAsyncPerformance::RunScenarioStep()
+{
+	if (!FloorSubsystem)
+	{
+		if (GetWorld())
+		{
+			GetWorld()->GetTimerManager().ClearTimer(ScenarioStepTimerHandle);
+		}
+		FinishTest(EFunctionalTestResult::Failed, TEXT("Floor subsystem became invalid during benchmark."));
+		return;
+	}
+
+	if (CurrentGeneratedFloorCount >= FloorSegmentCount)
+	{
+		CompleteCurrentScenario();
+		return;
+	}
+
+	// 每一步模拟玩家进入下一块地板后触发新地板生成 / Each step simulates the player entering the next floor and requesting a new segment
+	const double StepStartSeconds = FPlatformTime::Seconds();
+	AFloorBase* SpawnedFloor = FloorSubsystem->RequestNextFloor();
+	CurrentGameThreadSeconds += FPlatformTime::Seconds() - StepStartSeconds;
+
+	if (!SpawnedFloor)
+	{
+		if (GetWorld())
+		{
+			GetWorld()->GetTimerManager().ClearTimer(ScenarioStepTimerHandle);
+		}
+		FinishTest(EFunctionalTestResult::Failed, TEXT("Failed to spawn benchmark floor step."));
+		return;
+	}
+
+	CurrentGeneratedFloorCount++;
+	CurrentRow.GeneratedFloorCount = CurrentGeneratedFloorCount;
+	RecordMemorySample(CurrentRow);
+
+	// 使用生成地板的位置作为压缩后的玩家位置，按真实回收路径淘汰远处地板 / Use the spawned floor as compressed player position and recycle via the real path
 	const double RecycleStartSeconds = FPlatformTime::Seconds();
-	FloorSubsystem->RecycleDistantFloors(FVector(1000000.0f), RecycleDistance);
-	Row.RecycleMs = (FPlatformTime::Seconds() - RecycleStartSeconds) * 1000.0;
-	RecordMemorySample(Row);
+	FloorSubsystem->RecycleDistantFloors(SpawnedFloor->GetActorLocation(), RecycleDistance);
+	CurrentRecycleSeconds += FPlatformTime::Seconds() - RecycleStartSeconds;
+	RecordMemorySample(CurrentRow);
+
+	if (CurrentGeneratedFloorCount >= FloorSegmentCount)
+	{
+		CompleteCurrentScenario();
+	}
+}
+
+void ATest_PoolAsyncPerformance::CompleteCurrentScenario()
+{
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(ScenarioStepTimerHandle);
+	}
+
+	CurrentRow.ScenarioWallMs = (FPlatformTime::Seconds() - CurrentScenarioStartSeconds) * 1000.0;
+	CurrentRow.GameThreadMs = CurrentGameThreadSeconds * 1000.0;
+	CurrentRow.RecycleMs = CurrentRecycleSeconds * 1000.0;
+	RecordMemorySample(CurrentRow);
+
+	CurrentRow.ActiveFloorCount = FloorSubsystem ? FloorSubsystem->GetActiveFloorCount() : 0;
+	CurrentRow.ActiveCoinCount = CoinSubsystem ? CoinSubsystem->GetActiveCoinCount() : 0;
+	CurrentRow.ActiveTrapCount = CountActiveTraps();
+	CurrentRow.ActiveActorCount = CountActiveActors();
 
 	const FRunGameFloorBenchmarkStats FloorStats = FloorSubsystem->GetBenchmarkStats();
 	const FRunGameCoinBenchmarkStats CoinStats = CoinSubsystem->GetBenchmarkStats();
-	Row.LoadMs = FloorStats.AsyncLoadMs;
-	Row.PreAllocateMs = FloorStats.PreAllocateMs + CoinStats.PreAllocateMs;
-	Row.SpawnActorCount = FloorStats.SpawnActorCount + CoinStats.SpawnActorCount - PreWorkloadSpawnActorCount;
+	CurrentRow.LoadMs = FloorStats.AsyncLoadMs;
+	CurrentRow.PreAllocateMs = FloorStats.PreAllocateMs + CoinStats.PreAllocateMs;
+	CurrentRow.SpawnActorCount = FloorStats.SpawnActorCount + CoinStats.SpawnActorCount - CurrentPreWorkloadSpawnActorCount;
 
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ATest_PoolAsyncPerformance::FinalizeCurrentScenario));
+		return;
+	}
+
+	FinalizeCurrentScenario();
+}
+
+void ATest_PoolAsyncPerformance::FinalizeCurrentScenario()
+{
 	CleanupScenarioActors();
 	CollectGarbage(RF_NoFlags);
-	Row.GCCount++;
-	RecordMemorySample(Row);
+	CurrentRow.GCCount = FMath::Max(0, ObservedGCCount - ScenarioGCStartCount);
+	RecordMemorySample(CurrentRow);
 
-	Results.Add(Row);
+	// 当前场景完成后立即进入下一场景，避免跨场景状态残留 / Start the next scenario immediately after cleanup to avoid cross-scenario state leakage
+	Results.Add(CurrentRow);
 	LogStep(ELogVerbosity::Log, FString::Printf(
-		TEXT("%s: GameThread=%.3fms, SpawnActor=%d, Recycle=%.3fms, ActiveActors=%d, PeakMB=%llu"),
-		*Row.ScenarioName,
-		Row.GameThreadMs,
-		Row.SpawnActorCount,
-		Row.RecycleMs,
-		Row.ActiveActorCount,
-		Row.PeakUsedPhysicalMB));
+		TEXT("%s: GeneratedFloors=%d, Wall=%.3fms, GameThread=%.3fms, SpawnActor=%d, GC=%d, Recycle=%.3fms, ActiveActors=%d, PeakMB=%llu"),
+		*CurrentRow.ScenarioName,
+		CurrentRow.GeneratedFloorCount,
+		CurrentRow.ScenarioWallMs,
+		CurrentRow.GameThreadMs,
+		CurrentRow.SpawnActorCount,
+		CurrentRow.GCCount,
+		CurrentRow.RecycleMs,
+		CurrentRow.ActiveActorCount,
+		CurrentRow.PeakUsedPhysicalMB));
+
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateUObject(this, &ATest_PoolAsyncPerformance::StartNextScenario));
+		return;
+	}
 
 	StartNextScenario();
 }
@@ -221,6 +347,7 @@ int32 ATest_PoolAsyncPerformance::CountActiveTraps() const
 
 void ATest_PoolAsyncPerformance::WriteCsvAndFinish()
 {
+	// 输出到 Saved 目录，避免污染 Content 并便于性能结果归档 / Write under Saved to avoid Content churn and keep profiling artifacts together
 	const FString OutputDirectory = FPaths::ProjectSavedDir() / TEXT("Profiling") / TEXT("RunGamePoolBenchmark");
 	IFileManager::Get().MakeDirectory(*OutputDirectory, true);
 
@@ -237,18 +364,21 @@ void ATest_PoolAsyncPerformance::WriteCsvAndFinish()
 
 FString ATest_PoolAsyncPerformance::BuildCsv() const
 {
-	FString Csv = TEXT("Scenario,PoolEnabled,AsyncLoading,LoadMs,PreAllocateMs,GameThreadMs,SpawnActorCount,GCCount,ActiveActorCount,ActiveFloorCount,ActiveCoinCount,ActiveTrapCount,PeakUsedPhysicalMB,RecycleMs\n");
+	// CSV 表头固定，方便多次测试结果用脚本或表格直接比较 / Keep CSV header stable for script and spreadsheet comparison across runs
+	FString Csv = TEXT("Scenario,PoolEnabled,AsyncLoading,LoadMs,PreAllocateMs,GameThreadMs,ScenarioWallMs,SpawnActorCount,GeneratedFloorCount,GCCount,ActiveActorCount,ActiveFloorCount,ActiveCoinCount,ActiveTrapCount,PeakUsedPhysicalMB,RecycleMs\n");
 	for (const FPoolAsyncBenchmarkRow& Row : Results)
 	{
 		Csv += FString::Printf(
-			TEXT("%s,%s,%s,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%llu,%.3f\n"),
+			TEXT("%s,%s,%s,%.3f,%.3f,%.3f,%.3f,%d,%d,%d,%d,%d,%d,%d,%llu,%.3f\n"),
 			*Row.ScenarioName,
 			Row.bPoolEnabled ? TEXT("true") : TEXT("false"),
 			Row.bAsyncLoading ? TEXT("true") : TEXT("false"),
 			Row.LoadMs,
 			Row.PreAllocateMs,
 			Row.GameThreadMs,
+			Row.ScenarioWallMs,
 			Row.SpawnActorCount,
+			Row.GeneratedFloorCount,
 			Row.GCCount,
 			Row.ActiveActorCount,
 			Row.ActiveFloorCount,
@@ -262,6 +392,17 @@ FString ATest_PoolAsyncPerformance::BuildCsv() const
 
 void ATest_PoolAsyncPerformance::CleanUp()
 {
+	if (GetWorld())
+	{
+		GetWorld()->GetTimerManager().ClearTimer(ScenarioStepTimerHandle);
+	}
+
+	if (GarbageCollectCompleteHandle.IsValid())
+	{
+		FCoreUObjectDelegates::GarbageCollectComplete.Remove(GarbageCollectCompleteHandle);
+		GarbageCollectCompleteHandle.Reset();
+	}
+
 	if (FloorSubsystem)
 	{
 		FloorSubsystem->OnFloorSystemReady.RemoveDynamic(this, &ATest_PoolAsyncPerformance::OnFloorSystemReadyCallback);

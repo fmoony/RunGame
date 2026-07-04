@@ -63,6 +63,7 @@ public:
 	virtual FTransform GetAttachToTransform(const FVector& MyLocation);
 
 protected:
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void BeginPlay() override;
 
 	FTimerHandle MyTimeHandle;

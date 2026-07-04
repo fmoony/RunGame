@@ -54,7 +54,7 @@ void ACollectibleBase::Tick(float DeltaTime)
 void ACollectibleBase::ActivateCollectible(const FTransform& SpawnTransform)
 {
 	bIsCollected = false;
-	SetActorLocation(SpawnTransform.GetLocation());
+	SetActorTransform(SpawnTransform);
 	InitialLocation = SpawnTransform.GetLocation();
 	SetActorHiddenInGame(false);
 	SetActorEnableCollision(true);

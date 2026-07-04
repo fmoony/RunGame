@@ -15,9 +15,11 @@ struct FRunGameCoinBenchmarkStats
 {
 	GENERATED_BODY()
 
+	/** 运行期间真实 SpawnActor 次数 / Number of real SpawnActor calls during benchmark */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
 	int32 SpawnActorCount = 0;
 
+	/** 金币预分配耗时 / Coin pre-allocation time */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RunGame|Benchmark")
 	double PreAllocateMs = 0.0;
 };
@@ -86,6 +88,9 @@ private:
 	UPROPERTY()
 	TArray<TObjectPtr<ACoin>> ActiveCoins;
 
+	/** 性能测试专用：禁用对象池以对比直接 Spawn/Destroy / Benchmark-only toggle that disables pooling for Spawn/Destroy comparison */
 	bool bBenchmarkDisablePool = false;
+
+	/** 性能测试统计数据 / Benchmark counters */
 	FRunGameCoinBenchmarkStats BenchmarkStats;
 };
