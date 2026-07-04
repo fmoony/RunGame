@@ -303,8 +303,6 @@ AFloorBase* URunGameFloorSubsystem::RequestFloorAt(
 	// 通知子 Actor（Trap 等）Floor 已从池子激活 Notify child actors (Trap etc.) that Floor was activated from pool
 	Floor->OnFloorActivated.Broadcast(Floor);
 
-	BindFloorDelegates(Floor);
-
 	NextSpawnTransform = Floor->GetAttachToTransform(Location);
 
 	ActiveFloors.Add(Floor);
@@ -331,22 +329,30 @@ void URunGameFloorSubsystem::ReturnFloor(AFloorBase* Floor)
 		return;
 	}
 
+	const int32 RemovedCount = ActiveFloors.RemoveSingleSwap(Floor);
+	if (RemovedCount <= 0)
+	{
+		UE_LOG(LogRunGame, Verbose, TEXT("RunGameFloorSubsystem: Ignored return request for inactive floor %s"),
+			*GetNameSafe(Floor));
+		return;
+	}
+
 	if (UCoinSpawnerComponent* Spawner = Floor->CoinSpawnerComponent)
 	{
 		Spawner->DespawnCoins();
 	}
 
+	Floor->CancelRecycleTimer();
+
 	// 通知子 Actor（Trap 等）Floor 即将归还池子 Notify child actors (Trap etc.) that Floor is returning to pool
 	Floor->OnFloorDeactivated.Broadcast(Floor);
-
-	ActiveFloors.RemoveSwap(Floor);
-	UnbindFloorDelegates(Floor);
 
 	Floor->SetActorHiddenInGame(true);
 	Floor->SetActorEnableCollision(false);
 
 	if (bBenchmarkDisablePool)
 	{
+		UnbindFloorDelegates(Floor);
 		Floor->Destroy();
 		return;
 	}
@@ -406,6 +412,7 @@ void URunGameFloorSubsystem::ClearAllFloors()
 		{
 			if (IsValid(Floor))
 			{
+				PrepareFloorForDestroy(Floor);
 				Floor->Destroy();
 			}
 		}
@@ -414,8 +421,9 @@ void URunGameFloorSubsystem::ClearAllFloors()
 
 	for (AFloorBase* Floor : ActiveFloors)
 	{
-		if (Floor && Floor->IsValidLowLevel())
+		if (IsValid(Floor))
 		{
+			PrepareFloorForDestroy(Floor);
 			Floor->Destroy();
 		}
 	}
@@ -520,9 +528,13 @@ AFloorBase* URunGameFloorSubsystem::AcquireFloorFromPool(TSubclassOf<AActor> InC
 	}
 
 	TArray<AFloorBase*>* SubPool = PooledFloorsMap.Find(InClass);
-	if (SubPool && SubPool->Num() > 0)
+	while (SubPool && SubPool->Num() > 0)
 	{
-		return SubPool->Pop();
+		AFloorBase* Floor = SubPool->Pop();
+		if (IsValid(Floor))
+		{
+			return Floor;
+		}
 	}
 	return nullptr;
 }
@@ -552,8 +564,10 @@ AFloorBase* URunGameFloorSubsystem::CreateNewFloorActor(TSubclassOf<AActor> InCl
 	if (!NewFloor)
 	{
 		UE_LOG(LogRunGame, Error, TEXT("RunGameFloorSubsystem: Failed to spawn floor actor of class %s"), *InClass->GetName());
+		return nullptr;
 	}
 
+	BindFloorDelegates(NewFloor);
 	return NewFloor;
 }
 
@@ -564,8 +578,8 @@ void URunGameFloorSubsystem::BindFloorDelegates(AFloorBase* Floor)
 		return;
 	}
 
-	Floor->OnPlayerEntered.AddDynamic(this, &URunGameFloorSubsystem::OnFloorPlayerEntered);
-	Floor->OnRecycleRequested.AddDynamic(this, &URunGameFloorSubsystem::OnFloorRecycleRequested);
+	Floor->OnPlayerEntered.AddUniqueDynamic(this, &URunGameFloorSubsystem::OnFloorPlayerEntered);
+	Floor->OnRecycleRequested.AddUniqueDynamic(this, &URunGameFloorSubsystem::OnFloorRecycleRequested);
 }
 
 void URunGameFloorSubsystem::UnbindFloorDelegates(AFloorBase* Floor)
@@ -579,8 +593,34 @@ void URunGameFloorSubsystem::UnbindFloorDelegates(AFloorBase* Floor)
 	Floor->OnRecycleRequested.RemoveDynamic(this, &URunGameFloorSubsystem::OnFloorRecycleRequested);
 }
 
+void URunGameFloorSubsystem::PrepareFloorForDestroy(AFloorBase* Floor)
+{
+	if (!Floor)
+	{
+		return;
+	}
+
+	if (ActiveFloors.Contains(Floor))
+	{
+		Floor->OnFloorDeactivated.Broadcast(Floor);
+	}
+
+	if (UCoinSpawnerComponent* Spawner = Floor->CoinSpawnerComponent)
+	{
+		Spawner->DespawnCoins();
+	}
+
+	Floor->CancelRecycleTimer();
+	UnbindFloorDelegates(Floor);
+}
+
 void URunGameFloorSubsystem::OnFloorPlayerEntered(AFloorBase* Floor)
 {
+	if (!Floor || !ActiveFloors.Contains(Floor))
+	{
+		return;
+	}
+
 	// 死亡/无碰撞状态不触发新地板 Dead/CoyoteTime don't trigger new floors
 	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{

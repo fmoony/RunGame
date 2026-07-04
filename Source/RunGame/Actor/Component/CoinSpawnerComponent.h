@@ -47,6 +47,10 @@ struct FCoinSpawnConfig
 	UPROPERTY(EditDefaultsOnly, Category = "Coin", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float RowSpawnChance = 1.0f;
 
+	/** 金币视觉大小是否继承地板缩放，位置仍始终按地板 Transform 缩放 / Whether coin visual size inherits floor scale; placement always follows floor transform */
+	UPROPERTY(EditDefaultsOnly, Category = "Coin")
+	bool bInheritFloorScaleForCoinSize = false;
+
 	/** Fallback pattern when spline is empty */
 	UPROPERTY(EditDefaultsOnly, Category = "Coin|Fallback")
 	ECoinSpawnPattern SpawnPattern = ECoinSpawnPattern::StraightLine;
@@ -126,6 +130,8 @@ protected:
 	float RowSpacing = 100.0f;
 
 	float RowSpawnChance = 1.0f;
+
+	bool bInheritFloorScaleForCoinSize = false;
 
 	ECoinSpawnPattern SpawnPattern = ECoinSpawnPattern::StraightLine;
 

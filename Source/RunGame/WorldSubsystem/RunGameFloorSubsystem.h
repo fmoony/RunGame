@@ -132,11 +132,14 @@ private:
 	/** Spawns a new floor actor at the pool hide location */
 	AFloorBase* CreateNewFloorActor(TSubclassOf<AActor> InClass);
 
-	/** Binds to a floor's delegates when it becomes active */
+	/** 创建地板时绑定一次池事件 / Bind pool delegates once when a floor is created */
 	void BindFloorDelegates(AFloorBase* Floor);
 
-	/** Unbinds from a floor's delegates before returning it to the pool */
+	/** 销毁地板前解绑池事件 / Unbind pool delegates before a floor is destroyed */
 	void UnbindFloorDelegates(AFloorBase* Floor);
+
+	/** 销毁前清理地板运行期状态 / Clear runtime state before destroying a managed floor */
+	void PrepareFloorForDestroy(AFloorBase* Floor);
 
 	/** Called when a floor's box trigger is overlapped by the player */
 	UFUNCTION()

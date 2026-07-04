@@ -124,6 +124,7 @@ void UCoinSpawnerComponent::ApplyConfig(const FCoinSpawnConfig& Config)
 	RowCount = Config.RowCount;
 	RowSpacing = Config.RowSpacing;
 	SpawnPattern = Config.SpawnPattern;
+	bInheritFloorScaleForCoinSize = Config.bInheritFloorScaleForCoinSize;
 	StartOffset = Config.StartOffset;
 	LineDirection = Config.LineDirection;
 	EndOffset = Config.EndOffset;
@@ -166,9 +167,14 @@ FVector UCoinSpawnerComponent::GetCoinDefaultActorScale() const
 
 FTransform UCoinSpawnerComponent::MakeCoinTransform(const FTransform& RelativeTransform, const FTransform& ParentTransform) const
 {
-	FTransform AdjustedRelativeTransform = RelativeTransform;
-	AdjustedRelativeTransform.SetScale3D(RelativeTransform.GetScale3D() * GetCoinDefaultActorScale());
-	return AdjustedRelativeTransform * ParentTransform;
+	FTransform FinalTransform = RelativeTransform * ParentTransform;
+	FVector FinalScale = RelativeTransform.GetScale3D() * GetCoinDefaultActorScale();
+	if (bInheritFloorScaleForCoinSize)
+	{
+		FinalScale *= ParentTransform.GetScale3D();
+	}
+	FinalTransform.SetScale3D(FinalScale);
+	return FinalTransform;
 }
 
 void UCoinSpawnerComponent::SpawnCoins()

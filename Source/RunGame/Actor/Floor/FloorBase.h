@@ -98,4 +98,7 @@ public:
 
 	/** Broadcasts OnRecycleRequested to notify listeners this floor is ready for recycling */
 	virtual void ReturnToPool();
+
+	/** 清理回收计时器，地板进入对象池或销毁前调用 / Clear recycle timer before the floor enters the pool or is destroyed */
+	void CancelRecycleTimer();
 };

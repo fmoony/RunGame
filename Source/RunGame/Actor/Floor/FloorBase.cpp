@@ -7,6 +7,7 @@
 #include "Components/SplineComponent.h"
 #include "Actor/Component/CoinSpawnerComponent.h"
 #include "Character/RunGameCharacter.h"
+#include "Engine/World.h"
 
 AFloorBase::AFloorBase()
 {
@@ -83,7 +84,7 @@ void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 	if (MyTimeHandle.IsValid())
 	{
 		UE_LOG(LogRunGame, Error, TEXT("FloorBase: Overlap occurred while recycle timer is active, clearing existing timer."));
-		GetWorldTimerManager().ClearTimer(MyTimeHandle);
+		CancelRecycleTimer();
 	}
 
 	FTimerDelegate Delegate;
@@ -106,4 +107,18 @@ void AFloorBase::BoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 void AFloorBase::ReturnToPool()
 {
 	OnRecycleRequested.Broadcast(this);
+}
+
+void AFloorBase::CancelRecycleTimer()
+{
+	if (!MyTimeHandle.IsValid())
+	{
+		return;
+	}
+
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(MyTimeHandle);
+	}
+	MyTimeHandle.Invalidate();
 }
