@@ -15,6 +15,30 @@ enum class ERunGameInputCommand : uint8
 	Slide,
 };
 
+/** 输入命令请求：事件监听者处理后标记 bHandled / Input command request: listeners mark bHandled after consuming it */
+USTRUCT()
+struct FRunGameInputCommandRequest
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	ERunGameInputCommand Command = ERunGameInputCommand::None;
+
+	bool bHandled = false;
+
+	FRunGameInputCommandRequest() = default;
+
+	explicit FRunGameInputCommandRequest(ERunGameInputCommand InCommand)
+		: Command(InCommand)
+	{
+	}
+
+	void MarkHandled()
+	{
+		bHandled = true;
+	}
+};
+
 /** 缓冲条目：意图 + 时间戳 + 超时 Buffered entry: intent + timestamp + timeout */
 USTRUCT()
 struct FBufferedCommand
@@ -32,18 +56,16 @@ struct FBufferedCommand
 	}
 };
 
-DECLARE_DELEGATE_OneParam(FOnInputCommandConsumed, ERunGameInputCommand);
-
 /**
  * 输入缓冲组件 —— 自治单元
  *
- * Character 仅绑 EnhancedInput → 调用 BufferInput。
- * 组件自行监听 PlayerRuntimeState 状态变化，在状态回到 Idle 时消费缓冲命令。
+ * Character 仅广播输入意图，组件订阅后决定立即执行或缓存。
+ * 组件自行监听 PlayerRuntimeState 状态变化，在状态回到 Idle 时消费缓冲命令，并通过 Character 的命令就绪事件广播。
  * 超时自动丢弃。
  *
  * Input buffer component — self-contained
- * Character only binds EnhancedInput → BufferInput.
- * Listens to PlayerRuntimeState, consumes buffered commands when state returns to Idle.
+ * Character only broadcasts input intent; this component decides immediate execution vs buffering.
+ * Listens to PlayerRuntimeState, consumes buffered commands when state returns to Idle, then broadcasts ready commands through Character.
  * Stale commands auto-expire.
  */
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent)) 
@@ -57,9 +79,6 @@ public:
 	/** Buffered commands expire after this many seconds */
 	UPROPERTY(EditAnywhere, Category = "Buffer")
 	float BufferTimeout = 0.3f;
-
-	/** Fired when a buffered command is consumed. Character binds → DoJump / StartSlide */
-	FOnInputCommandConsumed OnInputCommandConsumed;
 
 	/**
 	 * 尝试立即执行输入命令。
@@ -78,9 +97,21 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	/** 响应 Character 输入意图事件 React to Character input-intent events */
+	void HandleInputCommandRequested(FRunGameInputCommandRequest& Request);
+
 	/** 当角色状态变化时——尝试消费缓冲 React to state changes — try consuming buffer */
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
+	/** 当前状态是否应立即尝试执行命令 Whether the command should attempt immediate execution in current state */
+	bool ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+
+	/** 当前状态是否应缓存命令 Whether the command should be buffered in current state */
+	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+
+	/** 通过 Character 的事件汇聚点广播命令就绪 Broadcast ready command through Character event hub */
+	bool TryDispatchReadyCommand(ERunGameInputCommand Command) const;
 
 	/** 移除过期条目 Remove stale entries */
 	void ExpireStaleCommands();
@@ -90,6 +121,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UPlayerRuntimeState> RuntimeState;
+
+	UPROPERTY()
+	TObjectPtr<class ARunGameCharacter> OwnerCharacter;
 
 	UPROPERTY()
 	TArray<FBufferedCommand> CommandQueue;

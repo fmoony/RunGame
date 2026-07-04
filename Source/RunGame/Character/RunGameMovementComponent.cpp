@@ -1,4 +1,5 @@
 #include "Character/RunGameMovementComponent.h"
+#include "Character/RunGameInputBufferComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Character/RunGameCharacter.h"
@@ -28,6 +29,8 @@ void URunGameMovementComponent::BeginPlay()
 		DesireRotation = Owner->GetActorRotation();
 	}
 
+	BindOwnerEvents();
+
 	// 绑状态机——运动状态自行响应 Bind state machine — movement self-reacts
 	if (UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
@@ -37,6 +40,8 @@ void URunGameMovementComponent::BeginPlay()
 
 void URunGameMovementComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindOwnerEvents();
+
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(CoyoteTimer);
@@ -122,10 +127,25 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 		bInTurnBox = false;
 	}
 
+	if (OldState == ERunGameCharacterState::CoyoteTime)
+	{
+		GetWorld()->GetTimerManager().ClearTimer(CoyoteTimer);
+	}
+
+	if (NewState == ERunGameCharacterState::Idle)
+	{
+		bAirJumpAvailable = true;
+		bJumpLaunchPending = false;
+		PendingJumpStartState = ERunGameCharacterState::Idle;
+	}
+
 	if (NewState == ERunGameCharacterState::Dead)
 	{
 		bTurn = false;
 		bInTurnBox = false;
+		bAirJumpAvailable = false;
+		bJumpLaunchPending = false;
+		PendingJumpStartState = ERunGameCharacterState::Dead;
 		SpeedModifiers.Empty();
 		CachedCompositeSpeedMultiplier = 1.0f;
 
@@ -150,6 +170,66 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 	}
 }
 
+void URunGameMovementComponent::BindOwnerEvents()
+{
+	ARunGameCharacter* Owner = Cast<ARunGameCharacter>(CharacterOwner.Get());
+	if (!Owner) return;
+
+	// Character 只广播事件；MovementComponent 订阅并处理移动域规则
+	// Character only broadcasts events; MovementComponent subscribes and owns movement-domain rules
+	Owner->OnInputCommandReady.AddUObject(this, &URunGameMovementComponent::OnInputCommandReady);
+	Owner->OnJumpInputReleased.AddUObject(this, &URunGameMovementComponent::OnJumpInputReleased);
+	Owner->OnCharacterJumped.AddUObject(this, &URunGameMovementComponent::HandleOwnerJumped);
+	Owner->OnCharacterLanded.AddUObject(this, &URunGameMovementComponent::HandleOwnerLanded);
+	Owner->CanStartJumpQuery.BindUObject(this, &URunGameMovementComponent::CanStartJump);
+}
+
+void URunGameMovementComponent::UnbindOwnerEvents()
+{
+	ARunGameCharacter* Owner = Cast<ARunGameCharacter>(CharacterOwner.Get());
+	if (!Owner) return;
+
+	Owner->OnInputCommandReady.RemoveAll(this);
+	Owner->OnJumpInputReleased.RemoveAll(this);
+	Owner->OnCharacterJumped.RemoveAll(this);
+	Owner->OnCharacterLanded.RemoveAll(this);
+	Owner->CanStartJumpQuery.Unbind();
+}
+
+void URunGameMovementComponent::OnInputCommandReady(FRunGameInputCommandRequest& Request)
+{
+	switch (Request.Command)
+	{
+	case ERunGameInputCommand::Jump:
+		if (TryStartJump())
+		{
+			Request.MarkHandled();
+		}
+		break;
+
+	case ERunGameInputCommand::Slide:
+		if (!IsFalling())
+		{
+			if (RequestCharacterState(ERunGameCharacterState::Sliding))
+			{
+				Request.MarkHandled();
+			}
+		}
+		break;
+
+	default:
+		break;
+	}
+}
+
+void URunGameMovementComponent::OnJumpInputReleased()
+{
+	if (ACharacter* Owner = CharacterOwner.Get())
+	{
+		Owner->StopJumping();
+	}
+}
+
 // ---- Speed modifiers ----
 
 void URunGameMovementComponent::AddSpeedModifier(FGameplayTag ModifierTag, float Multiplier)
@@ -171,6 +251,111 @@ void URunGameMovementComponent::RemoveSpeedModifier(FGameplayTag ModifierTag)
 	SpeedModifiers.Remove(ModifierTag);
 }
 
+// ---- Jump rules ----
+
+bool URunGameMovementComponent::TryStartJump()
+{
+	ARunGameCharacter* Owner = Cast<ARunGameCharacter>(CharacterOwner);
+	if (!Owner || !Owner->CanJump())
+	{
+		return false;
+	}
+
+	PendingJumpStartState = GetRuntimeCharacterState();
+	bJumpLaunchPending = true;
+	Owner->Jump();
+	return true;
+}
+
+bool URunGameMovementComponent::CanStartJump(bool bDefaultCanJump) const
+{
+	if (bDefaultCanJump)
+	{
+		return true;
+	}
+
+	const ERunGameCharacterState State = GetRuntimeCharacterState();
+	if (State == ERunGameCharacterState::CoyoteTime)
+	{
+		return true;
+	}
+
+	return State == ERunGameCharacterState::Airborne && bAirJumpAvailable;
+}
+
+void URunGameMovementComponent::HandleOwnerJumped()
+{
+	if (PendingJumpStartState == ERunGameCharacterState::CoyoteTime)
+	{
+		// 土狼跳仍算一段跳，保留二段跳资格 / Coyote jump is still the first jump, keep double-jump available
+		bAirJumpAvailable = true;
+		RequestCharacterState(ERunGameCharacterState::Airborne);
+	}
+	else if (PendingJumpStartState == ERunGameCharacterState::Airborne)
+	{
+		// 只有真正的二段跳才消耗空中跳资格 / Only a real double jump consumes air-jump availability
+		bAirJumpAvailable = false;
+	}
+	else if (PendingJumpStartState == ERunGameCharacterState::Idle
+		|| PendingJumpStartState == ERunGameCharacterState::Turning)
+	{
+		// 主动地面跳直接进入 Airborne，并保留二段跳资格 / Intentional ground jump enters Airborne and keeps double-jump available
+		bAirJumpAvailable = true;
+		RequestCharacterState(ERunGameCharacterState::Airborne);
+	}
+
+	bJumpLaunchPending = false;
+}
+
+void URunGameMovementComponent::HandleOwnerLanded(const FHitResult& /*Hit*/)
+{
+	bAirJumpAvailable = true;
+	bJumpLaunchPending = false;
+	PendingJumpStartState = ERunGameCharacterState::Idle;
+
+	const ERunGameCharacterState State = GetRuntimeCharacterState();
+	if (State == ERunGameCharacterState::Airborne || State == ERunGameCharacterState::CoyoteTime)
+	{
+		RequestCharacterState(ERunGameCharacterState::Idle);
+	}
+}
+
+ERunGameCharacterState URunGameMovementComponent::GetRuntimeCharacterState() const
+{
+	const UWorld* World = GetWorld();
+	const UPlayerRuntimeState* PRS = World ? World->GetSubsystem<UPlayerRuntimeState>() : nullptr;
+	return PRS ? PRS->GetCharacterState() : ERunGameCharacterState::Idle;
+}
+
+bool URunGameMovementComponent::RequestCharacterState(ERunGameCharacterState NewState) const
+{
+	UWorld* World = GetWorld();
+	UPlayerRuntimeState* PRS = World ? World->GetSubsystem<UPlayerRuntimeState>() : nullptr;
+	if (!PRS)
+	{
+		return false;
+	}
+
+	if (PRS->GetCharacterState() == NewState)
+	{
+		return true;
+	}
+
+	PRS->SetCharacterState(NewState);
+	return PRS->GetCharacterState() == NewState;
+}
+
+bool URunGameMovementComponent::ConsumePendingJumpLaunch()
+{
+	if (!bJumpLaunchPending)
+	{
+		return false;
+	}
+
+	bJumpLaunchPending = false;
+	return true;
+}
+
 // ---- Movement mode event-driven airborne detection ----
 
 void URunGameMovementComponent::SetMovementMode(EMovementMode NewMovementMode, uint8 NewCustomMode)
@@ -182,27 +367,28 @@ void URunGameMovementComponent::SetMovementMode(EMovementMode NewMovementMode, u
 	// Event-driven: entering Falling → CoyoteTime (grace period, not immediate Airborne)
 	if (OldMode != MOVE_Falling && NewMovementMode == MOVE_Falling)
 	{
-		UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-		if (PRS)
+		const ERunGameCharacterState CurrentState = GetRuntimeCharacterState();
+		if (CurrentState == ERunGameCharacterState::Idle || CurrentState == ERunGameCharacterState::Turning)
 		{
-			const ERunGameCharacterState CurrentState = PRS->GetCharacterState();
-			if (CurrentState == ERunGameCharacterState::Idle || CurrentState == ERunGameCharacterState::Turning)
+			if (ConsumePendingJumpLaunch())
 			{
-				if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
-				{
-					Char->SetCharacterState(ERunGameCharacterState::CoyoteTime);
-
-					// 启动 CoyoteTime 定时器——到期后自动转入 Airborne
-					// Arm coyote timer — auto-transition to Airborne on expiry
-					GetWorld()->GetTimerManager().SetTimer(
-						CoyoteTimer,
-						this,
-						&URunGameMovementComponent::OnCoyoteTimeExpired,
-						CoyoteTimeDuration,
-						false
-					);
-				}
+				// 主动跳跃进入空中，不开启土狼时间 / Intentional jump enters Airborne without arming coyote time
+				RequestCharacterState(ERunGameCharacterState::Airborne);
+				GetWorld()->GetTimerManager().ClearTimer(CoyoteTimer);
+				return;
 			}
+
+			RequestCharacterState(ERunGameCharacterState::CoyoteTime);
+
+			// 启动 CoyoteTime 定时器——到期后自动转入 Airborne
+			// Arm coyote timer — auto-transition to Airborne on expiry
+			GetWorld()->GetTimerManager().SetTimer(
+				CoyoteTimer,
+				this,
+				&URunGameMovementComponent::OnCoyoteTimeExpired,
+				CoyoteTimeDuration,
+				false
+			);
 		}
 	}
 
@@ -215,13 +401,9 @@ void URunGameMovementComponent::SetMovementMode(EMovementMode NewMovementMode, u
 
 void URunGameMovementComponent::OnCoyoteTimeExpired()
 {
-	UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (PRS && PRS->GetCharacterState() == ERunGameCharacterState::CoyoteTime)
+	if (GetRuntimeCharacterState() == ERunGameCharacterState::CoyoteTime)
 	{
-		if (ARunGameCharacter* Char = Cast<ARunGameCharacter>(CharacterOwner))
-		{
-			Char->SetCharacterState(ERunGameCharacterState::Airborne);
-		}
+		RequestCharacterState(ERunGameCharacterState::Airborne);
 	}
 }
 

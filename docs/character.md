@@ -4,14 +4,14 @@
 
 Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save → Modify → Broadcast`.
 
-**`UPlayerRuntimeState`** owns the state via `SetCharacterState(NewState)`. The method follows `Guard → Validate → Save → Modify → Broadcast` — it validates the transition, updates `CurrentCharacterState`, and broadcasts `OnCharacterStateChanged(Old, New)`. **`ARunGameCharacter`** delegates to `RS->SetCharacterState()` and binds `OnCharacterStateChangedCallback` for reactive side effects (slide crouch/friction, turn flags, etc.).
+**`UPlayerRuntimeState`** owns the state via `SetCharacterState(NewState)`. The method follows `Guard → Validate → Save → Modify → Broadcast` — it validates the transition, updates `CurrentCharacterState`, and broadcasts `OnCharacterStateChanged(Old, New)`. **`ARunGameCharacter`** delegates state requests to `RS->SetCharacterState()` and only bridges input / UE callbacks. Movement side effects and jump rules live in **`URunGameMovementComponent`**.
 
 | State | Description | Entry |
 |-------|-------------|-------|
 | `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne/CoyoteTime; slide/turn ended |
 | `CoyoteTime` | Grace period after walking off ledge (0.15s) — can still jump | `SetMovementMode` detects `MOVE_Falling` from Idle/Turning |
-| `Airborne` | Jumping, falling — supports double jump (`bAirJumpAvailable`) | CoyoteTime expiry; ground jump; coyote-time jump consumed |
-| `Sliding` | Crouched, no ground friction, montage playing | `StartSlide()` calls `SetCharacterState(Sliding)` |
+| `Airborne` | Jumping, falling — supports double jump (`bAirJumpAvailable`) | CoyoteTime expiry; intentional ground jump; coyote-time jump |
+| `Sliding` | Crouched, no ground friction, montage playing | Ready Slide command handled by `URunGameMovementComponent` |
 | `Turning` | Inside turn zone — lateral movement blocked, rotation locked | `TurnFloor` overlap calls `SetCharacterState(Turning)` |
 | `Dead` | All input/movement blocked, dissolving | `Die()` calls `SetCharacterState(Dead)` — terminal |
 
@@ -33,15 +33,15 @@ Enforced by `IsCharacterStateTransitionAllowed`:
 
 ## CoyoteTime + Double Jump
 
-- `URunGameMovementComponent::SetMovementMode` detects `MOVE_Falling` from Idle/Turning → sets `CoyoteTime` (not Airborne) + arms 0.15s `CoyoteTimer`. On expiry → auto-transition to `Airborne`.
-- `ARunGameCharacter::bAirJumpAvailable` granted on: entering CoyoteTime, ground jump (Idle→Airborne), landing (→Idle). Consumed on: jump during CoyoteTime or Airborne (either via buffered input or direct `DoJumpStart`).
-- `CanJumpInternal_Implementation` overridden: allows jump during CoyoteTime or Airborne with `bAirJumpAvailable`.
-- `Landed()` handles both Airborne and CoyoteTime → Idle transitions.
+- `URunGameMovementComponent::SetMovementMode` detects `MOVE_Falling` from Idle/Turning. Intentional jump launches transition directly to `Airborne`; ledge falls enter `CoyoteTime` and arm a 0.15s `CoyoteTimer`. On expiry → auto-transition to `Airborne`.
+- `URunGameMovementComponent::bAirJumpAvailable` represents double-jump availability, not CoyoteTime. It is available from grounded start / landing, stays available through coyote jump, and is consumed only by a real Airborne double jump.
+- `ARunGameCharacter::CanJumpInternal_Implementation` only executes `CanStartJumpQuery`; `URunGameMovementComponent` binds the query and owns the rule.
+- `ARunGameCharacter::Landed()` only broadcasts `OnCharacterLanded`; `URunGameMovementComponent` subscribes and handles both Airborne and CoyoteTime → Idle transitions.
 - `RunGameInputBufferComponent`: Jump during CoyoteTime → immediate execute (not buffered). Slide during CoyoteTime → buffered (like Airborne).
 
 ## Movement Reaction
 
-`URunGameMovementComponent`: Self-binds to `OnCharacterStateChanged`. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
+`URunGameMovementComponent`: Self-binds to `OnCharacterStateChanged` and native Character events (`OnInputCommandReady`, `OnJumpInputReleased`, `OnCharacterJumped`, `OnCharacterLanded`). Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
 
 ## Animation Reaction
 
@@ -49,7 +49,7 @@ Enforced by `IsCharacterStateTransitionAllowed`:
 
 ## Input Buffering
 
-`URunGameInputBufferComponent`: `PendingInputState` removed. Character bridges EnhancedInput → `BufferInput()`. Queue stores intent with 0.3s timeout. State change back to `Idle` auto-consumes oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
+`URunGameInputBufferComponent`: `PendingInputState` removed. Character bridges EnhancedInput → `OnInputCommandRequested`. InputBuffer subscribes, emits ready commands through `OnInputCommandReady`, and queues blocked commands with 0.3s timeout. State change back to `Idle` auto-consumes oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
 
 ## Skill Gating
 

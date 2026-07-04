@@ -77,7 +77,6 @@ void ARunGameCharacter::BeginPlay()
 	// 状态机响应 Reactive to state machine
 	if (UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>())
 	{
-		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
 		RS->OnCharacterStateChanged.AddDynamic(this, &ARunGameCharacter::OnRSCharacterStateChanged);
 	}
 
@@ -97,12 +96,8 @@ void ARunGameCharacter::BeginPlay()
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
 	}
 
-	// 输入缓冲消费：Jump → ACharacter::Jump，Slide → SetCharacterState(Sliding)
-	// Input buffer consumption: Jump → ACharacter::Jump, Slide → SetCharacterState
-	if (InputBuffer)
-	{
-		InputBuffer->OnInputCommandConsumed.BindUObject(this, &ARunGameCharacter::OnBufferedInputReady);
-	}
+	// 输入命令由 OnInputCommandRequested → InputBuffer → OnInputCommandReady 分发
+	// Input commands flow through OnInputCommandRequested → InputBuffer → OnInputCommandReady
 }
 
 void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -111,7 +106,6 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		if (UPlayerRuntimeState* RS = World->GetSubsystem<UPlayerRuntimeState>())
 		{
-			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnCharacterStateChangedCallback);
 			RS->OnCharacterStateChanged.RemoveDynamic(this, &ARunGameCharacter::OnRSCharacterStateChanged);
 		}
 
@@ -198,37 +192,28 @@ void ARunGameCharacter::DoLook(float Yaw, float Pitch)
 
 void ARunGameCharacter::DoJumpStart()
 {
-	// CanJump 通过 → 执行跳跃（副作用在 OnJumped）；不通过 → 缓冲（滑铲中等场景）
-	// CanJump passes → execute jump (side effects in OnJumped); fails → buffer (e.g. during slide)
-	if (CanJump())
-	{
-		PreJumpState = GetCharacterState();
-		Jump();
-	}
-	else
-	{
-		InputBuffer->BufferInput(ERunGameInputCommand::Jump);
-	}
+	RequestInputCommand(ERunGameInputCommand::Jump);
 }
 
-void ARunGameCharacter::DoJumpEnd() { StopJumping(); }
-
-void ARunGameCharacter::StartSlide() { InputBuffer->BufferInput(ERunGameInputCommand::Slide); }
-
-void ARunGameCharacter::OnBufferedInputReady(ERunGameInputCommand Command)
+void ARunGameCharacter::DoJumpEnd()
 {
-	switch (Command)
-	{
-	case ERunGameInputCommand::Jump:
-		PreJumpState = GetCharacterState();
-		Jump();  // CanJumpInternal validates; OnJumped handles side effects
-		break;
-	case ERunGameInputCommand::Slide:
-		SetCharacterState(ERunGameCharacterState::Sliding);
-		break;
-	default:
-		break;
-	}
+	OnJumpInputReleased.Broadcast();
+}
+
+void ARunGameCharacter::StartSlide()
+{
+	RequestInputCommand(ERunGameInputCommand::Slide);
+}
+
+void ARunGameCharacter::RequestInputCommand(ERunGameInputCommand Command)
+{
+	FRunGameInputCommandRequest Request(Command);
+	OnInputCommandRequested.Broadcast(Request);
+}
+
+void ARunGameCharacter::NotifyInputCommandReady(FRunGameInputCommandRequest& Request)
+{
+	OnInputCommandReady.Broadcast(Request);
 }
 void ARunGameCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
 {
@@ -330,47 +315,20 @@ bool ARunGameCharacter::IsDead_Implementation() const { return HealthComponent ?
 
 bool ARunGameCharacter::CanJumpInternal_Implementation() const
 {
-	// 默认地面检查 Default ground check
-	if (Super::CanJumpInternal_Implementation())
+	const bool bDefaultCanJump = Super::CanJumpInternal_Implementation();
+	if (CanStartJumpQuery.IsBound())
 	{
-		return true;
+		return CanStartJumpQuery.Execute(bDefaultCanJump);
 	}
 
-	// CoyoteTime — 土狼时间缓冲期内允许跳跃 CoyoteTime grace period
-	const ERunGameCharacterState State = GetCharacterState();
-	if (State == ERunGameCharacterState::CoyoteTime)
-	{
-		return true;
-	}
-
-	// Airborne + 二段跳可用 Double jump available
-	if (State == ERunGameCharacterState::Airborne && bAirJumpAvailable)
-	{
-		return true;
-	}
-
-	return false;
+	return bDefaultCanJump;
 }
 
 void ARunGameCharacter::OnJumped_Implementation()
 {
 	Super::OnJumped_Implementation();
 
-	if (PreJumpState == ERunGameCharacterState::CoyoteTime)
-	{
-		// 土狼时间中起跳 → 消耗空中资格 + 转入 Airborne
-		// Jumped during coyote time → consume air jump + transition to Airborne
-		bAirJumpAvailable = false;
-		SetCharacterState(ERunGameCharacterState::Airborne);
-	}
-	else if (PreJumpState == ERunGameCharacterState::Airborne)
-	{
-		// 二段跳 → 消耗空中资格
-		// Double jump → consume air jump
-		bAirJumpAvailable = false;
-	}
-	// PreJumpState == Idle: 地面跳——空中资格由 OnCharacterStateChangedCallback 在 Idle→CoyoteTime 时授予
-	// PreJumpState == Idle: ground jump — air jump granted by OnCharacterStateChangedCallback on Idle→CoyoteTime
+	OnCharacterJumped.Broadcast();
 }
 
 // -- State Machine --
@@ -380,19 +338,8 @@ void ARunGameCharacter::SetCharacterState(ERunGameCharacterState NewState)
 	UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
 	if (!RS) return;
 
-	const ERunGameCharacterState CurrentState = RS->GetCharacterState();
-	if (CurrentState == NewState) return;
-
-	if (!IsCharacterStateTransitionAllowed(NewState))
-	{
-		UE_LOG(LogRunGame, Warning, TEXT("RunGameCharacter: Blocked transition from %d to %d"),
-			static_cast<int32>(CurrentState), static_cast<int32>(NewState));
-		return;
-	}
-
-	// Character 层额外守卫：滑动必须在地面 Extra guard: sliding requires ground
-	if (NewState == ERunGameCharacterState::Sliding && GetCharacterMovement()->IsFalling()) return;
-
+	// Character 只作为 RuntimeState 转发门面；校验由 RuntimeState/组件域规则负责
+	// Character is only a RuntimeState forwarding facade; validation belongs to RuntimeState/component-domain rules
 	RS->SetCharacterState(NewState);
 }
 
@@ -402,40 +349,11 @@ bool ARunGameCharacter::IsCharacterStateTransitionAllowed(ERunGameCharacterState
 	return RS ? RS->IsCharacterStateTransitionAllowed(NewState) : false;
 }
 
-void ARunGameCharacter::OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
-{
-	// 进入 CoyoteTime 或从地面跳起 → 授予空中跳跃资格 Entering CoyoteTime or ground jump → grant air jump
-	if (NewState == ERunGameCharacterState::CoyoteTime)
-	{
-		bAirJumpAvailable = true;
-	}
-
-	// 地面起跳 → Airborne → 授予空中跳跃资格 Ground jump → Airborne → grant air jump
-	if (NewState == ERunGameCharacterState::Airborne && OldState == ERunGameCharacterState::Idle)
-	{
-		bAirJumpAvailable = true;
-	}
-
-	// 着陆 → 重置空中跳跃资格 Landing → reset air jump
-	if (NewState == ERunGameCharacterState::Idle)
-	{
-		bAirJumpAvailable = true;
-	}
-}
-
 void ARunGameCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
-	UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (!RS) return;
-
-	const ERunGameCharacterState State = RS->GetCharacterState();
-	if (State == ERunGameCharacterState::Airborne || State == ERunGameCharacterState::CoyoteTime)
-	{
-		SetCharacterState(ERunGameCharacterState::Idle);
-		// InputBuffer 自行监听状态变化 → Idle → 自动消费缓冲的 Slide
-	}
+	OnCharacterLanded.Broadcast(Hit);
 }
 
 ERunGameCharacterState ARunGameCharacter::GetCharacterState() const

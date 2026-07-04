@@ -27,6 +27,10 @@ struct FInputActionValue;
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterDiedSignature, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterStateChangedSignature, ERunGameCharacterState, OldState, ERunGameCharacterState, NewState);
+DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameInputCommandRequestSignature, FRunGameInputCommandRequest&);
+DECLARE_MULTICAST_DELEGATE(FRunGameCharacterNativeEvent);
+DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameCharacterLandedEvent, const FHitResult&);
+DECLARE_DELEGATE_RetVal_OneParam(bool, FRunGameCanStartJumpQuery, bool);
 
 UCLASS(abstract)
 class ARunGameCharacter : public ACharacter, public IDamagable
@@ -96,6 +100,25 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "RunGame|State")
 	FOnCharacterStateChangedSignature OnCharacterStateChanged;
 
+	/** 输入意图事件：Character 只发布，InputBuffer 决定立即执行或缓存 / Input intent event: Character only publishes; InputBuffer decides execute vs buffer */
+	FRunGameInputCommandRequestSignature OnInputCommandRequested;
+
+	/** 命令就绪事件：InputBuffer 发布，能力组件自行订阅处理 / Ready command event: InputBuffer publishes; ability components react */
+	FRunGameInputCommandRequestSignature OnInputCommandReady;
+
+	/** 跳跃按键释放事件 / Jump input released event */
+	FRunGameCharacterNativeEvent OnJumpInputReleased;
+
+	/** UE 跳跃物理生效事件 / UE jump-physics-applied event */
+	FRunGameCharacterNativeEvent OnCharacterJumped;
+
+	/** UE 落地事件 / UE landed event */
+	FRunGameCharacterLandedEvent OnCharacterLanded;
+
+	/** 跳跃许可查询：MovementComponent 绑定，Character 只转发 UE CanJumpInternal / Jump permission query bound by MovementComponent */
+	FRunGameCanStartJumpQuery CanStartJumpQuery;
+
+	/** RuntimeState 转发门面，状态校验由 RuntimeState 负责 / RuntimeState forwarding facade; RuntimeState owns validation */
 	UFUNCTION(BlueprintCallable, Category = "RunGame|State")
 	void SetCharacterState(ERunGameCharacterState NewState);
 
@@ -137,13 +160,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Input")
 	virtual void DoJumpEnd();
 
-	/** 空中跳跃是否可用——进入 CoyoteTime 或跳离地面时设 true，消耗后设 false，落地重置 */
-	bool bAirJumpAvailable = false;
-
-	/** 起跳前状态——OnJumped 用它区分「地面跳」和「土狼时间跳」 Pre-jump state — OnJumped uses it to distinguish ground jump vs coyote-time jump */
-	ERunGameCharacterState PreJumpState = ERunGameCharacterState::Idle;
-
 	void StartSlide();
+
+	/** InputBuffer 调用的命令就绪转发入口 Ready-command forwarding entry used by InputBuffer */
+	void NotifyInputCommandReady(FRunGameInputCommandRequest& Request);
 
 	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
 	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
@@ -165,11 +185,10 @@ public:
 	virtual bool IsDead_Implementation() const override;
 	// ~end IDamagable interface
 
-	/** 覆写：CoyoteTime 或 Airborne + bAirJumpAvailable 时允许跳跃 Override: allow jump during CoyoteTime or Airborne with double jump available */
+	/** 覆写：桥接到 MovementComponent 的跳跃规则 / Override: bridge to MovementComponent jump rules */
 	virtual bool CanJumpInternal_Implementation() const override;
 
-	/** 跳跃物理生效后回调 —— 在此统筹二段跳扣除和 CoyoteTime→Airborne 状态切换
-	 *  Called after jump physics is applied — handles air jump consumption and CoyoteTime→Airborne transition */
+	/** 跳跃物理生效后回调——只广播事件 / Called after jump physics is applied; only broadcasts event */
 	virtual void OnJumped_Implementation() override;
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }
@@ -182,16 +201,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);
 
-	/** 输入缓冲消费回调 Input buffer consumption callback */
-	void OnBufferedInputReady(ERunGameInputCommand Command);
-
 private:
-	UFUNCTION()
-	void OnCharacterStateChangedCallback(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+	/** 广播输入意图 Broadcast input intent */
+	void RequestInputCommand(ERunGameInputCommand Command);
 
 	UFUNCTION()
 	void OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
 
 	UFUNCTION()
 	void OnRSCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
+
 };

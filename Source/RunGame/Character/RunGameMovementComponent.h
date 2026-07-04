@@ -8,6 +8,7 @@
 
 class UCurveFloat;
 class URunGameTimerSubsystem;
+struct FRunGameInputCommandRequest;
 
 /**
  * 角色运动组件 —— 自治单元，绑 PRS 状态变化自行管理运动物理。
@@ -72,6 +73,28 @@ private:
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
+	/** 绑定/解绑 Character 原生事件 Bind/unbind native Character events */
+	void BindOwnerEvents();
+	void UnbindOwnerEvents();
+
+	/** 输入命令就绪后由组件自行处理 React to ready input commands */
+	void OnInputCommandReady(FRunGameInputCommandRequest& Request);
+
+	/** 跳跃按键释放后停止跳跃 Stop jumping when jump input is released */
+	void OnJumpInputReleased();
+
+	/** 尝试启动跳跃，成功时由组件记录跳跃上下文 / Try to start a jump and record jump context on success */
+	bool TryStartJump();
+
+	/** 判断当前状态是否允许跳跃，Character::CanJumpInternal 仅执行查询委托 / Check jump permission; Character::CanJumpInternal only executes query delegate */
+	bool CanStartJump(bool bDefaultCanJump) const;
+
+	/** 响应 Character 起跳事件，统一处理一段跳、土狼跳和二段跳 / React to Character jump event and handle ground, coyote, and double jumps */
+	void HandleOwnerJumped();
+
+	/** 响应 Character 落地事件，统一处理落地状态和二段跳重置 / React to Character landed event and reset grounded jump state */
+	void HandleOwnerLanded(const FHitResult& Hit);
+
 	// -- Speed --
 
 	float SmoothedMaxWalkSpeed = 2000.0f;
@@ -90,6 +113,24 @@ private:
 
 	/** CoyoteTime 到期回调——状态仍为 CoyoteTime 则转入 Airborne Coyote time expiry — if still in CoyoteTime, transition to Airborne */
 	void OnCoyoteTimeExpired();
+
+	/** 获取 RuntimeState 中的角色状态 / Read character state from RuntimeState */
+	ERunGameCharacterState GetRuntimeCharacterState() const;
+
+	/** 请求 RuntimeState 切换角色状态，返回是否已处于目标状态 / Request character state transition; returns whether target state is active */
+	bool RequestCharacterState(ERunGameCharacterState NewState) const;
+
+	/** 消费主动跳跃标记，区分主动起跳和走出边缘 / Consume jump-launch marker to distinguish jump from ledge fall */
+	bool ConsumePendingJumpLaunch();
+
+	/** 二段跳是否可用；初始地面状态默认允许后续空中跳 / Double-jump availability; grounded start can later spend an air jump */
+	bool bAirJumpAvailable = true;
+
+	/** 主动按跳导致的离地标记 / Set only for intentional jump launches */
+	bool bJumpLaunchPending = false;
+
+	/** 起跳前状态，用于区分地面跳、土狼跳和二段跳 / State before jump, used to distinguish ground, coyote, and double jumps */
+	ERunGameCharacterState PendingJumpStartState = ERunGameCharacterState::Idle;
 
 	FTimerHandle CoyoteTimer;
 };

@@ -1,4 +1,5 @@
 #include "Character/RunGameInputBufferComponent.h"
+#include "Character/RunGameCharacter.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 #include "RunGame.h"
@@ -21,10 +22,22 @@ void URunGameInputBufferComponent::BeginPlay()
 	{
 		UE_LOG(LogRunGame, Error, TEXT("InputBuffer: Failed to get PlayerRuntimeState"));
 	}
+
+	OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
+	if (OwnerCharacter)
+	{
+		OwnerCharacter->OnInputCommandRequested.AddUObject(this, &URunGameInputBufferComponent::HandleInputCommandRequested);
+	}
 }
 
 void URunGameInputBufferComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (OwnerCharacter)
+	{
+		OwnerCharacter->OnInputCommandRequested.RemoveAll(this);
+		OwnerCharacter = nullptr;
+	}
+
 	if (RuntimeState)
 	{
 		RuntimeState->OnCharacterStateChanged.RemoveDynamic(this, &URunGameInputBufferComponent::OnCharacterStateChanged);
@@ -44,41 +57,12 @@ void URunGameInputBufferComponent::BufferInput(ERunGameInputCommand Command)
 	// Dead — 丢弃所有输入 Dead — discard all input
 	if (CurrentState == ERunGameCharacterState::Dead) return;
 
-	// Idle — 立即执行 Idle — execute immediately
-	if (CurrentState == ERunGameCharacterState::Idle)
+	if (ShouldExecuteImmediately(CurrentState, Command) && TryDispatchReadyCommand(Command))
 	{
-		OnInputCommandConsumed.ExecuteIfBound(Command);
 		return;
 	}
 
-	// CoyoteTime + Jump → 立即执行（土狼时间跳跃）CoyoteTime + Jump → execute immediately
-	if (CurrentState == ERunGameCharacterState::CoyoteTime && Command == ERunGameInputCommand::Jump)
-	{
-		OnInputCommandConsumed.ExecuteIfBound(Command);
-		return;
-	}
-
-	// 非 Idle 状态——判断是否可缓冲 Non-Idle — check if bufferable
-	bool bShouldBuffer = false;
-
-	switch (Command)
-	{
-	case ERunGameInputCommand::Slide:
-		// 空中按滑铲 → 缓冲，落地触发 Airborne/CoyoteTime + Slide → buffer, consume on land
-		bShouldBuffer = (CurrentState == ERunGameCharacterState::Airborne
-			|| CurrentState == ERunGameCharacterState::CoyoteTime);
-		break;
-
-	case ERunGameInputCommand::Jump:
-		// 滑铲中按跳 → 缓冲，滑铲结束后触发 Sliding + Jump → buffer, consume after slide
-		bShouldBuffer = (CurrentState == ERunGameCharacterState::Sliding);
-		break;
-
-	default:
-		break;
-	}
-
-	if (!bShouldBuffer) return;
+	if (!ShouldBufferCommand(CurrentState, Command)) return;
 
 	// 去重：同类型命令只保留最新一个 Deduplicate: only keep latest of same command type
 	for (int32 i = CommandQueue.Num() - 1; i >= 0; --i)
@@ -104,6 +88,11 @@ void URunGameInputBufferComponent::ClearBuffer()
 
 // ---- State reaction ----
 
+void URunGameInputBufferComponent::HandleInputCommandRequested(FRunGameInputCommandRequest& Request)
+{
+	BufferInput(Request.Command);
+}
+
 void URunGameInputBufferComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
 	// Dead → 清空缓冲 Dead → clear everything
@@ -121,6 +110,53 @@ void URunGameInputBufferComponent::OnCharacterStateChanged(ERunGameCharacterStat
 }
 
 // ---- Internal ----
+
+bool URunGameInputBufferComponent::ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Jump:
+		// Jump 先尝试即时执行；MovementComponent 决定一段跳、土狼跳或二段跳是否真正可用
+		// Jump first attempts immediate execution; MovementComponent decides ground, coyote, or double-jump validity
+		return CurrentState == ERunGameCharacterState::Idle
+			|| CurrentState == ERunGameCharacterState::Turning
+			|| CurrentState == ERunGameCharacterState::CoyoteTime
+			|| CurrentState == ERunGameCharacterState::Airborne;
+
+	case ERunGameInputCommand::Slide:
+		return CurrentState == ERunGameCharacterState::Idle;
+
+	default:
+		return false;
+	}
+}
+
+bool URunGameInputBufferComponent::ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Slide:
+		// 空中按滑铲 → 缓冲，落地触发 Airborne/CoyoteTime + Slide → buffer, consume on land
+		return CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::CoyoteTime;
+
+	case ERunGameInputCommand::Jump:
+		// 滑铲中按跳 → 缓冲，滑铲结束后触发 Sliding + Jump → buffer, consume after slide
+		return CurrentState == ERunGameCharacterState::Sliding;
+
+	default:
+		return false;
+	}
+}
+
+bool URunGameInputBufferComponent::TryDispatchReadyCommand(ERunGameInputCommand Command) const
+{
+	if (!OwnerCharacter) return false;
+
+	FRunGameInputCommandRequest Request(Command);
+	OwnerCharacter->NotifyInputCommandReady(Request);
+	return Request.bHandled;
+}
 
 void URunGameInputBufferComponent::ExpireStaleCommands()
 {
@@ -149,5 +185,8 @@ void URunGameInputBufferComponent::TryConsumeBuffer()
 
 	UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Consumed buffered command %d"), (int32)Cmd.Command);
 
-	OnInputCommandConsumed.ExecuteIfBound(Cmd.Command);
+	if (!TryDispatchReadyCommand(Cmd.Command))
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Ready command %d was not handled"), (int32)Cmd.Command);
+	}
 }
