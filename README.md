@@ -29,10 +29,11 @@
 ```
 
 **核心设计原则：**
-- **单一数据源** — `ARunGameGameState` 持有全部游戏状态，`UPlayerRuntimeState` 持有角色状态
-- **事件驱动** — 所有系统通过委托订阅状态变更，无直接跨类命令调用
+- **单一数据源** — `ARunGameGameState` 持有游戏状态，`UPlayerRuntimeState` 持有角色语义状态
+- **输入生命周期自治** — `URunGameInputBufferComponent` 管输入缓存、超时、去重与成功消费
+- **状态请求有返回语义** — `TrySetCharacterState()` 明确返回状态切换是否被状态机接受
+- **事件驱动响应** — RuntimeState 状态变更后广播，各运动/动画/镜头/特效组件独立响应
 - **GameplayTag 通信** — 技能效果通过 Tag 发布，各子系统独立响应
-- **自主复原** — Dead→Idle 时各组件自愈（HP/能量/移动/碰撞/材质/动画），GameMode 只管定位和显示
 
 ## 模块结构
 
@@ -64,6 +65,34 @@ Source/RunGame/
 | `InGame` | 开跑：角色显示，运动恢复，镜头 Blend 到跟随 |
 | `Pause` | 暂停，冻结所有 Tick + Timer |
 | `GameOver` | 结束，停止计时，显示结算 |
+
+### 角色输入与状态链路
+
+角色层只保留 Unreal 必须的输入与生命周期回调，业务判断下沉到输入缓冲、运动组件和 RuntimeState：
+
+```
+EnhancedInput
+    ↓
+ARunGameCharacter 转发输入
+    ↓
+URunGameInputBufferComponent
+    ├─ 立即尝试消费
+    ├─ 不可执行则缓存 / 去重 / 超时丢弃
+    └─ Movement 成功消费后提前移除输入信号
+    ↓
+URunGameMovementComponent
+    ├─ Jump / Slide 运动域规则
+    ├─ 土狼时间 / 二段跳资源
+    └─ 请求 RuntimeState 切换语义状态
+    ↓
+UPlayerRuntimeState::TrySetCharacterState()
+    ↓
+OnCharacterStateChanged 广播
+    ↓
+Movement / Anim / Camera / Effect 自行响应
+```
+
+这条链路避免 `Character` 同时承担输入缓存、状态判断和运动执行职责：`InputBuffer` 管输入信号生命周期，`MovementComponent` 管物理与运动规则，`RuntimeState` 管角色状态真相源。
 
 ### 角色生命周期
 
