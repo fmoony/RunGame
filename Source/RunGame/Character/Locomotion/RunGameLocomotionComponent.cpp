@@ -1,7 +1,9 @@
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
+#include "Character/Animation/RunGameAnimInstance.h"
 #include "Character/RunGameCharacter.h"
 #include "Character/RunGameMovementComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
 
@@ -34,10 +36,14 @@ void URunGameLocomotionComponent::BeginPlay()
 			RuntimeState->OnCharacterStateChanged.AddDynamic(this, &URunGameLocomotionComponent::OnCharacterStateChanged);
 		}
 	}
+
+	BindAnimationEvents();
 }
 
 void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindAnimationEvents();
+
 	if (MovementComponent && MovementModeChangedHandle.IsValid())
 	{
 		MovementComponent->OnRunGameMovementModeChanged.Remove(MovementModeChangedHandle);
@@ -56,6 +62,7 @@ void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 
 	OwnerCharacter = nullptr;
 	MovementComponent = nullptr;
+	AnimInstance = nullptr;
 	RuntimeState = nullptr;
 
 	Super::EndPlay(EndPlayReason);
@@ -192,6 +199,46 @@ bool URunGameLocomotionComponent::ConsumePendingJumpLaunch()
 	return true;
 }
 
+void URunGameLocomotionComponent::BindAnimationEvents()
+{
+	if (!OwnerCharacter || SlideMontageEndedHandle.IsValid())
+	{
+		return;
+	}
+
+	USkeletalMeshComponent* Mesh = OwnerCharacter->GetMesh();
+	if (!Mesh)
+	{
+		return;
+	}
+
+	AnimInstance = Cast<URunGameAnimInstance>(Mesh->GetAnimInstance());
+	if (AnimInstance)
+	{
+		SlideMontageEndedHandle = AnimInstance->OnSlideMontageEnded.AddUObject(
+			this,
+			&URunGameLocomotionComponent::HandleSlideMontageEnded
+		);
+	}
+}
+
+void URunGameLocomotionComponent::UnbindAnimationEvents()
+{
+	if (AnimInstance && SlideMontageEndedHandle.IsValid())
+	{
+		AnimInstance->OnSlideMontageEnded.Remove(SlideMontageEndedHandle);
+		SlideMontageEndedHandle.Reset();
+	}
+}
+
+void URunGameLocomotionComponent::HandleSlideMontageEnded(UAnimMontage* /*Montage*/, bool /*bInterrupted*/)
+{
+	if (GetRuntimeCharacterState() == ERunGameCharacterState::Sliding)
+	{
+		RequestCharacterState(ERunGameCharacterState::Idle);
+	}
+}
+
 void URunGameLocomotionComponent::HandleMovementModeChanged(EMovementMode OldMovementMode, EMovementMode NewMovementMode)
 {
 	UWorld* World = GetWorld();
@@ -243,6 +290,11 @@ void URunGameLocomotionComponent::OnCoyoteTimeExpired()
 void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
 	UWorld* World = GetWorld();
+
+	if (NewState == ERunGameCharacterState::Sliding)
+	{
+		BindAnimationEvents();
+	}
 
 	if (OldState == ERunGameCharacterState::CoyoteTime && World)
 	{

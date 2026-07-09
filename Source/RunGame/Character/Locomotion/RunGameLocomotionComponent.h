@@ -8,7 +8,9 @@
 #include "RunGameLocomotionComponent.generated.h"
 
 class ARunGameCharacter;
+class UAnimMontage;
 class UPlayerRuntimeState;
+class URunGameAnimInstance;
 class URunGameMovementComponent;
 struct FHitResult;
 
@@ -66,6 +68,15 @@ private:
 	/** 消费主动跳跃标记，区分主动起跳和走出边缘 Consume intentional jump marker to distinguish jump from ledge fall */
 	bool ConsumePendingJumpLaunch();
 
+	/** 绑定动画事件，由 Locomotion 接管滑铲结束决策 Bind animation events so Locomotion owns slide-end decisions */
+	void BindAnimationEvents();
+
+	/** 解绑动画事件 Unbind animation events */
+	void UnbindAnimationEvents();
+
+	/** 响应滑铲蒙太奇结束 React to slide montage end */
+	void HandleSlideMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
 	/** 处理 MovementMode 变化 Handle movement mode changes */
 	void HandleMovementModeChanged(EMovementMode OldMovementMode, EMovementMode NewMovementMode);
 
@@ -83,9 +94,13 @@ private:
 	TObjectPtr<URunGameMovementComponent> MovementComponent;
 
 	UPROPERTY()
+	TObjectPtr<URunGameAnimInstance> AnimInstance;
+
+	UPROPERTY()
 	TObjectPtr<UPlayerRuntimeState> RuntimeState;
 
 	FDelegateHandle MovementModeChangedHandle;
+	FDelegateHandle SlideMontageEndedHandle;
 	FTimerHandle CoyoteTimer;
 
 	bool bAirJumpAvailable = true;

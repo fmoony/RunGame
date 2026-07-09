@@ -13,6 +13,8 @@ class UAnimMontage;
 class UPlayerRuntimeState;
 class URunGameTimerSubsystem;
 
+DECLARE_MULTICAST_DELEGATE_TwoParams(FRunGameSlideMontageEnded, UAnimMontage*, bool);
+
 /**
  * Native AnimInstance — 统一管理所有动画：数据缓存 + 蒙太奇播放。
  * AnimInstance — unified animation: data cache + montage playback.
@@ -26,6 +28,9 @@ class RUNGAME_API URunGameAnimInstance : public UAnimInstance
 public:
 	virtual void NativeInitializeAnimation() override;
 	virtual void NativeUpdateAnimation(float DeltaSeconds) override;
+
+	/** 滑铲蒙太奇结束事件，Locomotion 决定是否结束滑铲 Slide montage end event; Locomotion decides whether to finish slide */
+	FRunGameSlideMontageEnded OnSlideMontageEnded;
 
 	// ── Config: Slide ──
 

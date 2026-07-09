@@ -161,14 +161,8 @@ void URunGameAnimInstance::OnSlideBlendingOut(UAnimMontage* Montage, bool bInter
 
 	EndSlide();
 
-	// 告知状态机滑铲结束 → 切回 Idle
-	if (UWorld* World = GetWorld())
-	{
-		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			PRS->SetCharacterState(ERunGameCharacterState::Idle);
-		}
-	}
+	// 广播动画结束信号，由 Locomotion 决定是否结束滑铲 Broadcast animation end; Locomotion decides whether to finish slide
+	OnSlideMontageEnded.Broadcast(Montage, bInterrupted);
 }
 
 // ── Death ──
