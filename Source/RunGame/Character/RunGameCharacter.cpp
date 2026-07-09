@@ -3,6 +3,7 @@
 #include "Actor/Component/HealthComponent.h"
 #include "Skill/SkillComponent.h"
 #include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/RunGameLocomotionComponent.h"
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameEffectComponent.h"
 #include "Character/RunGameCollisionAbilityComponent.h"
@@ -57,6 +58,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
+	LocomotionComponent = CreateDefaultSubobject<URunGameLocomotionComponent>(TEXT("LocomotionComponent"));
 	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));
 	CollisionAbility = CreateDefaultSubobject<URunGameCollisionAbilityComponent>(TEXT("CollisionAbility"));
 	CameraComponent = CreateDefaultSubobject<URunGameCameraComponent>(TEXT("CameraComponent"));
@@ -168,12 +170,12 @@ void ARunGameCharacter::DoMove(float Right, float Forward)
 {
 	if (GetController() == nullptr || Right == 0.0f) return;
 
-	URunGameMovementComponent* MoveComp = GetRunGameMovementComponent();
-	if (!MoveComp) return;
+	URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent();
+	if (!LocomotionComp) return;
 
 	// 转弯系统：MovementComponent 处理旋转。返回 true = 在转向盒内，阻止横向输入
-	// Turn system: MovementComponent handles rotation. Returns true = in turn box, block lateral input
-	const bool bBlockLateral = MoveComp->ApplyTurnRotation(Right);
+	// Turn system: Locomotion routes turn rules. Returns true = in turn box, block lateral input
+	const bool bBlockLateral = LocomotionComp->ApplyTurnRotation(Right);
 	if (!bBlockLateral)
 	{
 		const FRotator YawRotation(0, GetController()->GetControlRotation().Yaw, 0);
@@ -200,9 +202,9 @@ void ARunGameCharacter::DoJumpStart()
 
 void ARunGameCharacter::DoJumpEnd()
 {
-	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	if (URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent())
 	{
-		MoveComp->HandleJumpInputReleased();
+		LocomotionComp->HandleJumpInputReleased();
 	}
 }
 
@@ -314,9 +316,9 @@ bool ARunGameCharacter::IsDead_Implementation() const { return HealthComponent ?
 bool ARunGameCharacter::CanJumpInternal_Implementation() const
 {
 	const bool bDefaultCanJump = Super::CanJumpInternal_Implementation();
-	if (const URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	if (const URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent())
 	{
-		return MoveComp->CanStartJump(bDefaultCanJump);
+		return LocomotionComp->CanStartJump(bDefaultCanJump);
 	}
 
 	return bDefaultCanJump;
@@ -326,9 +328,9 @@ void ARunGameCharacter::OnJumped_Implementation()
 {
 	Super::OnJumped_Implementation();
 
-	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	if (URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent())
 	{
-		MoveComp->HandleOwnerJumped();
+		LocomotionComp->HandleOwnerJumped();
 	}
 }
 
@@ -354,9 +356,9 @@ void ARunGameCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
 
-	if (URunGameMovementComponent* MoveComp = GetRunGameMovementComponent())
+	if (URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent())
 	{
-		MoveComp->HandleOwnerLanded(Hit);
+		LocomotionComp->HandleOwnerLanded(Hit);
 	}
 }
 
@@ -374,4 +376,9 @@ bool ARunGameCharacter::IsSliding() const
 URunGameMovementComponent* ARunGameCharacter::GetRunGameMovementComponent() const
 {
 	return Cast<URunGameMovementComponent>(GetCharacterMovement());
+}
+
+URunGameLocomotionComponent* ARunGameCharacter::GetRunGameLocomotionComponent() const
+{
+	return LocomotionComponent;
 }

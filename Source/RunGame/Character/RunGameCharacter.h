@@ -17,6 +17,7 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameInputBufferComponent;
 class URunGameMovementComponent;
+class URunGameLocomotionComponent;
 class URunGameEffectComponent;
 class URunGameCameraComponent;
 class URunGameCollisionAbilityComponent;
@@ -49,6 +50,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameInputBufferComponent> InputBuffer;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameLocomotionComponent> LocomotionComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameEffectComponent> EffectComponent;
@@ -172,6 +176,10 @@ public:
 	/** 获取自定义运动组件 Get custom movement component */
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	URunGameMovementComponent* GetRunGameMovementComponent() const;
+
+	/** 获取跑酷运动规则组件 Get runner locomotion rules component */
+	UFUNCTION(BlueprintCallable, Category = "Movement")
+	URunGameLocomotionComponent* GetRunGameLocomotionComponent() const;
 
 	UFUNCTION(BlueprintCallable, Category = "Skills")
 	void ActivateSkillByTag(FGameplayTag SkillTag);

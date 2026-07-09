@@ -60,7 +60,7 @@ public:
 	/**
 	 * 尝试立即执行输入命令。
 	 * 若当前状态不允许 → 入队缓冲（超时后自动丢弃）。
-	 * Attempt to execute immediately. If blocked by current state → enqueue (auto-expire).
+	 * Attempt to execute immediately. If blocked by current state -> cache as latest intent (auto-expire).
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Input")
 	void BufferInput(ERunGameInputCommand Command);
@@ -84,13 +84,16 @@ private:
 	/** 当前状态是否应缓存命令 Whether the command should be buffered in current state */
 	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
 
+	/** 缓冲命令在当前状态是否应尝试消费 Whether a buffered command should attempt consumption in the current state */
+	bool CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+
 	/** 请求 Movement 消费输入命令 Request Movement to consume an input command */
 	bool TryConsumeCommand(ERunGameInputCommand Command) const;
 
 	/** 移除过期条目 Remove stale entries */
 	void ExpireStaleCommands();
 
-	/** 尝试消费缓冲队列中的第一个有效条目 Try to consume the first valid buffered entry */
+	/** 尝试消费最新缓冲命令 Try to consume the latest buffered command */
 	void TryConsumeBuffer();
 
 	UPROPERTY()
@@ -100,5 +103,5 @@ private:
 	TObjectPtr<class ARunGameCharacter> OwnerCharacter;
 
 	UPROPERTY()
-	TArray<FBufferedCommand> CommandQueue;
+	FBufferedCommand BufferedCommand;
 };

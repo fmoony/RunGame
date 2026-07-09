@@ -1,8 +1,9 @@
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameCharacter.h"
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/RunGameLocomotionComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
+#include "TimerManager.h"
 #include "RunGame.h"
 
 URunGameInputBufferComponent::URunGameInputBufferComponent()
@@ -48,6 +49,8 @@ void URunGameInputBufferComponent::BufferInput(ERunGameInputCommand Command)
 {
 	if (!RuntimeState) return;
 
+	ExpireStaleCommands();
+
 	const ERunGameCharacterState CurrentState = RuntimeState->GetCharacterState();
 
 	// Dead — 丢弃所有输入 Dead — discard all input
@@ -60,25 +63,16 @@ void URunGameInputBufferComponent::BufferInput(ERunGameInputCommand Command)
 
 	if (!ShouldBufferCommand(CurrentState, Command)) return;
 
-	// 去重：同类型命令只保留最新一个 Deduplicate: only keep latest of same command type
-	for (int32 i = CommandQueue.Num() - 1; i >= 0; --i)
-	{
-		if (CommandQueue[i].Command == Command)
-		{
-			CommandQueue.RemoveAt(i);
-		}
-	}
-
-	FBufferedCommand& Entry = CommandQueue.AddDefaulted_GetRef();
-	Entry.Command = Command;
-	Entry.Timestamp = GetWorld()->GetTimeSeconds();
+	// 最新输入意图覆盖旧缓冲 Last input intent replaces the previous buffered command
+	BufferedCommand.Command = Command;
+	BufferedCommand.Timestamp = GetWorld()->GetTimeSeconds();
 
 	UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffered command %d (state=%d)"), (int32)Command, (int32)CurrentState);
 }
 
 void URunGameInputBufferComponent::ClearBuffer()
 {
-	CommandQueue.Empty();
+	BufferedCommand = FBufferedCommand();
 	UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffer cleared"));
 }
 
@@ -93,10 +87,15 @@ void URunGameInputBufferComponent::OnCharacterStateChanged(ERunGameCharacterStat
 		return;
 	}
 
-	// 回到 Idle → 尝试消费缓冲 Back to Idle → try consuming buffered commands
-	if (NewState == ERunGameCharacterState::Idle)
+	// 状态窗口变化时尝试消费缓冲 State-window changes try consuming buffered commands
+	if (UWorld* World = GetWorld())
 	{
-		TryConsumeBuffer();
+		FTimerDelegate ConsumeDelegate;
+		ConsumeDelegate.BindUObject(this, &URunGameInputBufferComponent::TryConsumeBuffer);
+
+		// 状态代理同帧完成后再消费，避免先于 Movement 收尾导致 CanJump 误失败
+		// Defer consumption until state delegates finish so Movement cleanup can run before CanJump checks
+		World->GetTimerManager().SetTimerForNextTick(ConsumeDelegate);
 	}
 }
 
@@ -132,8 +131,27 @@ bool URunGameInputBufferComponent::ShouldBufferCommand(ERunGameCharacterState Cu
 			|| CurrentState == ERunGameCharacterState::CoyoteTime;
 
 	case ERunGameInputCommand::Jump:
-		// 滑铲中按跳 → 缓冲，滑铲结束后触发 Sliding + Jump → buffer, consume after slide
-		return CurrentState == ERunGameCharacterState::Sliding;
+		// 空中跳跃即时消费失败后转为落地跳缓冲；滑铲中跳跃等待滑铲结束 Airborne jump falls back to landing buffer; sliding jump waits for slide end
+		return CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::Sliding;
+
+	default:
+		return false;
+	}
+}
+
+bool URunGameInputBufferComponent::CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Jump:
+		// 缓冲后的跳跃只等待下一次地面/土狼窗口，不反复尝试空中二段跳 Buffered jump waits for the next grounded/coyote window, not repeated air-jump attempts
+		return CurrentState == ERunGameCharacterState::Idle
+			|| CurrentState == ERunGameCharacterState::Turning
+			|| CurrentState == ERunGameCharacterState::CoyoteTime;
+
+	case ERunGameInputCommand::Slide:
+		return CurrentState == ERunGameCharacterState::Idle;
 
 	default:
 		return false;
@@ -144,40 +162,44 @@ bool URunGameInputBufferComponent::TryConsumeCommand(ERunGameInputCommand Comman
 {
 	if (!OwnerCharacter) return false;
 
-	URunGameMovementComponent* MoveComp = OwnerCharacter->GetRunGameMovementComponent();
-	return MoveComp && MoveComp->TryConsumeInputCommand(Command);
+	URunGameLocomotionComponent* LocomotionComp = OwnerCharacter->GetRunGameLocomotionComponent();
+	return LocomotionComp && LocomotionComp->TryConsumeInputCommand(Command);
 }
 
 void URunGameInputBufferComponent::ExpireStaleCommands()
 {
 	const float Now = GetWorld()->GetTimeSeconds();
 
-	CommandQueue.RemoveAll([this, Now](const FBufferedCommand& Cmd)
+	if (BufferedCommand.Command != ERunGameInputCommand::None && BufferedCommand.IsExpired(Now, BufferTimeout))
 	{
-		if (Cmd.IsExpired(Now, BufferTimeout))
-		{
-			UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Expired command %d (age=%.2fs)"), (int32)Cmd.Command, Now - Cmd.Timestamp);
-			return true;
-		}
-		return false;
-	});
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Expired command %d (age=%.2fs)"), (int32)BufferedCommand.Command, Now - BufferedCommand.Timestamp);
+		BufferedCommand = FBufferedCommand();
+	}
 }
 
 void URunGameInputBufferComponent::TryConsumeBuffer()
 {
 	ExpireStaleCommands();
 
-	if (CommandQueue.Num() == 0) return;
+	if (BufferedCommand.Command == ERunGameInputCommand::None) return;
 
-	// FIFO: 消费最早缓冲的命令 FIFO: consume oldest buffered command
-	const FBufferedCommand Cmd = CommandQueue[0];
-	if (TryConsumeCommand(Cmd.Command))
+	// 状态变化只尝试最新输入意图 State change only attempts the latest input intent
+	const ERunGameCharacterState CurrentState = RuntimeState
+		? RuntimeState->GetCharacterState()
+		: ERunGameCharacterState::Idle;
+
+	if (!CanAttemptBufferedConsume(CurrentState, BufferedCommand.Command))
 	{
-		CommandQueue.RemoveAt(0);
-		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Consumed buffered command %d"), (int32)Cmd.Command);
+		return;
+	}
+
+	if (TryConsumeCommand(BufferedCommand.Command))
+	{
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Consumed buffered command %d"), (int32)BufferedCommand.Command);
+		BufferedCommand = FBufferedCommand();
 	}
 	else
 	{
-		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffered command %d is still blocked"), (int32)Cmd.Command);
+		UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffered command %d is still blocked in state %d"), (int32)BufferedCommand.Command, (int32)CurrentState);
 	}
 }
