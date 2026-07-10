@@ -1,4 +1,4 @@
-#include "Character/RunGameEffectComponent.h"
+#include "Character/Effect/RunGameEffectComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "NiagaraSystem.h"
 #include "NiagaraComponent.h"

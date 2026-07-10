@@ -1,4 +1,4 @@
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Character/RunGameCharacter.h"

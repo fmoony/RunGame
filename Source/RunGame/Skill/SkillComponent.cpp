@@ -1,6 +1,7 @@
 #include "Skill/SkillComponent.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/RunGameSkillExecution.h"
+#include "Character/Input/RunGameInputContextComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "WorldSubsystem/RunGameTimerSubsystem.h"
 #include "Player/RunGamePlayerState.h"
@@ -18,6 +19,7 @@ void USkillComponent::BeginPlay()
 	Super::BeginPlay();
 
 	InitializeFromConfig();
+	BindInputContext();
 
 	// 初始化能量 Initialize energy
 	CurrentEnergy = FMath::Clamp(InitialEnergy, 0.0f, MaxEnergy);
@@ -45,6 +47,8 @@ void USkillComponent::BeginPlay()
 
 void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindInputContext();
+
 	if (UWorld* World = GetWorld())
 	{
 		FTimerManager& TimerManager = World->GetTimerManager();
@@ -72,6 +76,30 @@ void USkillComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	SkillStates.Empty();
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void USkillComponent::BindInputContext()
+{
+	if (InputContext)
+	{
+		return;
+	}
+
+	InputContext = GetOwner() ? GetOwner()->FindComponentByClass<URunGameInputContextComponent>() : nullptr;
+	if (InputContext)
+	{
+		SkillRequestedHandle = InputContext->OnSkillRequested.AddUObject(this, &USkillComponent::OnSkillRequested);
+	}
+}
+
+void USkillComponent::UnbindInputContext()
+{
+	if (InputContext && SkillRequestedHandle.IsValid())
+	{
+		InputContext->OnSkillRequested.Remove(SkillRequestedHandle);
+		SkillRequestedHandle.Reset();
+	}
+	InputContext = nullptr;
 }
 
 // ---- Init ----
@@ -189,6 +217,25 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	UE_LOG(LogRunGame, Warning, TEXT("USkillComponent: Activated skill '%s' with cooldown %.2f seconds"), *SkillTag.ToString(), CooldownDuration);
 
 	return true;
+}
+
+void USkillComponent::OnSkillRequested(FGameplayTag SkillTag)
+{
+	if (!SkillTag.IsValid())
+	{
+		return;
+	}
+
+	if (UPlayerRuntimeState* RuntimeState = GetWorld() ? GetWorld()->GetSubsystem<UPlayerRuntimeState>() : nullptr)
+	{
+		const ERunGameCharacterState State = RuntimeState->GetCharacterState();
+		if (State == ERunGameCharacterState::Dead || State == ERunGameCharacterState::Sliding)
+		{
+			return;
+		}
+	}
+
+	TryActivateSkill(SkillTag);
 }
 
 void USkillComponent::OnCooldownExpired(FGameplayTag SkillTag)

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Character/RunGameInputBufferComponent.h"
+#include "Character/Input/RunGameInputTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "RunGameType.h"
 #include "RunGameLocomotionComponent.generated.h"
@@ -11,6 +11,7 @@ class ARunGameCharacter;
 class UAnimMontage;
 class UPlayerRuntimeState;
 class URunGameAnimInstance;
+class URunGameInputContextComponent;
 class URunGameMovementComponent;
 struct FHitResult;
 
@@ -90,6 +91,16 @@ private:
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
+	void BindInputContext();
+	void UnbindInputContext();
+	void HandleMoveInputChanged(const FVector2D& MoveAxis);
+	void HandleJumpReleasedFromInputContext();
+	void HandleInputCommandBuffered(ERunGameInputCommand Command);
+	void TryConsumeInputContextBuffer();
+	bool ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+	bool CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
+
 	UPROPERTY()
 	TObjectPtr<ARunGameCharacter> OwnerCharacter;
 
@@ -102,8 +113,14 @@ private:
 	UPROPERTY()
 	TObjectPtr<UPlayerRuntimeState> RuntimeState;
 
+	UPROPERTY()
+	TObjectPtr<URunGameInputContextComponent> InputContext;
+
 	FDelegateHandle MovementModeChangedHandle;
 	FDelegateHandle SlideMontageEndedHandle;
+	FDelegateHandle MoveInputChangedHandle;
+	FDelegateHandle CommandBufferedHandle;
+	FDelegateHandle JumpReleasedHandle;
 	FTimerHandle CoyoteTimer;
 
 	bool bAirJumpAvailable = true;

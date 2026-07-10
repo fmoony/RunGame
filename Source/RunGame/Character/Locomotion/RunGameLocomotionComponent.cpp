@@ -1,7 +1,8 @@
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
 #include "Character/Animation/RunGameAnimInstance.h"
+#include "Character/Input/RunGameInputContextComponent.h"
 #include "Character/RunGameCharacter.h"
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
@@ -38,11 +39,13 @@ void URunGameLocomotionComponent::BeginPlay()
 		}
 	}
 
+	BindInputContext();
 	BindAnimationEvents();
 }
 
 void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	UnbindInputContext();
 	UnbindAnimationEvents();
 
 	if (MovementComponent && MovementModeChangedHandle.IsValid())
@@ -65,6 +68,7 @@ void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	MovementComponent = nullptr;
 	AnimInstance = nullptr;
 	RuntimeState = nullptr;
+	InputContext = nullptr;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -92,6 +96,88 @@ bool URunGameLocomotionComponent::TryConsumeInputCommand(ERunGameInputCommand Co
 
 	default:
 		return false;
+	}
+}
+
+void URunGameLocomotionComponent::BindInputContext()
+{
+	if (!OwnerCharacter || InputContext)
+	{
+		return;
+	}
+
+	InputContext = OwnerCharacter->FindComponentByClass<URunGameInputContextComponent>();
+	if (!InputContext)
+	{
+		return;
+	}
+
+	MoveInputChangedHandle = InputContext->OnMoveInputChanged.AddUObject(this, &URunGameLocomotionComponent::HandleMoveInputChanged);
+	CommandBufferedHandle = InputContext->OnCommandBuffered.AddUObject(this, &URunGameLocomotionComponent::HandleInputCommandBuffered);
+	JumpReleasedHandle = InputContext->OnJumpReleased.AddUObject(this, &URunGameLocomotionComponent::HandleJumpReleasedFromInputContext);
+}
+
+void URunGameLocomotionComponent::UnbindInputContext()
+{
+	if (!InputContext)
+	{
+		return;
+	}
+
+	if (MoveInputChangedHandle.IsValid())
+	{
+		InputContext->OnMoveInputChanged.Remove(MoveInputChangedHandle);
+		MoveInputChangedHandle.Reset();
+	}
+
+	if (CommandBufferedHandle.IsValid())
+	{
+		InputContext->OnCommandBuffered.Remove(CommandBufferedHandle);
+		CommandBufferedHandle.Reset();
+	}
+
+	if (JumpReleasedHandle.IsValid())
+	{
+		InputContext->OnJumpReleased.Remove(JumpReleasedHandle);
+		JumpReleasedHandle.Reset();
+	}
+}
+
+void URunGameLocomotionComponent::HandleMoveInputChanged(const FVector2D& MoveAxis)
+{
+	HandleMoveInput(MoveAxis.X);
+}
+
+void URunGameLocomotionComponent::HandleJumpReleasedFromInputContext()
+{
+	HandleJumpInputReleased();
+}
+
+void URunGameLocomotionComponent::HandleInputCommandBuffered(ERunGameInputCommand Command)
+{
+	if (!InputContext || !RuntimeState)
+	{
+		return;
+	}
+
+	InputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
+
+	const ERunGameCharacterState CurrentState = RuntimeState->GetCharacterState();
+	if (CurrentState == ERunGameCharacterState::Dead)
+	{
+		InputContext->ClearInputContext();
+		return;
+	}
+
+	if (ShouldExecuteImmediately(CurrentState, Command) && TryConsumeInputCommand(Command))
+	{
+		InputContext->ConsumeLatestCommand(Command);
+		return;
+	}
+
+	if (!ShouldBufferCommand(CurrentState, Command))
+	{
+		InputContext->ConsumeLatestCommand(Command);
 	}
 }
 
@@ -336,9 +422,103 @@ void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState
 		bJumpLaunchPending = false;
 		PendingJumpStartState = ERunGameCharacterState::Dead;
 
+		if (InputContext)
+		{
+			InputContext->ClearInputContext();
+		}
+
 		if (World)
 		{
 			World->GetTimerManager().ClearTimer(CoyoteTimer);
 		}
+	}
+
+	if (InputContext && NewState != ERunGameCharacterState::Dead && World)
+	{
+		FTimerDelegate ConsumeDelegate;
+		ConsumeDelegate.BindUObject(this, &URunGameLocomotionComponent::TryConsumeInputContextBuffer);
+
+		// 状态代理同帧完成后再消费，避免先于 Movement 收尾导致 CanJump 误失败
+		// Defer consumption until state delegates finish so Movement cleanup can run before CanJump checks.
+		World->GetTimerManager().SetTimerForNextTick(ConsumeDelegate);
+	}
+}
+
+void URunGameLocomotionComponent::TryConsumeInputContextBuffer()
+{
+	if (!InputContext)
+	{
+		return;
+	}
+
+	InputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
+
+	const ERunGameInputCommand Command = InputContext->GetLatestCommand();
+	if (Command == ERunGameInputCommand::None)
+	{
+		return;
+	}
+
+	const ERunGameCharacterState CurrentState = GetRuntimeCharacterState();
+	if (!CanAttemptBufferedConsume(CurrentState, Command))
+	{
+		return;
+	}
+
+	if (TryConsumeInputCommand(Command))
+	{
+		InputContext->ConsumeLatestCommand(Command);
+	}
+}
+
+bool URunGameLocomotionComponent::ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Jump:
+		return CurrentState == ERunGameCharacterState::Idle
+			|| CurrentState == ERunGameCharacterState::Turning
+			|| CurrentState == ERunGameCharacterState::CoyoteTime
+			|| CurrentState == ERunGameCharacterState::Airborne;
+
+	case ERunGameInputCommand::Slide:
+		return CurrentState == ERunGameCharacterState::Idle;
+
+	default:
+		return false;
+	}
+}
+
+bool URunGameLocomotionComponent::ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Slide:
+		return CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::CoyoteTime;
+
+	case ERunGameInputCommand::Jump:
+		return CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::Sliding;
+
+	default:
+		return false;
+	}
+}
+
+bool URunGameLocomotionComponent::CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
+{
+	switch (Command)
+	{
+	case ERunGameInputCommand::Jump:
+		return CurrentState == ERunGameCharacterState::Idle
+			|| CurrentState == ERunGameCharacterState::Turning
+			|| CurrentState == ERunGameCharacterState::CoyoteTime;
+
+	case ERunGameInputCommand::Slide:
+		return CurrentState == ERunGameCharacterState::Idle;
+
+	default:
+		return false;
 	}
 }

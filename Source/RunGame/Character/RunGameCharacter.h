@@ -11,11 +11,11 @@
 
 class USpringArmComponent;
 class UCameraComponent;
-class UInputAction;
 class URunGameTimerSubsystem;
 class UHealthComponent;
 class USkillComponent;
-class URunGameInputBufferComponent;
+class URunGameInputComponent;
+class URunGameInputContextComponent;
 class URunGameMovementComponent;
 class URunGameLocomotionComponent;
 class URunGameEffectComponent;
@@ -48,7 +48,10 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 	TObjectPtr<USkillComponent> SkillComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	TObjectPtr<URunGameInputBufferComponent> InputBuffer;
+	TObjectPtr<URunGameInputComponent> RunGameInputComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameInputContextComponent> InputContextComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameLocomotionComponent> LocomotionComponent;
@@ -61,27 +64,6 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameCameraComponent> CameraComponent;
-
-protected:
-
-	/** Jump Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* JumpAction;
-
-	/** Move Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* MoveAction;
-
-	UPROPERTY(EditAnywhere, Category = "Input")
-	UInputAction* SlideAction;
-
-	/** Look Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* LookAction;
-
-	/** Mouse Look Input Action */
-	UPROPERTY(EditAnywhere, Category="Input")
-	UInputAction* MouseLookAction;
 
 public:
 

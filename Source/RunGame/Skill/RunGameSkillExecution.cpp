@@ -6,7 +6,7 @@
 #include "Actor/Component/HealthComponent.h"
 #include "Animation/AnimMontage.h"
 #include "Character/RunGameCharacter.h"
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "RunGame.h"
 

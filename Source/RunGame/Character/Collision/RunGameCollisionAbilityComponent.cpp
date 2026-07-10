@@ -1,4 +1,4 @@
-#include "Character/RunGameCollisionAbilityComponent.h"
+#include "Character/Collision/RunGameCollisionAbilityComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Components/CapsuleComponent.h"
 #include "Interfaces/ImpactReceiver.h"

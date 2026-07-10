@@ -7,7 +7,7 @@
 #include "WorldSubsystem/RunGameFloorSubsystem.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Game/RunGameGameState.h"
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "Player/RunGamePlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "RunGame.h"

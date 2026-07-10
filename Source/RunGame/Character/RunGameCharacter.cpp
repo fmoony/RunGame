@@ -2,12 +2,13 @@
 #include "Player/RunGamePlayerController.h"
 #include "Actor/Component/HealthComponent.h"
 #include "Skill/SkillComponent.h"
-#include "Character/RunGameMovementComponent.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
-#include "Character/RunGameInputBufferComponent.h"
-#include "Character/RunGameEffectComponent.h"
-#include "Character/RunGameCollisionAbilityComponent.h"
-#include "Character/RunGameCameraComponent.h"
+#include "Character/Input/RunGameInputComponent.h"
+#include "Character/Input/RunGameInputContextComponent.h"
+#include "Character/Effect/RunGameEffectComponent.h"
+#include "Character/Collision/RunGameCollisionAbilityComponent.h"
+#include "Character/Camera/RunGameCameraComponent.h"
 #include "Animation/RunGameAnimInstance.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
@@ -52,7 +53,8 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
-	InputBuffer = CreateDefaultSubobject<URunGameInputBufferComponent>(TEXT("InputBuffer"));
+	InputContextComponent = CreateDefaultSubobject<URunGameInputContextComponent>(TEXT("InputContextComponent"));
+	RunGameInputComponent = CreateDefaultSubobject<URunGameInputComponent>(TEXT("RunGameInputComponent"));
 	LocomotionComponent = CreateDefaultSubobject<URunGameLocomotionComponent>(TEXT("LocomotionComponent"));
 	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));
 	CollisionAbility = CreateDefaultSubobject<URunGameCollisionAbilityComponent>(TEXT("CollisionAbility"));
@@ -85,16 +87,11 @@ void ARunGameCharacter::BeginPlay()
 	if (HealthComponent)
 	{
 		HealthComponent->OnDeath.AddDynamic(this, &ARunGameCharacter::OnHealthDepleted);
-	}
-
-	// 桥接 HealthComponent 伤害 → RuntimeState → AnimInstance Hit reaction bridge
-	if (HealthComponent)
-	{
 		HealthComponent->OnDamageTaken.AddDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
 	}
 
-	// 输入生命周期由 InputBuffer 管理，Character 仅转发 EnhancedInput
-	// Input lifetime is owned by InputBuffer; Character only forwards EnhancedInput
+	// 输入生命周期由正式输入组件管理，Character 仅转发 EnhancedInput
+	// Input lifetime is owned by the formal input component; Character only forwards EnhancedInput.
 }
 
 void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -115,6 +112,7 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (HealthComponent)
 	{
 		HealthComponent->OnDeath.RemoveDynamic(this, &ARunGameCharacter::OnHealthDepleted);
+		HealthComponent->OnDamageTaken.RemoveDynamic(this, &ARunGameCharacter::OnHealthDamageTaken);
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -122,20 +120,13 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	if (InputBuffer)
+	if (RunGameInputComponent)
 	{
-		InputBuffer->BindInput(
-			PlayerInputComponent,
-			JumpAction,
-			MoveAction,
-			SlideAction,
-			LookAction,
-			MouseLookAction,
-			SkillComponent);
+		RunGameInputComponent->BindInput(PlayerInputComponent);
 	}
 	else
 	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Missing InputBuffer component"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Missing RunGameInputComponent"));
 	}
 }
 
