@@ -1,5 +1,4 @@
 #include "Character/Camera/RunGameCameraComponent.h"
-#include "Character/Input/RunGameInputContextComponent.h"
 #include "Character/RunGameCharacter.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Game/RunGameGameState.h"
@@ -39,7 +38,6 @@ void URunGameCameraComponent::BeginPlay()
 	}
 
 	TimerSubsystem = GetWorld()->GetSubsystem<URunGameTimerSubsystem>();
-	BindInputContext();
 
 	// 初始化时检查当前状态 — Character 提前生成，可能在 MainMenu/InGame 任一状态
 	// Check current state on init — Character pre-spawned, may be in MainMenu or InGame
@@ -59,8 +57,6 @@ void URunGameCameraComponent::BeginPlay()
 
 void URunGameCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UnbindInputContext();
-
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
 		GS->OnGameStateChanged.RemoveDynamic(this, &URunGameCameraComponent::OnGameStateChanged);
@@ -73,31 +69,6 @@ void URunGameCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	Super::EndPlay(EndPlayReason);
-}
-
-void URunGameCameraComponent::BindInputContext()
-{
-	if (InputContext)
-	{
-		return;
-	}
-
-	const ARunGameCharacter* Char = Cast<ARunGameCharacter>(GetOwner());
-	InputContext = Char ? Char->FindComponentByClass<URunGameInputContextComponent>() : nullptr;
-	if (InputContext)
-	{
-		LookInputChangedHandle = InputContext->OnLookInputChanged.AddUObject(this, &URunGameCameraComponent::OnLookInputChanged);
-	}
-}
-
-void URunGameCameraComponent::UnbindInputContext()
-{
-	if (InputContext && LookInputChangedHandle.IsValid())
-	{
-		InputContext->OnLookInputChanged.Remove(LookInputChangedHandle);
-		LookInputChangedHandle.Reset();
-	}
-	InputContext = nullptr;
 }
 
 void URunGameCameraComponent::CacheOwnerComponents()
@@ -119,11 +90,6 @@ void URunGameCameraComponent::HandleLookInput(float Yaw, float Pitch) const
 
 	Char->AddControllerYawInput(Yaw);
 	Char->AddControllerPitchInput(Pitch);
-}
-
-void URunGameCameraComponent::OnLookInputChanged(const FVector2D& LookAxis)
-{
-	HandleLookInput(LookAxis.X, LookAxis.Y);
 }
 
 // ---- Tick ----

@@ -17,7 +17,6 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnEnergyChangedSignature, float, C
 
 
 class URunGameTimerSubsystem;
-class URunGameInputContextComponent;
 
 USTRUCT()
 struct FSkillRuntimeState
@@ -83,6 +82,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	bool TryActivateSkill(FGameplayTag SkillTag);
 
+	bool TryActivateRequestedSkill(FGameplayTag SkillTag);
+
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	bool IsSkillReady(FGameplayTag SkillTag) const;
 
@@ -141,10 +142,6 @@ private:
 
 	void OnCooldownExpired(FGameplayTag SkillTag);
 
-	void BindInputContext();
-	void UnbindInputContext();
-	void OnSkillRequested(FGameplayTag SkillTag);
-
 	/** 响应角色状态机：进入 Dead 时自行清空冷却和能量 React to character state: clear cooldowns and energy on death */
 	UFUNCTION()
 	void OnRS_CharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
@@ -155,11 +152,6 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
-
-	UPROPERTY()
-	TObjectPtr<URunGameInputContextComponent> InputContext;
-
-	FDelegateHandle SkillRequestedHandle;
 
 	// -- Energy runtime state --
 

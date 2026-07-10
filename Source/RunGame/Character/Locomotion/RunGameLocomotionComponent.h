@@ -54,6 +54,10 @@ public:
 	/** 应用转向规则，返回是否阻止横向输入 Apply turn rule and return whether lateral input should be blocked */
 	bool ApplyTurnRotation(float Right) const;
 
+	void HandleInputContextCommand(URunGameInputContextComponent* InInputContext, ERunGameInputCommand Command);
+
+	void TryConsumeInputContextBuffer(URunGameInputContextComponent* InInputContext);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -91,12 +95,6 @@ private:
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
 
-	void BindInputContext();
-	void UnbindInputContext();
-	void HandleMoveInputChanged(const FVector2D& MoveAxis);
-	void HandleJumpReleasedFromInputContext();
-	void HandleInputCommandBuffered(ERunGameInputCommand Command);
-	void TryConsumeInputContextBuffer();
 	bool ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
 	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
 	bool CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
@@ -113,14 +111,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UPlayerRuntimeState> RuntimeState;
 
-	UPROPERTY()
-	TObjectPtr<URunGameInputContextComponent> InputContext;
-
 	FDelegateHandle MovementModeChangedHandle;
 	FDelegateHandle SlideMontageEndedHandle;
-	FDelegateHandle MoveInputChangedHandle;
-	FDelegateHandle CommandBufferedHandle;
-	FDelegateHandle JumpReleasedHandle;
 	FTimerHandle CoyoteTimer;
 
 	bool bAirJumpAvailable = true;

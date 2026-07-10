@@ -6,6 +6,7 @@
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
 #include "Character/Input/RunGameInputComponent.h"
 #include "Character/Input/RunGameInputContextComponent.h"
+#include "Character/Pipeline/RunGameControlPipelineComponent.h"
 #include "Character/Effect/RunGameEffectComponent.h"
 #include "Character/Collision/RunGameCollisionAbilityComponent.h"
 #include "Character/Camera/RunGameCameraComponent.h"
@@ -54,6 +55,7 @@ ARunGameCharacter::ARunGameCharacter(const FObjectInitializer& ObjectInitializer
 	HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 	SkillComponent = CreateDefaultSubobject<USkillComponent>(TEXT("SkillComponent"));
 	InputContextComponent = CreateDefaultSubobject<URunGameInputContextComponent>(TEXT("InputContextComponent"));
+	ControlPipelineComponent = CreateDefaultSubobject<URunGameControlPipelineComponent>(TEXT("ControlPipelineComponent"));
 	RunGameInputComponent = CreateDefaultSubobject<URunGameInputComponent>(TEXT("RunGameInputComponent"));
 	LocomotionComponent = CreateDefaultSubobject<URunGameLocomotionComponent>(TEXT("LocomotionComponent"));
 	EffectComponent = CreateDefaultSubobject<URunGameEffectComponent>(TEXT("EffectComponent"));

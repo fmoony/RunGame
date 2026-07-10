@@ -16,6 +16,7 @@ class UHealthComponent;
 class USkillComponent;
 class URunGameInputComponent;
 class URunGameInputContextComponent;
+class URunGameControlPipelineComponent;
 class URunGameMovementComponent;
 class URunGameLocomotionComponent;
 class URunGameEffectComponent;
@@ -52,6 +53,9 @@ class ARunGameCharacter : public ACharacter, public IDamagable
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameInputContextComponent> InputContextComponent;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<URunGameControlPipelineComponent> ControlPipelineComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<URunGameLocomotionComponent> LocomotionComponent;

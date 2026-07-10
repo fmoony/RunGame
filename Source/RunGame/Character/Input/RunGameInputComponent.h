@@ -8,6 +8,7 @@
 
 class UInputAction;
 class UInputComponent;
+class URunGameControlPipelineComponent;
 class URunGameInputContextComponent;
 class USkillComponent;
 struct FInputActionValue;
@@ -73,6 +74,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URunGameInputContextComponent> InputContext;
+
+	UPROPERTY()
+	TObjectPtr<URunGameControlPipelineComponent> ControlPipeline;
 
 	UPROPERTY()
 	TObjectPtr<USkillComponent> SkillComponent;

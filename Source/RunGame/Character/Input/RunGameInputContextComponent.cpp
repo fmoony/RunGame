@@ -10,20 +10,20 @@ URunGameInputContextComponent::URunGameInputContextComponent()
 void URunGameInputContextComponent::SetMoveAxis(const FVector2D& InMoveAxis)
 {
 	MoveAxis = InMoveAxis;
-	OnMoveInputChanged.Broadcast(MoveAxis);
+	bMoveInputDirty = true;
 }
 
 void URunGameInputContextComponent::SetLookAxis(const FVector2D& InLookAxis)
 {
 	LookAxis = InLookAxis;
-	OnLookInputChanged.Broadcast(LookAxis);
+	bLookInputDirty = true;
 }
 
 void URunGameInputContextComponent::BufferCommand(ERunGameInputCommand Command)
 {
 	LatestCommand.Command = Command;
 	LatestCommand.Timestamp = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
-	OnCommandBuffered.Broadcast(Command);
+	bCommandBufferedThisFrame = true;
 }
 
 bool URunGameInputContextComponent::ConsumeLatestCommand(ERunGameInputCommand ExpectedCommand)
@@ -54,13 +54,41 @@ void URunGameInputContextComponent::ExpireLatestCommand(float CurrentTime)
 void URunGameInputContextComponent::NotifyJumpReleased()
 {
 	bJumpReleasedThisFrame = true;
-	OnJumpReleased.Broadcast();
 }
 
 void URunGameInputContextComponent::RequestSkill(FGameplayTag SkillTag)
 {
 	RequestedSkillTag = SkillTag;
-	OnSkillRequested.Broadcast(SkillTag);
+	bSkillRequestedThisFrame = true;
+}
+
+FRunGameInputFrame URunGameInputContextComponent::ConsumeFrame(float CurrentTime)
+{
+	ExpireLatestCommand(CurrentTime);
+
+	FRunGameInputFrame Frame;
+
+	Frame.MoveAxis = MoveAxis;
+	Frame.bHasMoveInput = bMoveInputDirty;
+	bMoveInputDirty = false;
+
+	Frame.LookAxis = LookAxis;
+	Frame.bHasLookInput = bLookInputDirty;
+	bLookInputDirty = false;
+
+	Frame.Command = LatestCommand.Command;
+	Frame.bHasCommand = bCommandBufferedThisFrame && LatestCommand.Command != ERunGameInputCommand::None;
+	bCommandBufferedThisFrame = false;
+
+	Frame.bJumpReleased = bJumpReleasedThisFrame;
+	bJumpReleasedThisFrame = false;
+
+	Frame.SkillTag = RequestedSkillTag;
+	Frame.bHasSkillRequest = bSkillRequestedThisFrame && RequestedSkillTag.IsValid();
+	RequestedSkillTag = FGameplayTag();
+	bSkillRequestedThisFrame = false;
+
+	return Frame;
 }
 
 void URunGameInputContextComponent::ClearInputContext()
@@ -69,5 +97,9 @@ void URunGameInputContextComponent::ClearInputContext()
 	LookAxis = FVector2D::ZeroVector;
 	ClearLatestCommand();
 	RequestedSkillTag = FGameplayTag();
+	bMoveInputDirty = false;
+	bLookInputDirty = false;
+	bCommandBufferedThisFrame = false;
 	bJumpReleasedThisFrame = false;
+	bSkillRequestedThisFrame = false;
 }

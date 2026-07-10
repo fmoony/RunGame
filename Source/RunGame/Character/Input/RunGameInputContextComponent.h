@@ -6,12 +6,6 @@
 #include "Character/Input/RunGameInputTypes.h"
 #include "RunGameInputContextComponent.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameMoveInputChanged, const FVector2D&);
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameLookInputChanged, const FVector2D&);
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameInputCommandBuffered, ERunGameInputCommand);
-DECLARE_MULTICAST_DELEGATE(FRunGameJumpReleased);
-DECLARE_MULTICAST_DELEGATE_OneParam(FRunGameSkillRequested, FGameplayTag);
-
 /**
  * 轻量输入上下文组件，承载输入管线中的短生命周期输入数据
  * Lightweight input context component that carries short-lived input data inside the input pipeline.
@@ -23,12 +17,6 @@ class RUNGAME_API URunGameInputContextComponent : public UActorComponent
 
 public:
 	URunGameInputContextComponent();
-
-	FRunGameMoveInputChanged OnMoveInputChanged;
-	FRunGameLookInputChanged OnLookInputChanged;
-	FRunGameInputCommandBuffered OnCommandBuffered;
-	FRunGameJumpReleased OnJumpReleased;
-	FRunGameSkillRequested OnSkillRequested;
 
 	/** 输入命令缓冲超时时间 Input command buffer timeout */
 	UPROPERTY(EditAnywhere, Category = "Input|Buffer")
@@ -42,6 +30,7 @@ public:
 	void ExpireLatestCommand(float CurrentTime);
 	void NotifyJumpReleased();
 	void RequestSkill(FGameplayTag SkillTag);
+	FRunGameInputFrame ConsumeFrame(float CurrentTime);
 	void ClearInputContext();
 
 	FORCEINLINE const FVector2D& GetMoveAxis() const { return MoveAxis; }
@@ -62,5 +51,9 @@ private:
 	UPROPERTY()
 	FGameplayTag RequestedSkillTag;
 
+	bool bMoveInputDirty = false;
+	bool bLookInputDirty = false;
+	bool bCommandBufferedThisFrame = false;
 	bool bJumpReleasedThisFrame = false;
+	bool bSkillRequestedThisFrame = false;
 };

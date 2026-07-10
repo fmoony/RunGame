@@ -9,7 +9,6 @@
 class USpringArmComponent;
 class UCameraComponent;
 class URunGameTimerSubsystem;
-class URunGameInputContextComponent;
 
 /**
  * 镜头逻辑组件 — 挂载于 Character，听命于玩家状态机
@@ -74,10 +73,6 @@ private:
 	UFUNCTION()
 	void OnCharacterDied(FGameplayTag DamageType, class ARunGameCharacter* DeadCharacter);
 
-	void BindInputContext();
-	void UnbindInputContext();
-	void OnLookInputChanged(const FVector2D& LookAxis);
-
 	void SwitchToMainMenuCamera();
 	void SwitchToFollowCamera();
 	void DetachCameraToWorld();
@@ -96,11 +91,6 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
-
-	UPROPERTY()
-	TObjectPtr<URunGameInputContextComponent> InputContext;
-
-	FDelegateHandle LookInputChangedHandle;
 
 	ERunGameCharacterState CurrentCharState = ERunGameCharacterState::Idle;
 	bool bCameraDetached = false;

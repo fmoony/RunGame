@@ -1,6 +1,7 @@
 #include "Character/Input/RunGameInputComponent.h"
 
 #include "Character/Input/RunGameInputContextComponent.h"
+#include "Character/Pipeline/RunGameControlPipelineComponent.h"
 #include "Character/RunGameCharacter.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
@@ -25,6 +26,7 @@ void URunGameInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	OwnerCharacter = nullptr;
 	InputContext = nullptr;
+	ControlPipeline = nullptr;
 	SkillComponent = nullptr;
 
 	Super::EndPlay(EndPlayReason);
@@ -91,6 +93,10 @@ void URunGameInputComponent::BufferInput(ERunGameInputCommand Command)
 	if (InputContext)
 	{
 		InputContext->BufferCommand(Command);
+		if (ControlPipeline)
+		{
+			ControlPipeline->ProcessInputFrame();
+		}
 	}
 }
 
@@ -123,6 +129,11 @@ void URunGameInputComponent::CacheOwnerComponents()
 	{
 		SkillComponent = OwnerCharacter->FindComponentByClass<USkillComponent>();
 	}
+
+	if (!ControlPipeline)
+	{
+		ControlPipeline = OwnerCharacter->FindComponentByClass<URunGameControlPipelineComponent>();
+	}
 }
 
 void URunGameInputComponent::HandleMove(const FInputActionValue& Value)
@@ -132,6 +143,10 @@ void URunGameInputComponent::HandleMove(const FInputActionValue& Value)
 	if (InputContext)
 	{
 		InputContext->SetMoveAxis(Value.Get<FVector2D>());
+		if (ControlPipeline)
+		{
+			ControlPipeline->ProcessInputFrame();
+		}
 	}
 }
 
@@ -142,6 +157,10 @@ void URunGameInputComponent::HandleLook(const FInputActionValue& Value)
 	if (InputContext)
 	{
 		InputContext->SetLookAxis(Value.Get<FVector2D>());
+		if (ControlPipeline)
+		{
+			ControlPipeline->ProcessInputFrame();
+		}
 	}
 }
 
@@ -157,6 +176,10 @@ void URunGameInputComponent::HandleJumpCompleted()
 	if (InputContext)
 	{
 		InputContext->NotifyJumpReleased();
+		if (ControlPipeline)
+		{
+			ControlPipeline->ProcessInputFrame();
+		}
 	}
 }
 
@@ -172,5 +195,9 @@ void URunGameInputComponent::HandleSkillStarted(FGameplayTag SkillTag)
 	if (InputContext)
 	{
 		InputContext->RequestSkill(SkillTag);
+		if (ControlPipeline)
+		{
+			ControlPipeline->ProcessInputFrame();
+		}
 	}
 }

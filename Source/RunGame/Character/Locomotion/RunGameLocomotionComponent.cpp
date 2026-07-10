@@ -39,13 +39,11 @@ void URunGameLocomotionComponent::BeginPlay()
 		}
 	}
 
-	BindInputContext();
 	BindAnimationEvents();
 }
 
 void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	UnbindInputContext();
 	UnbindAnimationEvents();
 
 	if (MovementComponent && MovementModeChangedHandle.IsValid())
@@ -68,7 +66,6 @@ void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 	MovementComponent = nullptr;
 	AnimInstance = nullptr;
 	RuntimeState = nullptr;
-	InputContext = nullptr;
 
 	Super::EndPlay(EndPlayReason);
 }
@@ -99,85 +96,31 @@ bool URunGameLocomotionComponent::TryConsumeInputCommand(ERunGameInputCommand Co
 	}
 }
 
-void URunGameLocomotionComponent::BindInputContext()
+void URunGameLocomotionComponent::HandleInputContextCommand(URunGameInputContextComponent* InInputContext, ERunGameInputCommand Command)
 {
-	if (!OwnerCharacter || InputContext)
+	if (!InInputContext || !RuntimeState)
 	{
 		return;
 	}
 
-	InputContext = OwnerCharacter->FindComponentByClass<URunGameInputContextComponent>();
-	if (!InputContext)
-	{
-		return;
-	}
-
-	MoveInputChangedHandle = InputContext->OnMoveInputChanged.AddUObject(this, &URunGameLocomotionComponent::HandleMoveInputChanged);
-	CommandBufferedHandle = InputContext->OnCommandBuffered.AddUObject(this, &URunGameLocomotionComponent::HandleInputCommandBuffered);
-	JumpReleasedHandle = InputContext->OnJumpReleased.AddUObject(this, &URunGameLocomotionComponent::HandleJumpReleasedFromInputContext);
-}
-
-void URunGameLocomotionComponent::UnbindInputContext()
-{
-	if (!InputContext)
-	{
-		return;
-	}
-
-	if (MoveInputChangedHandle.IsValid())
-	{
-		InputContext->OnMoveInputChanged.Remove(MoveInputChangedHandle);
-		MoveInputChangedHandle.Reset();
-	}
-
-	if (CommandBufferedHandle.IsValid())
-	{
-		InputContext->OnCommandBuffered.Remove(CommandBufferedHandle);
-		CommandBufferedHandle.Reset();
-	}
-
-	if (JumpReleasedHandle.IsValid())
-	{
-		InputContext->OnJumpReleased.Remove(JumpReleasedHandle);
-		JumpReleasedHandle.Reset();
-	}
-}
-
-void URunGameLocomotionComponent::HandleMoveInputChanged(const FVector2D& MoveAxis)
-{
-	HandleMoveInput(MoveAxis.X);
-}
-
-void URunGameLocomotionComponent::HandleJumpReleasedFromInputContext()
-{
-	HandleJumpInputReleased();
-}
-
-void URunGameLocomotionComponent::HandleInputCommandBuffered(ERunGameInputCommand Command)
-{
-	if (!InputContext || !RuntimeState)
-	{
-		return;
-	}
-
-	InputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
+	InInputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
 
 	const ERunGameCharacterState CurrentState = RuntimeState->GetCharacterState();
 	if (CurrentState == ERunGameCharacterState::Dead)
 	{
-		InputContext->ClearInputContext();
+		InInputContext->ClearInputContext();
 		return;
 	}
 
 	if (ShouldExecuteImmediately(CurrentState, Command) && TryConsumeInputCommand(Command))
 	{
-		InputContext->ConsumeLatestCommand(Command);
+		InInputContext->ConsumeLatestCommand(Command);
 		return;
 	}
 
 	if (!ShouldBufferCommand(CurrentState, Command))
 	{
-		InputContext->ConsumeLatestCommand(Command);
+		InInputContext->ConsumeLatestCommand(Command);
 	}
 }
 
@@ -422,38 +365,24 @@ void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState
 		bJumpLaunchPending = false;
 		PendingJumpStartState = ERunGameCharacterState::Dead;
 
-		if (InputContext)
-		{
-			InputContext->ClearInputContext();
-		}
-
 		if (World)
 		{
 			World->GetTimerManager().ClearTimer(CoyoteTimer);
 		}
 	}
 
-	if (InputContext && NewState != ERunGameCharacterState::Dead && World)
-	{
-		FTimerDelegate ConsumeDelegate;
-		ConsumeDelegate.BindUObject(this, &URunGameLocomotionComponent::TryConsumeInputContextBuffer);
-
-		// 状态代理同帧完成后再消费，避免先于 Movement 收尾导致 CanJump 误失败
-		// Defer consumption until state delegates finish so Movement cleanup can run before CanJump checks.
-		World->GetTimerManager().SetTimerForNextTick(ConsumeDelegate);
-	}
 }
 
-void URunGameLocomotionComponent::TryConsumeInputContextBuffer()
+void URunGameLocomotionComponent::TryConsumeInputContextBuffer(URunGameInputContextComponent* InInputContext)
 {
-	if (!InputContext)
+	if (!InInputContext)
 	{
 		return;
 	}
 
-	InputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
+	InInputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
 
-	const ERunGameInputCommand Command = InputContext->GetLatestCommand();
+	const ERunGameInputCommand Command = InInputContext->GetLatestCommand();
 	if (Command == ERunGameInputCommand::None)
 	{
 		return;
@@ -467,7 +396,7 @@ void URunGameLocomotionComponent::TryConsumeInputContextBuffer()
 
 	if (TryConsumeInputCommand(Command))
 	{
-		InputContext->ConsumeLatestCommand(Command);
+		InInputContext->ConsumeLatestCommand(Command);
 	}
 }
 
