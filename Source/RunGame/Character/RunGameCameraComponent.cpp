@@ -80,6 +80,18 @@ void URunGameCameraComponent::CacheOwnerComponents()
 	CachedFollowCamera = Char->GetFollowCamera();
 }
 
+void URunGameCameraComponent::HandleLookInput(float Yaw, float Pitch) const
+{
+	ARunGameCharacter* Char = Cast<ARunGameCharacter>(GetOwner());
+	if (!Char || !Char->GetController())
+	{
+		return;
+	}
+
+	Char->AddControllerYawInput(Yaw);
+	Char->AddControllerPitchInput(Pitch);
+}
+
 // ---- Tick ----
 
 void URunGameCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

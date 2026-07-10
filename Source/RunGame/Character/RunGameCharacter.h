@@ -23,7 +23,6 @@ class URunGameCameraComponent;
 class URunGameCollisionAbilityComponent;
 class UNiagaraSystem;
 class UNiagaraComponent;
-struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnCharacterDiedSignature, FGameplayTag, DamageType, ARunGameCharacter*, DeadCharacter);
@@ -123,30 +122,6 @@ protected:
 	UFUNCTION()
 	void OnHealthDamageTaken(float Damage, FGameplayTag DamageType, AActor* DamageCauser);
 
-protected:
-
-	void Move(const FInputActionValue& Value);
-	void Look(const FInputActionValue& Value);
-
-public:
-
-	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoMove(float Right, float Forward);
-
-	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoLook(float Yaw, float Pitch);
-
-	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoJumpStart();
-
-	UFUNCTION(BlueprintCallable, Category="Input")
-	virtual void DoJumpEnd();
-
-	void StartSlide();
-
-	virtual void OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
-	virtual void OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust) override;
-
 public:
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -180,9 +155,6 @@ public:
 	/** 获取跑酷运动规则组件 Get runner locomotion rules component */
 	UFUNCTION(BlueprintCallable, Category = "Movement")
 	URunGameLocomotionComponent* GetRunGameLocomotionComponent() const;
-
-	UFUNCTION(BlueprintCallable, Category = "Skills")
-	void ActivateSkillByTag(FGameplayTag SkillTag);
 
 private:
 	UFUNCTION()

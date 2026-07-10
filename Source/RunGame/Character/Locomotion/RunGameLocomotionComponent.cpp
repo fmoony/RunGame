@@ -5,6 +5,7 @@
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/Controller.h"
 #include "TimerManager.h"
 
 URunGameLocomotionComponent::URunGameLocomotionComponent()
@@ -99,6 +100,27 @@ void URunGameLocomotionComponent::HandleJumpInputReleased() const
 	if (OwnerCharacter)
 	{
 		OwnerCharacter->StopJumping();
+	}
+}
+
+void URunGameLocomotionComponent::HandleMoveInput(float Right) const
+{
+	if (!OwnerCharacter || Right == 0.0f)
+	{
+		return;
+	}
+
+	AController* Controller = OwnerCharacter->GetController();
+	if (!Controller)
+	{
+		return;
+	}
+
+	const bool bBlockLateral = ApplyTurnRotation(Right);
+	if (!bBlockLateral)
+	{
+		const FRotator YawRotation(0, Controller->GetControlRotation().Yaw, 0);
+		OwnerCharacter->AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
 	}
 }
 

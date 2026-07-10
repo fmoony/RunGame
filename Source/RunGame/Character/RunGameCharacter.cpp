@@ -9,16 +9,11 @@
 #include "Character/RunGameCollisionAbilityComponent.h"
 #include "Character/RunGameCameraComponent.h"
 #include "Animation/RunGameAnimInstance.h"
-#include "Skill/RunGameSkillConfigData.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "GameFramework/Controller.h"
-#include "EnhancedInputComponent.h"
-#include "EnhancedInputSubsystems.h"
-#include "InputActionValue.h"
 #include "RunGame.h"
 #include "Game/RunGameGameState.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -127,104 +122,21 @@ void ARunGameCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ARunGameCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
-	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent))
+	if (InputBuffer)
 	{
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ARunGameCharacter::DoJumpStart);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ARunGameCharacter::DoJumpEnd);
-
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ARunGameCharacter::Move);
-
-		EnhancedInputComponent->BindAction(SlideAction, ETriggerEvent::Started, this, &ARunGameCharacter::StartSlide);
-
-		if (SkillComponent && SkillComponent->SkillConfig)
-		{
-			for (const FSkillDefinition& SkillDef : SkillComponent->SkillConfig->Skills)
-			{
-				if (SkillDef.InputAction && SkillDef.SkillTag.IsValid())
-				{
-					EnhancedInputComponent->BindAction(SkillDef.InputAction, ETriggerEvent::Started,
-						this, &ARunGameCharacter::ActivateSkillByTag, SkillDef.SkillTag);
-				}
-			}
-		}
+		InputBuffer->BindInput(
+			PlayerInputComponent,
+			JumpAction,
+			MoveAction,
+			SlideAction,
+			LookAction,
+			MouseLookAction,
+			SkillComponent);
 	}
 	else
 	{
-		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Failed to find Enhanced Input component!"));
+		UE_LOG(LogRunGame, Error, TEXT("RunGameCharacter: Missing InputBuffer component"));
 	}
-}
-
-void ARunGameCharacter::Move(const FInputActionValue& Value)
-{
-	FVector2D MovementVector = Value.Get<FVector2D>();
-	DoMove(MovementVector.X, MovementVector.Y);
-}
-
-void ARunGameCharacter::Look(const FInputActionValue& Value)
-{
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-	DoLook(LookAxisVector.X, LookAxisVector.Y);
-}
-
-void ARunGameCharacter::DoMove(float Right, float Forward)
-{
-	if (GetController() == nullptr || Right == 0.0f) return;
-
-	URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent();
-	if (!LocomotionComp) return;
-
-	// 转弯系统：MovementComponent 处理旋转。返回 true = 在转向盒内，阻止横向输入
-	// Turn system: Locomotion routes turn rules. Returns true = in turn box, block lateral input
-	const bool bBlockLateral = LocomotionComp->ApplyTurnRotation(Right);
-	if (!bBlockLateral)
-	{
-		const FRotator YawRotation(0, GetController()->GetControlRotation().Yaw, 0);
-		AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
-	}
-}
-
-void ARunGameCharacter::DoLook(float Yaw, float Pitch)
-{
-	if (GetController() != nullptr)
-	{
-		AddControllerYawInput(Yaw);
-		AddControllerPitchInput(Pitch);
-	}
-}
-
-void ARunGameCharacter::DoJumpStart()
-{
-	if (InputBuffer)
-	{
-		InputBuffer->BufferInput(ERunGameInputCommand::Jump);
-	}
-}
-
-void ARunGameCharacter::DoJumpEnd()
-{
-	if (URunGameLocomotionComponent* LocomotionComp = GetRunGameLocomotionComponent())
-	{
-		LocomotionComp->HandleJumpInputReleased();
-	}
-}
-
-void ARunGameCharacter::StartSlide()
-{
-	if (InputBuffer)
-	{
-		InputBuffer->BufferInput(ERunGameInputCommand::Slide);
-	}
-}
-void ARunGameCharacter::OnStartCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
-{
-	Super::OnStartCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	if (CameraBoom) CameraBoom->TargetOffset.Z += ScaledHalfHeightAdjust;
-}
-
-void ARunGameCharacter::OnEndCrouch(float HalfHeightAdjust, float ScaledHalfHeightAdjust)
-{
-	Super::OnEndCrouch(HalfHeightAdjust, ScaledHalfHeightAdjust);
-	if (CameraBoom) CameraBoom->TargetOffset.Z -= ScaledHalfHeightAdjust;
 }
 
 void ARunGameCharacter::Die(FGameplayTag DamageType, float DestroyDelay, AActor* DeathCauser)
@@ -278,17 +190,6 @@ void ARunGameCharacter::OnGameStateChanged(ERunGameGameState OldState, ERunGameG
 void ARunGameCharacter::OnRSCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
 	OnCharacterStateChanged.Broadcast(OldState, NewState);
-}
-
-void ARunGameCharacter::ActivateSkillByTag(FGameplayTag SkillTag)
-{
-	UPlayerRuntimeState* RS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (!RS) return;
-
-	const ERunGameCharacterState State = RS->GetCharacterState();
-	if (State == ERunGameCharacterState::Dead || State == ERunGameCharacterState::Sliding) return;
-
-	if (SkillComponent) SkillComponent->TryActivateSkill(SkillTag);
 }
 
 // ~begin IDamagable

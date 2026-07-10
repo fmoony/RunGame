@@ -1,6 +1,11 @@
 #include "Character/RunGameInputBufferComponent.h"
 #include "Character/RunGameCharacter.h"
+#include "Character/RunGameCameraComponent.h"
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
+#include "EnhancedInputComponent.h"
+#include "InputActionValue.h"
+#include "Skill/RunGameSkillConfigData.h"
+#include "Skill/SkillComponent.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
 #include "Engine/World.h"
 #include "TimerManager.h"
@@ -26,6 +31,7 @@ void URunGameInputBufferComponent::BeginPlay()
 	}
 
 	OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
+	CacheOwnerComponents();
 }
 
 void URunGameInputBufferComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -34,6 +40,18 @@ void URunGameInputBufferComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 	{
 		OwnerCharacter = nullptr;
 	}
+	if (SkillComponent)
+	{
+		SkillComponent = nullptr;
+	}
+	if (LocomotionComponent)
+	{
+		LocomotionComponent = nullptr;
+	}
+	if (CameraComponent)
+	{
+		CameraComponent = nullptr;
+	}
 
 	if (RuntimeState)
 	{
@@ -41,6 +59,119 @@ void URunGameInputBufferComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 	}
 
 	Super::EndPlay(EndPlayReason);
+}
+
+void URunGameInputBufferComponent::BindInput(
+	UInputComponent* PlayerInputComponent,
+	UInputAction* JumpAction,
+	UInputAction* MoveAction,
+	UInputAction* SlideAction,
+	UInputAction* LookAction,
+	UInputAction* MouseLookAction,
+	USkillComponent* InSkillComponent)
+{
+	if (!OwnerCharacter)
+	{
+		OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
+	}
+	SkillComponent = InSkillComponent;
+	CacheOwnerComponents();
+
+	UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	if (!EnhancedInputComponent)
+	{
+		UE_LOG(LogRunGame, Error, TEXT("InputBuffer: Failed to find Enhanced Input component"));
+		return;
+	}
+
+	if (JumpAction)
+	{
+		EnhancedInputComponent->BindAction(
+			JumpAction,
+			ETriggerEvent::Started,
+			this,
+			&URunGameInputBufferComponent::HandleJumpStarted);
+		EnhancedInputComponent->BindAction(
+			JumpAction,
+			ETriggerEvent::Completed,
+			this,
+			&URunGameInputBufferComponent::HandleJumpCompleted);
+	}
+
+	if (MoveAction)
+	{
+		EnhancedInputComponent->BindAction(
+			MoveAction,
+			ETriggerEvent::Triggered,
+			this,
+			&URunGameInputBufferComponent::HandleMove);
+	}
+
+	if (SlideAction)
+	{
+		EnhancedInputComponent->BindAction(
+			SlideAction,
+			ETriggerEvent::Started,
+			this,
+			&URunGameInputBufferComponent::HandleSlideStarted);
+	}
+
+	if (LookAction)
+	{
+		EnhancedInputComponent->BindAction(
+			LookAction,
+			ETriggerEvent::Triggered,
+			this,
+			&URunGameInputBufferComponent::HandleLook);
+	}
+
+	if (MouseLookAction)
+	{
+		EnhancedInputComponent->BindAction(
+			MouseLookAction,
+			ETriggerEvent::Triggered,
+			this,
+			&URunGameInputBufferComponent::HandleLook);
+	}
+
+	if (SkillComponent && SkillComponent->SkillConfig)
+	{
+		for (const FSkillDefinition& SkillDef : SkillComponent->SkillConfig->Skills)
+		{
+			if (SkillDef.InputAction && SkillDef.SkillTag.IsValid())
+			{
+				EnhancedInputComponent->BindAction(
+					SkillDef.InputAction,
+					ETriggerEvent::Started,
+					this,
+					&URunGameInputBufferComponent::HandleSkillStarted,
+					SkillDef.SkillTag);
+			}
+		}
+	}
+}
+
+void URunGameInputBufferComponent::CacheOwnerComponents()
+{
+	if (!OwnerCharacter)
+	{
+		OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
+	}
+
+	if (!OwnerCharacter)
+	{
+		return;
+	}
+
+	if (!LocomotionComponent)
+	{
+		LocomotionComponent = OwnerCharacter->FindComponentByClass<URunGameLocomotionComponent>();
+	}
+
+	if (!CameraComponent)
+	{
+		CameraComponent = OwnerCharacter->FindComponentByClass<URunGameCameraComponent>();
+	}
 }
 
 // ---- Public API ----
@@ -74,6 +205,73 @@ void URunGameInputBufferComponent::ClearBuffer()
 {
 	BufferedCommand = FBufferedCommand();
 	UE_LOG(LogRunGame, Warning, TEXT("InputBuffer: Buffer cleared"));
+}
+
+void URunGameInputBufferComponent::HandleMove(const FInputActionValue& Value)
+{
+	CacheOwnerComponents();
+
+	if (!LocomotionComponent)
+	{
+		return;
+	}
+
+	const FVector2D MovementVector = Value.Get<FVector2D>();
+	LocomotionComponent->HandleMoveInput(MovementVector.X);
+}
+
+void URunGameInputBufferComponent::HandleLook(const FInputActionValue& Value)
+{
+	CacheOwnerComponents();
+
+	if (!CameraComponent)
+	{
+		return;
+	}
+
+	const FVector2D LookAxisVector = Value.Get<FVector2D>();
+	CameraComponent->HandleLookInput(LookAxisVector.X, LookAxisVector.Y);
+}
+
+void URunGameInputBufferComponent::HandleJumpStarted()
+{
+	BufferInput(ERunGameInputCommand::Jump);
+}
+
+void URunGameInputBufferComponent::HandleJumpCompleted()
+{
+	CacheOwnerComponents();
+
+	if (LocomotionComponent)
+	{
+		LocomotionComponent->HandleJumpInputReleased();
+	}
+}
+
+void URunGameInputBufferComponent::HandleSlideStarted()
+{
+	BufferInput(ERunGameInputCommand::Slide);
+}
+
+void URunGameInputBufferComponent::HandleSkillStarted(FGameplayTag SkillTag)
+{
+	if (!RuntimeState)
+	{
+		RuntimeState = GetWorld() ? GetWorld()->GetSubsystem<UPlayerRuntimeState>() : nullptr;
+	}
+
+	if (!RuntimeState || !SkillComponent)
+	{
+		return;
+	}
+
+	const ERunGameCharacterState State = RuntimeState->GetCharacterState();
+	if (State == ERunGameCharacterState::Dead || State == ERunGameCharacterState::Sliding)
+	{
+		return;
+	}
+
+	SkillComponent->TryActivateSkill(SkillTag);
 }
 
 // ---- State reaction ----
@@ -158,12 +356,11 @@ bool URunGameInputBufferComponent::CanAttemptBufferedConsume(ERunGameCharacterSt
 	}
 }
 
-bool URunGameInputBufferComponent::TryConsumeCommand(ERunGameInputCommand Command) const
+bool URunGameInputBufferComponent::TryConsumeCommand(ERunGameInputCommand Command)
 {
-	if (!OwnerCharacter) return false;
+	CacheOwnerComponents();
 
-	URunGameLocomotionComponent* LocomotionComp = OwnerCharacter->GetRunGameLocomotionComponent();
-	return LocomotionComp && LocomotionComp->TryConsumeInputCommand(Command);
+	return LocomotionComponent && LocomotionComponent->TryConsumeInputCommand(Command);
 }
 
 void URunGameInputBufferComponent::ExpireStaleCommands()

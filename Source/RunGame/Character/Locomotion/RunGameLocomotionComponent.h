@@ -38,6 +38,9 @@ public:
 	/** 处理跳跃按键释放 Handle jump input release */
 	void HandleJumpInputReleased() const;
 
+	/** 处理横向移动输入，包含转向盒规则 Handle lateral move input, including turn-box rules */
+	void HandleMoveInput(float Right) const;
+
 	/** 判断当前状态是否允许跳跃 Check whether the current state allows jump */
 	bool CanStartJump(bool bDefaultCanJump) const;
 

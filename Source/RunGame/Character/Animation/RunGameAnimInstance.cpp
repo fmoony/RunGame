@@ -21,30 +21,21 @@ void URunGameAnimInstance::NativeInitializeAnimation()
 	// 缓存 RuntimeState —— 避免每帧 GetSubsystem 查找
 	CachedPRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
 
-	CacheBaseSpeed();
-	BindGameplayDelegates();
-}
-
-void URunGameAnimInstance::CacheBaseSpeed()
-{
 	if (MovementComp)
 	{
 		BaseMaxWalkSpeed = MovementComp->MaxWalkSpeed;
 	}
-}
 
-void URunGameAnimInstance::BindGameplayDelegates()
-{
 	UWorld* World = GetWorld();
 	if (!World) return;
 
 	TimerSubsystem = World->GetSubsystem<URunGameTimerSubsystem>();
 
-	if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
+	if (CachedPRS.IsValid())
 	{
-		PRS->OnCharacterStateChanged.AddDynamic(this, &URunGameAnimInstance::OnCharacterStateChanged);
-		PRS->OnCharacterDied.AddDynamic(this, &URunGameAnimInstance::OnCharacterDied);
-		PRS->OnHitReaction.AddDynamic(this, &URunGameAnimInstance::OnHitReaction);
+		CachedPRS->OnCharacterStateChanged.AddDynamic(this, &URunGameAnimInstance::OnCharacterStateChanged);
+		CachedPRS->OnCharacterDied.AddDynamic(this, &URunGameAnimInstance::OnCharacterDied);
+		CachedPRS->OnHitReaction.AddDynamic(this, &URunGameAnimInstance::OnHitReaction);
 	}
 }
 
@@ -201,12 +192,9 @@ void URunGameAnimInstance::OnDeathMontageBlendingOut(UAnimMontage* Montage, bool
 		}
 	}
 
-	if (UWorld* World = GetWorld())
+	if (CachedPRS.IsValid())
 	{
-		if (UPlayerRuntimeState* PRS = World->GetSubsystem<UPlayerRuntimeState>())
-		{
-			PRS->NotifyDeathAnimationFinished();
-		}
+		CachedPRS->NotifyDeathAnimationFinished();
 	}
 }
 

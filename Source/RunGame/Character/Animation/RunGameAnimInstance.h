@@ -93,11 +93,6 @@ protected:
 	TObjectPtr<UCharacterMovementComponent> MovementComp;
 
 private:
-	// ── Init ──
-
-	void BindGameplayDelegates();
-	void CacheBaseSpeed();
-
 	// ── State reactions ──
 
 	UFUNCTION()
