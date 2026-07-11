@@ -128,7 +128,7 @@ public:
 	/** 覆写：桥接到 MovementComponent 的跳跃规则 / Override: bridge to MovementComponent jump rules */
 	virtual bool CanJumpInternal_Implementation() const override;
 
-	/** 跳跃物理生效后回调——只广播事件 / Called after jump physics is applied; only broadcasts event */
+	/** CMC 确认起跳后转发给 Locomotion / Forward confirmed CMC launch to Locomotion */
 	virtual void OnJumped_Implementation() override;
 
 	FORCEINLINE UHealthComponent* GetHealthComponent() const { return HealthComponent; }

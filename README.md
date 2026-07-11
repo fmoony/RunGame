@@ -30,7 +30,8 @@
 
 **核心设计原则：**
 - **单一数据源** — `ARunGameGameState` 持有游戏状态，`UPlayerRuntimeState` 持有角色语义状态
-- **输入生命周期自治** — `URunGameInputBufferComponent` 管输入缓存、超时、去重与成功消费
+- **输入生命周期自治** — `URunGameInputComponent` 保存连续快照与 Jump/Slide/Skill 请求，统一负责超时和移除
+- **固定控制阶段** — `URunGameControlPipelineComponent` 在 PrePhysics 中先处理物理信号，再路由连续输入和领域请求
 - **状态请求有返回语义** — `TrySetCharacterState()` 明确返回状态切换是否被状态机接受
 - **事件驱动响应** — RuntimeState 状态变更后广播，各运动/动画/镜头/特效组件独立响应
 - **GameplayTag 通信** — 技能效果通过 Tag 发布，各子系统独立响应
@@ -68,31 +69,34 @@ Source/RunGame/
 
 ### 角色输入与状态链路
 
-角色层只保留 Unreal 必须的输入与生命周期回调，业务判断下沉到输入缓冲、运动组件和 RuntimeState：
+角色层只保留 Unreal 必须的输入与生命周期回调。输入、规则、物理执行和语义状态分别归属不同组件：
 
 ```
 EnhancedInput
     ↓
-ARunGameCharacter 转发输入
+URunGameInputComponent
+    ├─ Move / Look / JumpHeld 快照
+    └─ Jump / Slide / Skill 请求队列（容量 16，超时 0.3s）
     ↓
-URunGameInputBufferComponent
-    ├─ 立即尝试消费
-    ├─ 不可执行则缓存 / 去重 / 超时丢弃
-    └─ Movement 成功消费后提前移除输入信号
+URunGameControlPipelineComponent（PrePhysics）
+    ├─ 先处理 Landed / Coyote / SlideEnded Signal
+    ├─ 路由 Move / Look / JumpRelease
+    └─ 分别扫描 Locomotion / Skill 请求域
+    ↓
+URunGameLocomotionComponent
+    ├─ Jump / Slide 允许性判断
+    ├─ 土狼时间 / 二段跳资源
+    └─ 简单移动 Signal
     ↓
 URunGameMovementComponent
-    ├─ Jump / Slide 运动域规则
-    ├─ 土狼时间 / 二段跳资源
-    └─ 请求 RuntimeState 切换语义状态
+    └─ Move / Look / Jump / StopJumping / Crouch
     ↓
 UPlayerRuntimeState::TrySetCharacterState()
     ↓
-OnCharacterStateChanged 广播
-    ↓
-Movement / Anim / Camera / Effect 自行响应
+OnCharacterStateChanged → Anim / Camera / Effect 自行响应
 ```
 
-这条链路避免 `Character` 同时承担输入缓存、状态判断和运动执行职责：`InputBuffer` 管输入信号生命周期，`MovementComponent` 管物理与运动规则，`RuntimeState` 管角色状态真相源。
+`InputComponent` 管输入生命周期，`Pipeline` 管固定阶段，`LocomotionComponent` 管规则和移动领域数据，`MovementComponent` 管 CMC 命令，`RuntimeState` 管角色语义状态真相源。
 
 ### 角色生命周期
 

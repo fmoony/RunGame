@@ -1,13 +1,11 @@
 #include "Character/Input/RunGameInputComponent.h"
 
-#include "Character/Input/RunGameInputContextComponent.h"
-#include "Character/Pipeline/RunGameControlPipelineComponent.h"
 #include "Character/RunGameCharacter.h"
 #include "EnhancedInputComponent.h"
 #include "InputActionValue.h"
+#include "RunGame.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/SkillComponent.h"
-#include "RunGame.h"
 
 URunGameInputComponent::URunGameInputComponent()
 {
@@ -17,18 +15,13 @@ URunGameInputComponent::URunGameInputComponent()
 void URunGameInputComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
 	CacheOwnerComponents();
 }
 
 void URunGameInputComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	OwnerCharacter = nullptr;
-	InputContext = nullptr;
-	ControlPipeline = nullptr;
 	SkillComponent = nullptr;
-
+	PendingRequests.Reset();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -52,6 +45,8 @@ void URunGameInputComponent::BindInput(UInputComponent* PlayerInputComponent)
 	if (MoveAction)
 	{
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &URunGameInputComponent::HandleMove);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Completed, this, &URunGameInputComponent::HandleMoveCompleted);
+		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Canceled, this, &URunGameInputComponent::HandleMoveCompleted);
 	}
 
 	if (SlideAction)
@@ -62,11 +57,15 @@ void URunGameInputComponent::BindInput(UInputComponent* PlayerInputComponent)
 	if (LookAction)
 	{
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &URunGameInputComponent::HandleLook);
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Completed, this, &URunGameInputComponent::HandleLookCompleted);
+		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Canceled, this, &URunGameInputComponent::HandleLookCompleted);
 	}
 
 	if (MouseLookAction)
 	{
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &URunGameInputComponent::HandleLook);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Completed, this, &URunGameInputComponent::HandleLookCompleted);
+		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Canceled, this, &URunGameInputComponent::HandleLookCompleted);
 	}
 
 	if (SkillComponent && SkillComponent->SkillConfig)
@@ -86,118 +85,122 @@ void URunGameInputComponent::BindInput(UInputComponent* PlayerInputComponent)
 	}
 }
 
-void URunGameInputComponent::BufferInput(ERunGameInputCommand Command)
+FRunGameInputSnapshot URunGameInputComponent::GetInputSnapshot() const
 {
-	CacheOwnerComponents();
+	FRunGameInputSnapshot Snapshot;
+	Snapshot.MoveAxis = MoveAxis;
+	Snapshot.LookAxis = LookAxis;
+	Snapshot.bJumpHeld = bJumpHeld;
+	Snapshot.JumpReleaseGeneration = JumpReleaseGeneration;
+	Snapshot.Requests = PendingRequests;
+	return Snapshot;
+}
 
-	if (InputContext)
+void URunGameInputComponent::ExpireRequests(float CurrentTime)
+{
+	for (int32 Index = PendingRequests.Num() - 1; Index >= 0; --Index)
 	{
-		InputContext->BufferCommand(Command);
-		if (ControlPipeline)
+		const FRunGameInputRequest& Request = PendingRequests[Index];
+		if ((CurrentTime - Request.CreatedAt) > RequestTimeout)
 		{
-			ControlPipeline->ProcessInputFrame();
+			UE_LOG(LogRunGame, Verbose, TEXT("Input request expired: Id=%llu Type=%d"),
+				Request.RequestId, static_cast<int32>(Request.Type));
+			PendingRequests.RemoveAt(Index);
 		}
 	}
 }
 
-void URunGameInputComponent::ClearBuffer()
+bool URunGameInputComponent::RemoveRequest(uint64 RequestId)
 {
-	if (InputContext)
+	const int32 Index = PendingRequests.IndexOfByPredicate(
+		[RequestId](const FRunGameInputRequest& Request)
+		{
+			return Request.RequestId == RequestId;
+		});
+
+	if (Index == INDEX_NONE)
 	{
-		InputContext->ClearInputContext();
+		return false;
 	}
+
+	PendingRequests.RemoveAt(Index);
+	return true;
+}
+
+void URunGameInputComponent::ClearInputState()
+{
+	MoveAxis = FVector2D::ZeroVector;
+	LookAxis = FVector2D::ZeroVector;
+	bJumpHeld = false;
+	PendingRequests.Reset();
 }
 
 void URunGameInputComponent::CacheOwnerComponents()
 {
-	if (!OwnerCharacter)
+	if (!SkillComponent)
 	{
-		OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
+		if (const ARunGameCharacter* OwnerCharacter = Cast<ARunGameCharacter>(GetOwner()))
+		{
+			SkillComponent = OwnerCharacter->GetSkillComponent();
+		}
 	}
+}
 
-	if (!OwnerCharacter)
+void URunGameInputComponent::EnqueueRequest(ERunGameInputRequestType Type, FGameplayTag SkillTag)
+{
+	if (PendingRequests.Num() >= RequestCapacity)
 	{
+		UE_LOG(LogRunGame, Warning,
+			TEXT("Input request queue full: Capacity=%d RejectedType=%d NextRequestId=%llu"),
+			RequestCapacity, static_cast<int32>(Type), NextRequestId);
 		return;
 	}
 
-	if (!InputContext)
-	{
-		InputContext = OwnerCharacter->FindComponentByClass<URunGameInputContextComponent>();
-	}
-
-	if (!SkillComponent)
-	{
-		SkillComponent = OwnerCharacter->FindComponentByClass<USkillComponent>();
-	}
-
-	if (!ControlPipeline)
-	{
-		ControlPipeline = OwnerCharacter->FindComponentByClass<URunGameControlPipelineComponent>();
-	}
+	FRunGameInputRequest& Request = PendingRequests.AddDefaulted_GetRef();
+	Request.RequestId = NextRequestId++;
+	Request.Type = Type;
+	Request.SkillTag = SkillTag;
+	Request.CreatedAt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
 }
 
 void URunGameInputComponent::HandleMove(const FInputActionValue& Value)
 {
-	CacheOwnerComponents();
+	MoveAxis = Value.Get<FVector2D>();
+}
 
-	if (InputContext)
-	{
-		InputContext->SetMoveAxis(Value.Get<FVector2D>());
-		if (ControlPipeline)
-		{
-			ControlPipeline->ProcessInputFrame();
-		}
-	}
+void URunGameInputComponent::HandleMoveCompleted()
+{
+	MoveAxis = FVector2D::ZeroVector;
 }
 
 void URunGameInputComponent::HandleLook(const FInputActionValue& Value)
 {
-	CacheOwnerComponents();
+	LookAxis = Value.Get<FVector2D>();
+}
 
-	if (InputContext)
-	{
-		InputContext->SetLookAxis(Value.Get<FVector2D>());
-		if (ControlPipeline)
-		{
-			ControlPipeline->ProcessInputFrame();
-		}
-	}
+void URunGameInputComponent::HandleLookCompleted()
+{
+	LookAxis = FVector2D::ZeroVector;
 }
 
 void URunGameInputComponent::HandleJumpStarted()
 {
-	BufferInput(ERunGameInputCommand::Jump);
+	bJumpHeld = true;
+	EnqueueRequest(ERunGameInputRequestType::Jump);
 }
 
 void URunGameInputComponent::HandleJumpCompleted()
 {
-	CacheOwnerComponents();
-
-	if (InputContext)
-	{
-		InputContext->NotifyJumpReleased();
-		if (ControlPipeline)
-		{
-			ControlPipeline->ProcessInputFrame();
-		}
-	}
+	bJumpHeld = false;
+	++JumpReleaseGeneration;
 }
 
 void URunGameInputComponent::HandleSlideStarted()
 {
-	BufferInput(ERunGameInputCommand::Slide);
+	EnqueueRequest(ERunGameInputRequestType::Slide);
 }
 
 void URunGameInputComponent::HandleSkillStarted(FGameplayTag SkillTag)
 {
-	CacheOwnerComponents();
-
-	if (InputContext)
-	{
-		InputContext->RequestSkill(SkillTag);
-		if (ControlPipeline)
-		{
-			ControlPipeline->ProcessInputFrame();
-		}
-	}
+	EnqueueRequest(ERunGameInputRequestType::Skill, SkillTag);
 }

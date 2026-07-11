@@ -5,7 +5,7 @@
 ## Central Types (`RunGameType.h`)
 
 - **`ERunGameGameState`**: `MainMenu, CountDown, InGame, Pause, GameOver, MAX` — drives the entire reactive state machine.
-- **`ERunGameCharacterState`**: `Idle, Airborne, Sliding, Turning, Dead, MAX` — character core state machine. Mutually exclusive locomotion/life states. Dead is terminal.
+- **`ERunGameCharacterState`**: `Idle, CoyoteTime, Airborne, Sliding, Turning, Dead, MAX` — character semantic state machine. Dead is terminal.
 - **`FFloorType`**: `StraightFloor, TurnFloor, UpAndDownFloor, MAX` — floor segment categories.
 
 ## Reactive State Machine (central event bus)
@@ -14,7 +14,7 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 
 **`ARunGameGameState`** is the single source of truth. All configurable defaults (`DefaultCountdownSeconds`, `DefaultGameTotalTime`) and mutable state (`CurrentState`, `CountdownSeconds`) live here. `SetGameState()` broadcasts `OnGameStateChanged(OldState, NewState)`, which is the central event bus every system listens to. `SetCountdownSeconds()` broadcasts `OnCountdownUpdated(CountdownSeconds)` when the value changes.
 
-**No class directly commands another.** Each class binds to `GameState::OnGameStateChanged` in `BeginPlay` and reactively manages only its own domain:
+Global systems do not directly command each other. Each class binds to `GameState::OnGameStateChanged` in `BeginPlay` and reactively manages only its own domain. The local Character control stack is the explicit exception: Pipeline calls narrow Locomotion, Movement, and Skill domain entries without taking ownership of their data.
 
 | Class | What it does when state changes |
 |---|---|
@@ -24,6 +24,25 @@ Game states flow: `MainMenu → CountDown → InGame → GameOver` (with `Pause`
 | `ARunGameHUD` | Switches widget via `CurrentUIMap` (`TMap<ERunGameGameState, TSubclassOf<UUserWidget>>`) |
 | `ARunGameCharacter` | `MainMenu` → self-destroys |
 | `ARunGameGameMode` | `InGame` → spawns player via `SpawnPlayer()`; orchestrates floor system init/reset |
+
+## Character Control Pipeline
+
+The local Character control stack uses a fixed PrePhysics pipeline:
+
+```text
+RunGameInputComponent snapshot / requests
+    → RunGameControlPipelineComponent
+    → RunGameLocomotionComponent rule evaluation
+    → RunGameMovementComponent CMC commands
+    → UPlayerRuntimeState semantic commit
+```
+
+- InputComponent owns Move/Look/JumpHeld and the Jump/Slide/Skill request queue.
+- Pipeline owns ordering and routing, not input or domain runtime state.
+- Locomotion owns jump/slide rules, coyote time, air-jump eligibility, and simple movement signals.
+- Movement owns physical commands and never writes PlayerRuntimeState.
+- SkillComponent owns its own validation and runtime state.
+- RuntimeState remains the only owner of the final character semantic state.
 
 ## Key Delegates (who declares what)
 

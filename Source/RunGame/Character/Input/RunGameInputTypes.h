@@ -4,35 +4,46 @@
 #include "GameplayTagContainer.h"
 #include "RunGameInputTypes.generated.h"
 
-/** 输入命令类型，与角色状态分离，仅表达玩家意图 Input command, separated from character state and only expressing player intent */
+/** 离散输入请求类型 / Discrete input request type */
 UENUM()
-enum class ERunGameInputCommand : uint8
+enum class ERunGameInputRequestType : uint8
 {
-	None,
 	Jump,
 	Slide,
+	Skill,
 };
 
-/** 缓冲输入命令，记录意图和产生时间 Buffered input command, recording intent and timestamp */
+/** 领域执行输入请求后的结果 / Result returned by a domain after evaluating an input request */
+UENUM()
+enum class ERunGameInputRequestResult : uint8
+{
+	Applied,
+	Deferred,
+	Rejected,
+};
+
+/** 等待控制管线处理的离散输入请求 / Discrete input request waiting for the control pipeline */
 USTRUCT()
-struct FRunGameBufferedInputCommand
+struct FRunGameInputRequest
 {
 	GENERATED_BODY()
 
 	UPROPERTY()
-	ERunGameInputCommand Command = ERunGameInputCommand::None;
+	uint64 RequestId = 0;
 
 	UPROPERTY()
-	float Timestamp = 0.0f;
+	ERunGameInputRequestType Type = ERunGameInputRequestType::Jump;
 
-	bool IsExpired(float CurrentTime, float Timeout) const
-	{
-		return (CurrentTime - Timestamp) > Timeout;
-	}
+	UPROPERTY()
+	FGameplayTag SkillTag;
+
+	UPROPERTY()
+	float CreatedAt = 0.0f;
 };
 
+/** 输入组件提供给控制管线的只读快照 / Read-only input snapshot exposed to the control pipeline */
 USTRUCT()
-struct FRunGameInputFrame
+struct FRunGameInputSnapshot
 {
 	GENERATED_BODY()
 
@@ -43,23 +54,11 @@ struct FRunGameInputFrame
 	FVector2D LookAxis = FVector2D::ZeroVector;
 
 	UPROPERTY()
-	ERunGameInputCommand Command = ERunGameInputCommand::None;
+	bool bJumpHeld = false;
 
 	UPROPERTY()
-	FGameplayTag SkillTag;
+	uint64 JumpReleaseGeneration = 0;
 
 	UPROPERTY()
-	bool bHasMoveInput = false;
-
-	UPROPERTY()
-	bool bHasLookInput = false;
-
-	UPROPERTY()
-	bool bHasCommand = false;
-
-	UPROPERTY()
-	bool bJumpReleased = false;
-
-	UPROPERTY()
-	bool bHasSkillRequest = false;
+	TArray<FRunGameInputRequest> Requests;
 };

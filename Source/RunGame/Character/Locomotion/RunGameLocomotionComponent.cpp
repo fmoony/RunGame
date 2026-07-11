@@ -1,13 +1,12 @@
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
+
 #include "Character/Animation/RunGameAnimInstance.h"
-#include "Character/Input/RunGameInputContextComponent.h"
-#include "Character/RunGameCharacter.h"
 #include "Character/Locomotion/Movement/RunGameMovementComponent.h"
-#include "WorldSubsystem/State/PlayerRuntimeState.h"
+#include "Character/RunGameCharacter.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
-#include "GameFramework/Controller.h"
 #include "TimerManager.h"
+#include "WorldSubsystem/State/PlayerRuntimeState.h"
 
 URunGameLocomotionComponent::URunGameLocomotionComponent()
 {
@@ -19,21 +18,19 @@ void URunGameLocomotionComponent::BeginPlay()
 	Super::BeginPlay();
 
 	OwnerCharacter = Cast<ARunGameCharacter>(GetOwner());
-	MovementComponent = OwnerCharacter
-		? OwnerCharacter->GetRunGameMovementComponent()
-		: nullptr;
+	MovementComponent = OwnerCharacter ? OwnerCharacter->GetRunGameMovementComponent() : nullptr;
 
-	if (MovementComponent && !MovementModeChangedHandle.IsValid())
+	if (MovementComponent)
 	{
 		MovementModeChangedHandle = MovementComponent->OnRunGameMovementModeChanged.AddUObject(
 			this,
-			&URunGameLocomotionComponent::HandleMovementModeChanged
-		);
+			&URunGameLocomotionComponent::HandleMovementModeChanged);
 	}
 
 	if (UWorld* World = GetWorld())
 	{
-		if (RuntimeState = World->GetSubsystem<UPlayerRuntimeState>())
+		RuntimeState = World->GetSubsystem<UPlayerRuntimeState>();
+		if (RuntimeState)
 		{
 			RuntimeState->OnCharacterStateChanged.AddDynamic(this, &URunGameLocomotionComponent::OnCharacterStateChanged);
 		}
@@ -62,95 +59,59 @@ void URunGameLocomotionComponent::EndPlay(const EEndPlayReason::Type EndPlayReas
 		World->GetTimerManager().ClearTimer(CoyoteTimer);
 	}
 
+	PendingSignals.Reset();
 	OwnerCharacter = nullptr;
 	MovementComponent = nullptr;
 	AnimInstance = nullptr;
 	RuntimeState = nullptr;
-
 	Super::EndPlay(EndPlayReason);
 }
 
 ERunGameCharacterState URunGameLocomotionComponent::GetRuntimeCharacterState() const
 {
-	return RuntimeState
-		? RuntimeState->GetCharacterState()
-		: ERunGameCharacterState::Idle;
+	return RuntimeState ? RuntimeState->GetCharacterState() : ERunGameCharacterState::Idle;
 }
 
-bool URunGameLocomotionComponent::TryConsumeInputCommand(ERunGameInputCommand Command)
+bool URunGameLocomotionComponent::CanExecuteJump() const
 {
-	switch (Command)
-	{
-	case ERunGameInputCommand::Jump:
-		return TryStartJump();
+	const ERunGameCharacterState State = GetRuntimeCharacterState();
+	const bool bStateAllowsJump = State == ERunGameCharacterState::Idle
+		|| State == ERunGameCharacterState::Turning
+		|| State == ERunGameCharacterState::CoyoteTime
+		|| State == ERunGameCharacterState::Airborne;
 
-	case ERunGameInputCommand::Slide:
-		if (MovementComponent && !MovementComponent->IsFalling())
-		{
-			return RequestCharacterState(ERunGameCharacterState::Sliding);
-		}
-		return false;
-
-	default:
-		return false;
-	}
+	return bStateAllowsJump && OwnerCharacter && OwnerCharacter->CanJump();
 }
 
-void URunGameLocomotionComponent::HandleInputContextCommand(URunGameInputContextComponent* InInputContext, ERunGameInputCommand Command)
+bool URunGameLocomotionComponent::CanExecuteSlide() const
 {
-	if (!InInputContext || !RuntimeState)
-	{
-		return;
-	}
+	return MovementComponent
+		&& !MovementComponent->IsFalling()
+		&& GetRuntimeCharacterState() == ERunGameCharacterState::Idle;
+}
 
-	InInputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
+void URunGameLocomotionComponent::NotifyJumpRequested(ERunGameCharacterState PreviousState)
+{
+	PendingJumpStartState = PreviousState;
+	bJumpLaunchPending = true;
 
-	const ERunGameCharacterState CurrentState = RuntimeState->GetCharacterState();
-	if (CurrentState == ERunGameCharacterState::Dead)
+	if (UWorld* World = GetWorld())
 	{
-		InInputContext->ClearInputContext();
-		return;
-	}
-
-	if (ShouldExecuteImmediately(CurrentState, Command) && TryConsumeInputCommand(Command))
-	{
-		InInputContext->ConsumeLatestCommand(Command);
-		return;
-	}
-
-	if (!ShouldBufferCommand(CurrentState, Command))
-	{
-		InInputContext->ConsumeLatestCommand(Command);
+		World->GetTimerManager().ClearTimer(CoyoteTimer);
 	}
 }
 
-void URunGameLocomotionComponent::HandleJumpInputReleased() const
+void URunGameLocomotionComponent::HandleOwnerJumped()
 {
-	if (OwnerCharacter)
-	{
-		OwnerCharacter->StopJumping();
-	}
-}
-
-void URunGameLocomotionComponent::HandleMoveInput(float Right) const
-{
-	if (!OwnerCharacter || Right == 0.0f)
+	if (!bJumpLaunchPending)
 	{
 		return;
 	}
 
-	AController* Controller = OwnerCharacter->GetController();
-	if (!Controller)
-	{
-		return;
-	}
-
-	const bool bBlockLateral = ApplyTurnRotation(Right);
-	if (!bBlockLateral)
-	{
-		const FRotator YawRotation(0, Controller->GetControlRotation().Yaw, 0);
-		OwnerCharacter->AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
-	}
+	// 只有空中起跳消耗二段跳资格；地面和土狼跳仍保留一次空中跳。
+	// Only an airborne jump consumes the extra jump; ground and coyote jumps keep it available.
+	bAirJumpAvailable = PendingJumpStartState != ERunGameCharacterState::Airborne;
+	bJumpLaunchPending = false;
 }
 
 bool URunGameLocomotionComponent::CanStartJump(bool bDefaultCanJump) const
@@ -169,85 +130,75 @@ bool URunGameLocomotionComponent::CanStartJump(bool bDefaultCanJump) const
 	return State == ERunGameCharacterState::Airborne && bAirJumpAvailable;
 }
 
-void URunGameLocomotionComponent::HandleOwnerJumped()
-{
-	if (PendingJumpStartState == ERunGameCharacterState::CoyoteTime)
-	{
-		// 土狼跳仍算一段跳，保留二段跳资格 Coyote jump is still the first jump, keep double-jump available
-		bAirJumpAvailable = true;
-		RequestCharacterState(ERunGameCharacterState::Airborne);
-	}
-	else if (PendingJumpStartState == ERunGameCharacterState::Airborne)
-	{
-		// 只有真正的二段跳才消耗空中跳资格 Only a real double jump consumes air-jump availability
-		bAirJumpAvailable = false;
-	}
-	else if (PendingJumpStartState == ERunGameCharacterState::Idle
-		|| PendingJumpStartState == ERunGameCharacterState::Turning)
-	{
-		// 主动地面跳直接进入 Airborne，并保留二段跳资格 Intentional ground jump enters Airborne and keeps double-jump available
-		bAirJumpAvailable = true;
-		RequestCharacterState(ERunGameCharacterState::Airborne);
-	}
-
-	bJumpLaunchPending = false;
-}
-
 void URunGameLocomotionComponent::HandleOwnerLanded(const FHitResult& /*Hit*/)
 {
-	bAirJumpAvailable = true;
 	bJumpLaunchPending = false;
-	PendingJumpStartState = ERunGameCharacterState::Idle;
-
-	const ERunGameCharacterState State = GetRuntimeCharacterState();
-	if (State == ERunGameCharacterState::Airborne || State == ERunGameCharacterState::CoyoteTime)
-	{
-		RequestCharacterState(ERunGameCharacterState::Idle);
-	}
+	PendingSignals.Add(ERunGameLocomotionSignal::Landed);
 }
 
-bool URunGameLocomotionComponent::ApplyTurnRotation(float Right) const
+bool URunGameLocomotionComponent::DequeueSignal(ERunGameLocomotionSignal& OutSignal)
 {
-	return MovementComponent && MovementComponent->ApplyTurnRotation(Right);
-}
-
-bool URunGameLocomotionComponent::TryStartJump()
-{
-	if (!OwnerCharacter || !OwnerCharacter->CanJump())
+	if (PendingSignals.IsEmpty())
 	{
 		return false;
 	}
 
-	PendingJumpStartState = GetRuntimeCharacterState();
-	bJumpLaunchPending = true;
-	OwnerCharacter->Jump();
+	OutSignal = PendingSignals[0];
+	PendingSignals.RemoveAt(0);
 	return true;
 }
 
-bool URunGameLocomotionComponent::RequestCharacterState(ERunGameCharacterState NewState) const
+void URunGameLocomotionComponent::ClearSignals()
 {
-	if (!RuntimeState)
-	{
-		return false;
-	}
-
-	if (RuntimeState->GetCharacterState() == NewState)
-	{
-		return true;
-	}
-
-	return RuntimeState->TrySetCharacterState(NewState);
+	PendingSignals.Reset();
 }
 
-bool URunGameLocomotionComponent::ConsumePendingJumpLaunch()
+bool URunGameLocomotionComponent::EvaluateSignal(
+	ERunGameLocomotionSignal Signal,
+	ERunGameCharacterState CurrentState,
+	ERunGameCharacterState& OutNewState) const
 {
-	if (!bJumpLaunchPending)
+	switch (Signal)
 	{
-		return false;
+	case ERunGameLocomotionSignal::Landed:
+		if (CurrentState == ERunGameCharacterState::Airborne
+			|| CurrentState == ERunGameCharacterState::CoyoteTime)
+		{
+			OutNewState = ERunGameCharacterState::Idle;
+			return true;
+		}
+		break;
+
+	case ERunGameLocomotionSignal::StartedFalling:
+		if (CurrentState == ERunGameCharacterState::Idle
+			|| CurrentState == ERunGameCharacterState::Turning)
+		{
+			OutNewState = ERunGameCharacterState::CoyoteTime;
+			return true;
+		}
+		break;
+
+	case ERunGameLocomotionSignal::CoyoteExpired:
+		if (CurrentState == ERunGameCharacterState::CoyoteTime)
+		{
+			OutNewState = ERunGameCharacterState::Airborne;
+			return true;
+		}
+		break;
+
+	case ERunGameLocomotionSignal::SlideEnded:
+		if (CurrentState == ERunGameCharacterState::Sliding)
+		{
+			OutNewState = ERunGameCharacterState::Idle;
+			return true;
+		}
+		break;
+
+	default:
+		break;
 	}
 
-	bJumpLaunchPending = false;
-	return true;
+	return false;
 }
 
 void URunGameLocomotionComponent::BindAnimationEvents()
@@ -257,19 +208,16 @@ void URunGameLocomotionComponent::BindAnimationEvents()
 		return;
 	}
 
-	USkeletalMeshComponent* Mesh = OwnerCharacter->GetMesh();
-	if (!Mesh)
+	if (USkeletalMeshComponent* Mesh = OwnerCharacter->GetMesh())
 	{
-		return;
+		AnimInstance = Cast<URunGameAnimInstance>(Mesh->GetAnimInstance());
 	}
 
-	AnimInstance = Cast<URunGameAnimInstance>(Mesh->GetAnimInstance());
 	if (AnimInstance)
 	{
 		SlideMontageEndedHandle = AnimInstance->OnSlideMontageEnded.AddUObject(
 			this,
-			&URunGameLocomotionComponent::HandleSlideMontageEnded
-		);
+			&URunGameLocomotionComponent::HandleSlideMontageEnded);
 	}
 }
 
@@ -284,13 +232,12 @@ void URunGameLocomotionComponent::UnbindAnimationEvents()
 
 void URunGameLocomotionComponent::HandleSlideMontageEnded(UAnimMontage* /*Montage*/, bool /*bInterrupted*/)
 {
-	if (GetRuntimeCharacterState() == ERunGameCharacterState::Sliding)
-	{
-		RequestCharacterState(ERunGameCharacterState::Idle);
-	}
+	PendingSignals.Add(ERunGameLocomotionSignal::SlideEnded);
 }
 
-void URunGameLocomotionComponent::HandleMovementModeChanged(EMovementMode OldMovementMode, EMovementMode NewMovementMode)
+void URunGameLocomotionComponent::HandleMovementModeChanged(
+	EMovementMode OldMovementMode,
+	EMovementMode NewMovementMode)
 {
 	UWorld* World = GetWorld();
 	if (!World)
@@ -300,27 +247,16 @@ void URunGameLocomotionComponent::HandleMovementModeChanged(EMovementMode OldMov
 
 	if (OldMovementMode != MOVE_Falling && NewMovementMode == MOVE_Falling)
 	{
-		const ERunGameCharacterState CurrentState = GetRuntimeCharacterState();
-		if (CurrentState == ERunGameCharacterState::Idle || CurrentState == ERunGameCharacterState::Turning)
+		const ERunGameCharacterState State = GetRuntimeCharacterState();
+		if (State == ERunGameCharacterState::Idle || State == ERunGameCharacterState::Turning)
 		{
-			if (ConsumePendingJumpLaunch())
-			{
-				// 主动跳跃进入空中，不开启土狼时间 Intentional jump enters Airborne without arming coyote time
-				RequestCharacterState(ERunGameCharacterState::Airborne);
-				World->GetTimerManager().ClearTimer(CoyoteTimer);
-				return;
-			}
-
-			RequestCharacterState(ERunGameCharacterState::CoyoteTime);
-
-			// 走出边缘时开启土狼时间窗口 Walking off ledge arms the coyote time window
+			PendingSignals.Add(ERunGameLocomotionSignal::StartedFalling);
 			World->GetTimerManager().SetTimer(
 				CoyoteTimer,
 				this,
 				&URunGameLocomotionComponent::OnCoyoteTimeExpired,
 				CoyoteTimeDuration,
-				false
-			);
+				false);
 		}
 	}
 
@@ -332,13 +268,12 @@ void URunGameLocomotionComponent::HandleMovementModeChanged(EMovementMode OldMov
 
 void URunGameLocomotionComponent::OnCoyoteTimeExpired()
 {
-	if (GetRuntimeCharacterState() == ERunGameCharacterState::CoyoteTime)
-	{
-		RequestCharacterState(ERunGameCharacterState::Airborne);
-	}
+	PendingSignals.Add(ERunGameLocomotionSignal::CoyoteExpired);
 }
 
-void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
+void URunGameLocomotionComponent::OnCharacterStateChanged(
+	ERunGameCharacterState OldState,
+	ERunGameCharacterState NewState)
 {
 	UWorld* World = GetWorld();
 
@@ -364,90 +299,10 @@ void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState
 		bAirJumpAvailable = false;
 		bJumpLaunchPending = false;
 		PendingJumpStartState = ERunGameCharacterState::Dead;
-
+		PendingSignals.Reset();
 		if (World)
 		{
 			World->GetTimerManager().ClearTimer(CoyoteTimer);
 		}
-	}
-
-}
-
-void URunGameLocomotionComponent::TryConsumeInputContextBuffer(URunGameInputContextComponent* InInputContext)
-{
-	if (!InInputContext)
-	{
-		return;
-	}
-
-	InInputContext->ExpireLatestCommand(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f);
-
-	const ERunGameInputCommand Command = InInputContext->GetLatestCommand();
-	if (Command == ERunGameInputCommand::None)
-	{
-		return;
-	}
-
-	const ERunGameCharacterState CurrentState = GetRuntimeCharacterState();
-	if (!CanAttemptBufferedConsume(CurrentState, Command))
-	{
-		return;
-	}
-
-	if (TryConsumeInputCommand(Command))
-	{
-		InInputContext->ConsumeLatestCommand(Command);
-	}
-}
-
-bool URunGameLocomotionComponent::ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
-{
-	switch (Command)
-	{
-	case ERunGameInputCommand::Jump:
-		return CurrentState == ERunGameCharacterState::Idle
-			|| CurrentState == ERunGameCharacterState::Turning
-			|| CurrentState == ERunGameCharacterState::CoyoteTime
-			|| CurrentState == ERunGameCharacterState::Airborne;
-
-	case ERunGameInputCommand::Slide:
-		return CurrentState == ERunGameCharacterState::Idle;
-
-	default:
-		return false;
-	}
-}
-
-bool URunGameLocomotionComponent::ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
-{
-	switch (Command)
-	{
-	case ERunGameInputCommand::Slide:
-		return CurrentState == ERunGameCharacterState::Airborne
-			|| CurrentState == ERunGameCharacterState::CoyoteTime;
-
-	case ERunGameInputCommand::Jump:
-		return CurrentState == ERunGameCharacterState::Airborne
-			|| CurrentState == ERunGameCharacterState::Sliding;
-
-	default:
-		return false;
-	}
-}
-
-bool URunGameLocomotionComponent::CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const
-{
-	switch (Command)
-	{
-	case ERunGameInputCommand::Jump:
-		return CurrentState == ERunGameCharacterState::Idle
-			|| CurrentState == ERunGameCharacterState::Turning
-			|| CurrentState == ERunGameCharacterState::CoyoteTime;
-
-	case ERunGameInputCommand::Slide:
-		return CurrentState == ERunGameCharacterState::Idle;
-
-	default:
-		return false;
 	}
 }

@@ -52,9 +52,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Blend")
 	float RestoreBlendTime = 0.3f;
 
-	/** 处理视角输入并作用到拥有者控制器 Handle look input on the owner controller */
-	void HandleLookInput(float Yaw, float Pitch) const;
-
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

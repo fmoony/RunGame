@@ -47,6 +47,81 @@ void URunGameMovementComponent::EndPlay(const EEndPlayReason::Type EndPlayReason
 	Super::EndPlay(EndPlayReason);
 }
 
+void URunGameMovementComponent::ExecuteMoveInput(float Right)
+{
+	ACharacter* Owner = CharacterOwner.Get();
+	if (!Owner || Right == 0.0f)
+	{
+		return;
+	}
+
+	AController* Controller = Owner->GetController();
+	if (!Controller)
+	{
+		return;
+	}
+
+	if (!ApplyTurnRotation(Right))
+	{
+		const FRotator YawRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+		Owner->AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
+	}
+}
+
+void URunGameMovementComponent::ExecuteLookInput(const FVector2D& LookAxis)
+{
+	ACharacter* Owner = CharacterOwner.Get();
+	if (!Owner || !Owner->GetController())
+	{
+		return;
+	}
+
+	Owner->AddControllerYawInput(LookAxis.X);
+	Owner->AddControllerPitchInput(LookAxis.Y);
+}
+
+bool URunGameMovementComponent::ExecuteJump()
+{
+	ACharacter* Owner = CharacterOwner.Get();
+	if (!Owner || !Owner->CanJump())
+	{
+		return false;
+	}
+
+	Owner->Jump();
+	return true;
+}
+
+void URunGameMovementComponent::ExecuteStopJumping()
+{
+	if (ACharacter* Owner = CharacterOwner.Get())
+	{
+		Owner->StopJumping();
+	}
+}
+
+bool URunGameMovementComponent::ExecuteSlide()
+{
+	ACharacter* Owner = CharacterOwner.Get();
+	if (!Owner || IsFalling())
+	{
+		return false;
+	}
+
+	Owner->Crouch();
+	GroundFriction = 0.0f;
+	return true;
+}
+
+void URunGameMovementComponent::ExecuteSlideEnd()
+{
+	if (ACharacter* Owner = CharacterOwner.Get())
+	{
+		Owner->UnCrouch();
+	}
+	GroundFriction = DefaultGroundFriction;
+}
+
 void URunGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -101,16 +176,11 @@ void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState O
 		return;
 	}
 
-	if (NewState == ERunGameCharacterState::Sliding)
+	// 外部权威状态可能直接打断滑铲，确保物理设置不会遗留。
+	// External authoritative state changes may interrupt a slide; restore its physical settings.
+	if (OldState == ERunGameCharacterState::Sliding && NewState != ERunGameCharacterState::Sliding)
 	{
-		Owner->Crouch();
-		GroundFriction = 0.0f;
-	}
-
-	if (OldState == ERunGameCharacterState::Sliding)
-	{
-		Owner->UnCrouch();
-		GroundFriction = DefaultGroundFriction;
+		ExecuteSlideEnd();
 	}
 
 	if (NewState == ERunGameCharacterState::Turning)

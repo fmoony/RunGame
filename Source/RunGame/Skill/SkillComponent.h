@@ -6,6 +6,7 @@
 #include "Components/ActorComponent.h"
 #include "GameplayTagContainer.h"
 #include "RunGameType.h"
+#include "Character/Input/RunGameInputTypes.h"
 #include "Skill/RunGameSkillConfigData.h"
 #include "Skill/RunGameSkillExecution.h"
 #include "SkillComponent.generated.h"
@@ -82,7 +83,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Skill")
 	bool TryActivateSkill(FGameplayTag SkillTag);
 
-	bool TryActivateRequestedSkill(FGameplayTag SkillTag);
+	/** 评估并执行控制管线路由的技能请求 / Evaluate and execute a skill request routed by the control pipeline */
+	ERunGameInputRequestResult TryActivateRequestedSkill(FGameplayTag SkillTag);
 
 	UFUNCTION(BlueprintPure, Category = "Skill")
 	bool IsSkillReady(FGameplayTag SkillTag) const;

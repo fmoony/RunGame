@@ -1,64 +1,98 @@
 # Character State Machine — 角色状态机
 
-> 从 `CLAUDE.md` 提取，完整描述角色状态机、过渡矩阵、土狼时间、二段跳及组件反应。
+> 描述角色语义状态、轻量控制管线、土狼时间、二段跳和组件反应。
 
-Mirrors the `ARunGameGameState` reactive pattern: `Guard → Validate → Save → Modify → Broadcast`.
+`UPlayerRuntimeState` 是角色语义状态唯一拥有者。`TrySetCharacterState()` 校验转移、更新 `CurrentCharacterState` 并广播 `OnCharacterStateChanged(Old, New)`。
 
-**`UPlayerRuntimeState`** owns the state via `TrySetCharacterState(NewState)`. The method follows `Guard → Validate → Save → Modify → Broadcast` — it validates the transition, updates `CurrentCharacterState`, broadcasts `OnCharacterStateChanged(Old, New)`, and returns whether the target state is active. **`ARunGameCharacter`** is a UE callback / Blueprint compatibility facade. Input lifetime lives in **`URunGameInputBufferComponent`**; movement rules and physics execution live in **`URunGameMovementComponent`**.
+`ARunGameCharacter` 只保留 Unreal 必需桥接：输入绑定入口、`CanJumpInternal_Implementation()`、`OnJumped_Implementation()` 和 `Landed()`。输入数据属于 InputComponent，移动规则属于 Locomotion，物理命令属于 Movement，阶段协调属于 Pipeline。
 
 | State | Description | Entry |
-|-------|-------------|-------|
-| `Idle` | Default grounded: walking, running, standing | Start of game; landed from Airborne/CoyoteTime; slide/turn ended |
-| `CoyoteTime` | Grace period after walking off ledge (0.15s) — can still jump | `SetMovementMode` detects `MOVE_Falling` from Idle/Turning |
-| `Airborne` | Jumping, falling — supports double jump (`bAirJumpAvailable`) | CoyoteTime expiry; intentional ground jump; coyote-time jump |
-| `Sliding` | Crouched, no ground friction, montage playing | Ready Slide command handled by `URunGameMovementComponent` |
-| `Turning` | Inside turn zone — lateral movement blocked, rotation locked | `TurnFloor` overlap calls `SetCharacterState(Turning)` |
-| `Dead` | All input/movement blocked, dissolving | `Die()` calls `SetCharacterState(Dead)` — terminal |
+|---|---|---|
+| `Idle` | 默认地面状态 | 游戏开始、落地、滑铲结束 |
+| `CoyoteTime` | 离开边缘后的 0.15 秒跳跃宽限期 | StartedFalling Signal |
+| `Airborne` | 主动跳跃、二段跳或土狼时间结束 | Jump 请求或 CoyoteExpired Signal |
+| `Sliding` | 蹲伏且地面摩擦为零 | Slide 请求成功 |
+| `Turning` | 位于转向区域 | TurnFloor overlap |
+| `Dead` | 输入清空、Movement 禁用 | Character Death |
 
 ## Transition Matrix
 
-Enforced by `IsCharacterStateTransitionAllowed`:
+由 `UPlayerRuntimeState::IsCharacterStateTransitionAllowed()` 强制执行：
 
 | FROM \ TO | Idle | CoyoteTime | Airborne | Sliding | Turning | Dead |
-|-----------|------|------------|----------|---------|---------|------|
-| **Idle**  | -    | YES        | YES      | YES¹    | YES     | YES  |
-| **CoyoteTime** | YES | -     | YES      | NO      | NO      | YES  |
-| **Airborne** | YES | NO      | -        | NO²     | YES     | YES  |
-| **Sliding** | YES | NO      | YES      | -       | YES     | YES  |
-| **Turning** | YES | YES     | YES      | NO      | -       | YES  |
-| **Dead**  | NO   | NO      | NO       | NO      | NO      | -    |
+|---|---:|---:|---:|---:|---:|---:|
+| Idle | - | YES | YES | YES | YES | YES |
+| CoyoteTime | YES | - | YES | NO | NO | YES |
+| Airborne | YES | NO | - | NO | YES | YES |
+| Sliding | YES | NO | YES | - | YES | YES |
+| Turning | YES | YES | YES | NO | - | YES |
+| Dead | NO | NO | NO | NO | NO | - |
 
-¹ Sliding additionally requires `!IsFalling()` at runtime.
-² Sliding input while Airborne/CoyoteTime is buffered by `URunGameInputBufferComponent`; auto-consumed when state returns to Idle.
+Slide 还要求 CMC 当前不处于 Falling。
 
-## CoyoteTime + Double Jump
+## Control Ownership
 
-- `URunGameMovementComponent::SetMovementMode` detects `MOVE_Falling` from Idle/Turning. Intentional jump launches transition directly to `Airborne`; ledge falls enter `CoyoteTime` and arm a 0.15s `CoyoteTimer`. On expiry → auto-transition to `Airborne`.
-- `URunGameMovementComponent::bAirJumpAvailable` represents double-jump availability, not CoyoteTime. It is available from grounded start / landing, stays available through coyote jump, and is consumed only by a real Airborne double jump.
-- `ARunGameCharacter::CanJumpInternal_Implementation` forwards UE's jump permission callback to `URunGameMovementComponent::CanStartJump`.
-- `ARunGameCharacter::Landed()` forwards UE's landed callback to `URunGameMovementComponent::HandleOwnerLanded`, which handles both Airborne and CoyoteTime → Idle transitions.
-- `RunGameInputBufferComponent`: Jump during CoyoteTime → immediate execute (not buffered). Slide during CoyoteTime → buffered (like Airborne).
+```text
+RunGameInputComponent
+  continuous snapshot + pending requests
+        ↓
+RunGameControlPipelineComponent
+  PrePhysics fixed stages + domain routing
+        ↓
+RunGameLocomotionComponent
+  Jump / Slide rules + coyote / air-jump data
+        ↓
+RunGameMovementComponent
+  Move / Look / Jump / StopJumping / Crouch
+        ↓
+UPlayerRuntimeState
+  semantic state validation + final broadcast
+```
 
-## Movement Reaction
+Pipeline 是协调入口，不拥有输入队列、移动领域数据或技能状态。
 
-`URunGameMovementComponent`: Self-binds to `OnCharacterStateChanged`, consumes movement-domain input requests from `URunGameInputBufferComponent`, and handles UE jump / landed callbacks forwarded by Character. Sliding → Crouch + `GroundFriction=0`. Turning → set turn flags. Dead → `DisableMovement`. Airborne/CoyoteTime detection via `SetMovementMode` override (not Tick polling). Landing clears `CoyoteTimer`.
+## CoyoteTime And Double Jump
 
-## Animation Reaction
+- `RunGameMovementComponent::SetMovementMode()` 将 MovementMode 变化广播给 Locomotion。
+- 从 Idle/Turning 进入 Falling 时，Locomotion 生成 StartedFalling Signal 并启动 0.15 秒 CoyoteTimer。
+- Pipeline 下一 PrePhysics 帧将状态提交为 CoyoteTime。
+- CoyoteTimer 到期只生成 CoyoteExpired Signal；Pipeline 再提交 Airborne。
+- `bAirJumpAvailable` 由 Locomotion 拥有。
+- 地面跳和土狼跳保留一次空中跳；真实 Airborne 起跳通过 Character `OnJumped` 回调消耗资格。
+- Landed 只生成 Signal；Pipeline 下一控制帧先提交 Idle，再评估仍在缓冲期内的 Jump/Slide 请求。
 
-`URunGameAnimInstance`: Self-binds to `OnCharacterStateChanged` and `OnCharacterDied`. Plays slide/death montages. Death blend-out → `PRS->NotifyDeathAnimationFinished` → Character dissolve.
+## Jump And Slide
 
-## Input Buffering
+Jump：
 
-`URunGameInputBufferComponent`: `PendingInputState` removed. Character forwards EnhancedInput → `BufferInput()`. InputBuffer decides immediate execution vs queueing, asks `URunGameMovementComponent::TryConsumeInputCommand()` to consume movement-domain commands, and removes the signal only when consumption succeeds. State change back to `Idle` auto-attempts the oldest buffered entry. Deduplicates same-type commands. Dead → clears buffer.
+```text
+Jump Request
+→ Locomotion CanExecuteJump
+→ Movement ExecuteJump
+→ RuntimeState Airborne
+→ RemoveRequest
+```
+
+Slide：
+
+```text
+Slide Request
+→ Locomotion CanExecuteSlide
+→ Movement Crouch + GroundFriction=0
+→ RuntimeState Sliding
+→ RemoveRequest
+```
+
+Slide Montage BlendOut 生成 SlideEnded Signal；Pipeline 下一帧调用 `ExecuteSlideEnd()` 并提交 Idle。外部状态直接中断 Sliding 时，Movement 的最终状态监听会兜底恢复 UnCrouch 和摩擦。
 
 ## Skill Gating
 
-`ActivateSkillByTag()` reads `UPlayerRuntimeState::GetCharacterState()` and blocks activation while `Dead` or `Sliding`. All other states (`Idle`, `Airborne`, `Turning`) allow skill input through to `SkillComponent::TryActivateSkill`.
+Pipeline 只把 Skill Request 交给 `USkillComponent::TryActivateRequestedSkill()`。SkillComponent 自己检查状态、冷却、能量、配置和执行对象，并返回：
 
-## Invincibility
+- `Applied`：技能已执行，请求移除。
+- `Deferred`：当前暂不可执行，请求保留至超时。
+- `Rejected`：请求永久无效，请求移除。
 
-`UHealthComponent::SetInvincible()` follows the same Guard→Modify→Broadcast pattern, broadcasting `OnInvincibilityChanged(bool)` when the value changes. Invincibility is orthogonal — it can coexist with any character state.
+## Presentation
 
-## Cleanup
-
-`BeginPlay` binds `OnCharacterStateChanged.AddDynamic`; `EndPlay` calls `RemoveDynamic`.
+AnimInstance、Camera、HUD 和效果组件只订阅 RuntimeState 或领域最终事件。Camera 不再拥有 Gameplay Look 输入；Look 由 Pipeline 路由到 Movement 执行。

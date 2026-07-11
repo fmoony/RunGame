@@ -191,23 +191,49 @@ bool USkillComponent::TryActivateSkill(FGameplayTag SkillTag)
 	return true;
 }
 
-bool USkillComponent::TryActivateRequestedSkill(FGameplayTag SkillTag)
+ERunGameInputRequestResult USkillComponent::TryActivateRequestedSkill(FGameplayTag SkillTag)
 {
-	if (!SkillTag.IsValid())
+	if (!SkillTag.IsValid() || !SkillConfig)
 	{
-		return false;
+		return ERunGameInputRequestResult::Rejected;
 	}
 
 	if (UPlayerRuntimeState* RuntimeState = GetWorld() ? GetWorld()->GetSubsystem<UPlayerRuntimeState>() : nullptr)
 	{
 		const ERunGameCharacterState State = RuntimeState->GetCharacterState();
-		if (State == ERunGameCharacterState::Dead || State == ERunGameCharacterState::Sliding)
+		if (State == ERunGameCharacterState::Dead)
 		{
-			return false;
+			return ERunGameInputRequestResult::Rejected;
+		}
+		if (State == ERunGameCharacterState::Sliding)
+		{
+			return ERunGameInputRequestResult::Deferred;
 		}
 	}
 
-	return TryActivateSkill(SkillTag);
+	FSkillRuntimeState* State = SkillStates.Find(SkillTag);
+	const FSkillDefinition* SkillDef = SkillConfig->FindSkillByTag(SkillTag);
+	if (!State || !SkillDef)
+	{
+		return ERunGameInputRequestResult::Rejected;
+	}
+
+	if (State->bOnCooldown || CurrentEnergy < SkillDef->EnergyCost)
+	{
+		return ERunGameInputRequestResult::Deferred;
+	}
+
+	if (USkillExecutionBase* Execution = State->ExecutionObject.Get())
+	{
+		if (!Execution->CanExecute(GetOwner(), SkillTag))
+		{
+			return ERunGameInputRequestResult::Deferred;
+		}
+	}
+
+	return TryActivateSkill(SkillTag)
+		? ERunGameInputRequestResult::Applied
+		: ERunGameInputRequestResult::Rejected;
 }
 
 void USkillComponent::OnCooldownExpired(FGameplayTag SkillTag)

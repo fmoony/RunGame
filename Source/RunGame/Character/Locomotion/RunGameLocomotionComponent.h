@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Character/Input/RunGameInputTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "RunGameType.h"
 #include "RunGameLocomotionComponent.generated.h"
@@ -11,13 +10,21 @@ class ARunGameCharacter;
 class UAnimMontage;
 class UPlayerRuntimeState;
 class URunGameAnimInstance;
-class URunGameInputContextComponent;
 class URunGameMovementComponent;
 struct FHitResult;
 
+/** 移动领域向控制管线上报的简单信号 / Simple locomotion signal reported to the control pipeline */
+enum class ERunGameLocomotionSignal : uint8
+{
+	Landed,
+	StartedFalling,
+	CoyoteExpired,
+	SlideEnded,
+};
+
 /**
- * 跑酷运动规则组件，承接跳跃/滑铲/转向等玩法层运动规则
- * Runner locomotion rules component, owning gameplay-level jump/slide/turn rules.
+ * 跑酷移动规则组件，负责跳跃、滑铲、土狼时间和二段跳判定。
+ * Runner locomotion rules component owning jump, slide, coyote-time, and air-jump rules.
  */
 UCLASS(Blueprintable, ClassGroup=(Custom), meta=(BlueprintSpawnableComponent))
 class RUNGAME_API URunGameLocomotionComponent : public UActorComponent
@@ -27,77 +34,69 @@ class RUNGAME_API URunGameLocomotionComponent : public UActorComponent
 public:
 	URunGameLocomotionComponent();
 
-	/** 获取当前角色语义状态 Get current semantic character state */
+	/** 获取当前角色语义状态 / Get current semantic character state */
 	ERunGameCharacterState GetRuntimeCharacterState() const;
 
-	/** 获取缓存的运动组件 Get cached movement component */
+	/** 获取缓存的运动组件 / Get the cached movement component */
 	FORCEINLINE URunGameMovementComponent* GetRunGameMovementComponent() const { return MovementComponent; }
 
-	/** 消费输入命令 Consume an input command */
-	bool TryConsumeInputCommand(ERunGameInputCommand Command);
+	/** 判断当前领域状态是否允许执行跳跃请求 / Check whether a jump request is currently allowed */
+	bool CanExecuteJump() const;
 
-	/** 处理跳跃按键释放 Handle jump input release */
-	void HandleJumpInputReleased() const;
+	/** 判断当前领域状态是否允许执行滑铲请求 / Check whether a slide request is currently allowed */
+	bool CanExecuteSlide() const;
 
-	/** 处理横向移动输入，包含转向盒规则 Handle lateral move input, including turn-box rules */
-	void HandleMoveInput(float Right) const;
+	/** 记录已经交给 CMC 的跳跃请求 / Record a jump request submitted to CMC */
+	void NotifyJumpRequested(ERunGameCharacterState PreviousState);
 
-	/** 判断当前状态是否允许跳跃 Check whether the current state allows jump */
-	bool CanStartJump(bool bDefaultCanJump) const;
-
-	/** 响应 Character 起跳回调 React to Character jump callback */
+	/** 在 CMC 确认起跳后提交二段跳领域数据 / Commit air-jump data after CMC confirms launch */
 	void HandleOwnerJumped();
 
-	/** 响应 Character 落地回调 React to Character landed callback */
+	/** 判断 Character 默认规则之外是否仍允许跳跃 / Extend Character jump rules with coyote and air-jump state */
+	bool CanStartJump(bool bDefaultCanJump) const;
+
+	/** 将落地回调转换为待处理信号 / Convert a landed callback into a pending signal */
 	void HandleOwnerLanded(const FHitResult& Hit);
 
-	/** 应用转向规则，返回是否阻止横向输入 Apply turn rule and return whether lateral input should be blocked */
-	bool ApplyTurnRotation(float Right) const;
+	/** 取出一个待处理移动信号 / Pop one pending locomotion signal */
+	bool DequeueSignal(ERunGameLocomotionSignal& OutSignal);
 
-	void HandleInputContextCommand(URunGameInputContextComponent* InInputContext, ERunGameInputCommand Command);
+	/** 清空未处理信号 / Clear pending locomotion signals */
+	void ClearSignals();
 
-	void TryConsumeInputContextBuffer(URunGameInputContextComponent* InInputContext);
+	/** 根据最终状态评估信号对应的语义状态变化 / Evaluate a signal against the latest semantic state */
+	bool EvaluateSignal(
+		ERunGameLocomotionSignal Signal,
+		ERunGameCharacterState CurrentState,
+		ERunGameCharacterState& OutNewState) const;
 
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	/** CoyoteTime 持续时间（秒），走下边缘后仍可跳跃的缓冲窗口 Duration of coyote time window after walking off ledge */
+	/** 土狼时间持续时间 / Duration of the coyote-time window */
 	UPROPERTY(EditAnywhere, Category = "Movement|CoyoteTime")
 	float CoyoteTimeDuration = 0.15f;
 
 private:
-	/** 尝试启动跳跃，成功时记录跳跃上下文 Try to start jump and record jump context on success */
-	bool TryStartJump();
-
-	/** 请求 RuntimeState 切换角色状态 Request RuntimeState character state transition */
-	bool RequestCharacterState(ERunGameCharacterState NewState) const;
-
-	/** 消费主动跳跃标记，区分主动起跳和走出边缘 Consume intentional jump marker to distinguish jump from ledge fall */
-	bool ConsumePendingJumpLaunch();
-
-	/** 绑定动画事件，由 Locomotion 接管滑铲结束决策 Bind animation events so Locomotion owns slide-end decisions */
+	// 绑定滑铲动画结束事件 / Bind the slide animation end event
 	void BindAnimationEvents();
 
-	/** 解绑动画事件 Unbind animation events */
+	// 解绑滑铲动画结束事件 / Unbind the slide animation end event
 	void UnbindAnimationEvents();
 
-	/** 响应滑铲蒙太奇结束 React to slide montage end */
+	// 将滑铲动画结束转换为信号 / Convert slide montage completion into a signal
 	void HandleSlideMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-	/** 处理 MovementMode 变化 Handle movement mode changes */
+	// 将 CMC 模式变化转换为移动信号 / Convert CMC movement-mode changes into locomotion signals
 	void HandleMovementModeChanged(EMovementMode OldMovementMode, EMovementMode NewMovementMode);
 
-	/** CoyoteTime 到期回调，状态仍为 CoyoteTime 则转入 Airborne Coyote time expiry callback */
+	// 将土狼计时结束转换为信号 / Convert coyote timer expiry into a signal
 	void OnCoyoteTimeExpired();
 
-	/** 响应角色状态变化 React to character state changes */
+	/** 响应最终角色状态并维护领域数据 / React to committed character state and maintain domain data */
 	UFUNCTION()
 	void OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState);
-
-	bool ShouldExecuteImmediately(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
-	bool ShouldBufferCommand(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
-	bool CanAttemptBufferedConsume(ERunGameCharacterState CurrentState, ERunGameInputCommand Command) const;
 
 	UPROPERTY()
 	TObjectPtr<ARunGameCharacter> OwnerCharacter;
@@ -114,7 +113,7 @@ private:
 	FDelegateHandle MovementModeChangedHandle;
 	FDelegateHandle SlideMontageEndedHandle;
 	FTimerHandle CoyoteTimer;
-
+	TArray<ERunGameLocomotionSignal> PendingSignals;
 	bool bAirJumpAvailable = true;
 	bool bJumpLaunchPending = false;
 	ERunGameCharacterState PendingJumpStartState = ERunGameCharacterState::Idle;

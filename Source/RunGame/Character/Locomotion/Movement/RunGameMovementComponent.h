@@ -49,6 +49,24 @@ public:
 	FORCEINLINE bool IsInTurnBox() const { return bInTurnBox; }
 	FORCEINLINE FRotator GetDesireRotation() const { return DesireRotation; }
 
+	/** 执行横向移动输入 / Execute lateral movement input */
+	void ExecuteMoveInput(float Right);
+
+	/** 执行控制侧视角输入 / Execute control-side look input */
+	void ExecuteLookInput(const FVector2D& LookAxis);
+
+	/** 向 Character 提交跳跃命令 / Submit a jump command to the Character */
+	bool ExecuteJump();
+
+	/** 向 Character 提交停止跳跃命令 / Submit a stop-jumping command to the Character */
+	void ExecuteStopJumping();
+
+	/** 启动滑铲物理设置 / Apply slide movement settings */
+	bool ExecuteSlide();
+
+	/** 结束滑铲物理设置 / Restore movement settings after a slide */
+	void ExecuteSlideEnd();
+
 	/** 应用 90 度转向旋转，返回是否应阻止横向输入 Apply 90-degree turn rotation and return whether lateral input should be blocked */
 	bool ApplyTurnRotation(float Right);
 
