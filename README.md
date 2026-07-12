@@ -32,6 +32,7 @@
 - **单一数据源** — `ARunGameGameState` 持有游戏状态，`UPlayerRuntimeState` 持有角色语义状态
 - **输入生命周期自治** — `URunGameInputComponent` 保存连续快照与 Jump/Slide/Skill 请求，统一负责超时和移除
 - **固定控制阶段** — `URunGameControlPipelineComponent` 在 PrePhysics 中先处理物理信号，再路由连续输入和领域请求
+- **跑酷与镜头解耦** — `DesireRotation` 表示赛道前进方向，`ControllerRotation` 只表示玩家观察方向
 - **状态请求有返回语义** — `TrySetCharacterState()` 明确返回状态切换是否被状态机接受
 - **事件驱动响应** — RuntimeState 状态变更后广播，各运动/动画/镜头/特效组件独立响应
 - **GameplayTag 通信** — 技能效果通过 Tag 发布，各子系统独立响应
@@ -80,7 +81,8 @@ URunGameInputComponent
     ↓
 URunGameControlPipelineComponent（PrePhysics）
     ├─ 先处理 Landed / Coyote / SlideEnded Signal
-    ├─ 路由 Move / Look / JumpRelease
+    ├─ Move / JumpRelease → MovementComponent
+    ├─ Look → CameraComponent
     └─ 分别扫描 Locomotion / Skill 请求域
     ↓
 URunGameLocomotionComponent
@@ -89,14 +91,17 @@ URunGameLocomotionComponent
     └─ 简单移动 Signal
     ↓
 URunGameMovementComponent
-    └─ Move / Look / Jump / StopJumping / Crouch
+    ├─ 基于 DesireRotation 自动前进和横向移动
+    └─ Jump / StopJumping / Crouch 等 CMC 命令
+URunGameCameraComponent
+    └─ Look / 视角限制 / TurnBox 镜头跟随
     ↓
 UPlayerRuntimeState::TrySetCharacterState()
     ↓
 OnCharacterStateChanged → Anim / Camera / Effect 自行响应
 ```
 
-`InputComponent` 管输入生命周期，`Pipeline` 管固定阶段，`LocomotionComponent` 管规则和移动领域数据，`MovementComponent` 管 CMC 命令，`RuntimeState` 管角色语义状态真相源。
+`InputComponent` 管输入生命周期，`Pipeline` 管固定阶段，`LocomotionComponent` 管规则和移动领域数据，`MovementComponent` 管跑酷方向与 CMC 命令，`CameraComponent` 管观察方向和镜头表现，`RuntimeState` 管角色语义状态真相源。
 
 ### 角色生命周期
 
@@ -118,6 +123,12 @@ OnCharacterStateChanged → Anim / Camera / Effect 自行响应
 - **Death**：SpringArm `DetachFromComponent` 留在死亡点
 - **Restart**：CountDown 时挂回+切主菜单视点，InGame 丝滑 Blend 无跳变
 - **FOV**：速度驱动平滑 FOV；状态驱动 SpringArm 长度
+- **自由观察**：Look 只改变 `ControllerRotation`，不会改变 `DesireRotation` 跑酷方向
+- **视角限制**：水平观察限制为相对当前赛道方向左右各 90°，避免持续回看已回收地板
+- **TurnBox 跟随**：角色和速度立即转向，镜头参考方向以 180°/s 匀速旋转，并保留玩家当前观察偏角
+- **可选回正**：默认不自动回正；开启后仅在无 Look 输入且 TurnBox 跟随结束时缓慢回正
+
+镜头控制参数位于 CameraComponent 的 `Camera|Control` 分类：`MaxYawOffset`、`TurnFollowYawSpeed`、`bEnableYawRecentering` 和 `YawRecenteringSpeed`。
 
 ### 技能系统
 
