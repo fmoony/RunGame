@@ -10,6 +10,7 @@ class UPlayerRuntimeState;
 class URunGameInputComponent;
 class URunGameLocomotionComponent;
 class URunGameMovementComponent;
+class URunGameCameraComponent;
 class USkillComponent;
 
 /**
@@ -56,6 +57,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<URunGameMovementComponent> MovementComponent;
+
+	UPROPERTY()
+	TObjectPtr<URunGameCameraComponent> CameraComponent;
 
 	UPROPERTY()
 	TObjectPtr<USkillComponent> SkillComponent;

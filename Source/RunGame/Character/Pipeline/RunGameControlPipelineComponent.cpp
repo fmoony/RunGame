@@ -2,6 +2,7 @@
 
 #include "Character/Input/RunGameInputComponent.h"
 #include "Character/Locomotion/Movement/RunGameMovementComponent.h"
+#include "Character/Camera/RunGameCameraComponent.h"
 #include "Character/Locomotion/RunGameLocomotionComponent.h"
 #include "Character/RunGameCharacter.h"
 #include "Engine/World.h"
@@ -23,6 +24,10 @@ void URunGameControlPipelineComponent::BeginPlay()
 	if (MovementComponent)
 	{
 		MovementComponent->AddTickPrerequisiteComponent(this);
+	}
+	if (CameraComponent)
+	{
+		CameraComponent->AddTickPrerequisiteComponent(this);
 	}
 
 	if (InputComponent)
@@ -52,7 +57,7 @@ void URunGameControlPipelineComponent::TickComponent(float DeltaTime, ELevelTick
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	CacheOwnerComponents();
 
-	if (!InputComponent || !LocomotionComponent || !MovementComponent || !RuntimeState)
+	if (!InputComponent || !LocomotionComponent || !MovementComponent || !CameraComponent || !RuntimeState)
 	{
 		return;
 	}
@@ -103,6 +108,11 @@ void URunGameControlPipelineComponent::CacheOwnerComponents()
 		MovementComponent = OwnerCharacter->GetRunGameMovementComponent();
 	}
 
+	if (!CameraComponent)
+	{
+		CameraComponent = OwnerCharacter->FindComponentByClass<URunGameCameraComponent>();
+	}
+
 	if (!SkillComponent)
 	{
 		SkillComponent = OwnerCharacter->GetSkillComponent();
@@ -138,7 +148,7 @@ void URunGameControlPipelineComponent::ProcessLocomotionSignals()
 void URunGameControlPipelineComponent::ProcessContinuousInput(const FRunGameInputSnapshot& Snapshot)
 {
 	MovementComponent->ExecuteMoveInput(Snapshot.MoveAxis.X);
-	MovementComponent->ExecuteLookInput(Snapshot.LookAxis);
+	CameraComponent->ApplyLookInput(Snapshot.LookAxis);
 
 	if (Snapshot.JumpReleaseGeneration != LastJumpReleaseGeneration)
 	{

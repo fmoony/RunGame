@@ -9,6 +9,7 @@
 class USpringArmComponent;
 class UCameraComponent;
 class URunGameTimerSubsystem;
+class URunGameMovementComponent;
 
 /**
  * 镜头逻辑组件 — 挂载于 Character，听命于玩家状态机
@@ -24,6 +25,9 @@ class RUNGAME_API URunGameCameraComponent : public UActorComponent
 
 public:
 	URunGameCameraComponent();
+
+	/** 应用玩家视角输入 / Apply player look input */
+	void ApplyLookInput(const FVector2D& LookAxis);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|FOV")
 	float BaseFOV = 90.0f;
@@ -52,6 +56,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Blend")
 	float RestoreBlendTime = 0.3f;
 
+	/** 镜头相对跑酷方向允许的最大水平偏角 / Maximum yaw offset from the run direction */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Control", meta = (ClampMin = "0.0", ClampMax = "180.0"))
+	float MaxYawOffset = 90.0f;
+
+	/** TurnBox 改变方向后镜头参考方向的匀速旋转速度 / Constant camera reference turn speed after a TurnBox */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Control", meta = (ClampMin = "0.0"))
+	float TurnFollowYawSpeed = 180.0f;
+
+	/** 没有视角输入时是否缓慢回正 / Recenter yaw when no look input is active */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Control")
+	bool bEnableYawRecentering = false;
+
+	/** 普通镜头回正插值速度 / Interpolation speed for normal yaw recentering */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Camera|Control", meta = (EditCondition = "bEnableYawRecentering", ClampMin = "0.0"))
+	float YawRecenteringSpeed = 1.5f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -60,6 +80,9 @@ protected:
 private:
 	void CacheOwnerComponents();
 	class APlayerController* GetPC() const;
+	void UpdateControlRotation(float DeltaTime, bool bReceivedLookInput);
+	void SyncRunDirection(bool bResetViewYaw);
+	void HandleRunDirectionChanged(float OldYaw, float NewYaw);
 
 	UFUNCTION()
 	void OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState);
@@ -89,6 +112,13 @@ private:
 	UPROPERTY()
 	TObjectPtr<URunGameTimerSubsystem> TimerSubsystem;
 
+	UPROPERTY()
+	TObjectPtr<URunGameMovementComponent> MovementComponent;
+
 	ERunGameCharacterState CurrentCharState = ERunGameCharacterState::Idle;
 	bool bCameraDetached = false;
+	bool bReceivedLookInputSinceLastTick = false;
+	bool bRunDirectionInitialized = false;
+	float CurrentReferenceYaw = 0.0f;
+	float TargetReferenceYaw = 0.0f;
 };

@@ -271,9 +271,7 @@ void URunGameLocomotionComponent::OnCoyoteTimeExpired()
 	PendingSignals.Add(ERunGameLocomotionSignal::CoyoteExpired);
 }
 
-void URunGameLocomotionComponent::OnCharacterStateChanged(
-	ERunGameCharacterState OldState,
-	ERunGameCharacterState NewState)
+void URunGameLocomotionComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
 {
 	UWorld* World = GetWorld();
 

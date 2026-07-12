@@ -1,5 +1,6 @@
 #include "Character/Camera/RunGameCameraComponent.h"
 #include "Character/RunGameCharacter.h"
+#include "Character/Locomotion/Movement/RunGameMovementComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Game/RunGameGameState.h"
 #include "WorldSubsystem/State/PlayerRuntimeState.h"
@@ -25,6 +26,12 @@ void URunGameCameraComponent::BeginPlay()
 
 	ARunGameCharacter* Char = Cast<ARunGameCharacter>(GetOwner());
 	if (!Char) return;
+
+	if (MovementComponent)
+	{
+		MovementComponent->OnRunDirectionChanged.AddUObject(this, &URunGameCameraComponent::HandleRunDirectionChanged);
+		SyncRunDirection(true);
+	}
 
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
@@ -57,6 +64,11 @@ void URunGameCameraComponent::BeginPlay()
 
 void URunGameCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (MovementComponent)
+	{
+		MovementComponent->OnRunDirectionChanged.RemoveAll(this);
+	}
+
 	if (ARunGameGameState* GS = GetWorld()->GetGameState<ARunGameGameState>())
 	{
 		GS->OnGameStateChanged.RemoveDynamic(this, &URunGameCameraComponent::OnGameStateChanged);
@@ -78,6 +90,20 @@ void URunGameCameraComponent::CacheOwnerComponents()
 
 	CachedCameraBoom = Char->GetCameraBoom();
 	CachedFollowCamera = Char->GetFollowCamera();
+	MovementComponent = Char->GetRunGameMovementComponent();
+}
+
+void URunGameCameraComponent::ApplyLookInput(const FVector2D& LookAxis)
+{
+	ARunGameCharacter* Char = Cast<ARunGameCharacter>(GetOwner());
+	if (!Char || !Char->GetController() || bCameraDetached)
+	{
+		return;
+	}
+
+	bReceivedLookInputSinceLastTick |= !LookAxis.IsNearlyZero();
+	Char->AddControllerYawInput(LookAxis.X);
+	Char->AddControllerPitchInput(LookAxis.Y);
 }
 
 // ---- Tick ----
@@ -85,8 +111,12 @@ void URunGameCameraComponent::CacheOwnerComponents()
 void URunGameCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	const bool bReceivedLookInput = bReceivedLookInputSinceLastTick;
+	bReceivedLookInputSinceLastTick = false;
 
 	if (!CachedFollowCamera || !CachedCameraBoom || bCameraDetached) return;
+
+	UpdateControlRotation(DeltaTime, bReceivedLookInput);
 
 	// ---- FOV：速度越快越宽 FOV: wider with speed ----
 	const ACharacter* Char = Cast<ACharacter>(GetOwner());
@@ -115,6 +145,80 @@ void URunGameCameraComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	CachedCameraBoom->TargetArmLength = CurrentSmoothedArmLength;
 }
 
+void URunGameCameraComponent::UpdateControlRotation(float DeltaTime, bool bReceivedLookInput)
+{
+	APlayerController* PC = GetPC();
+	if (!PC || !MovementComponent)
+	{
+		return;
+	}
+
+	if (!bRunDirectionInitialized)
+	{
+		SyncRunDirection(false);
+	}
+
+	const float PreviousReferenceYaw = CurrentReferenceYaw;
+	CurrentReferenceYaw = FMath::FixedTurn(
+		CurrentReferenceYaw,
+		TargetReferenceYaw,
+		TurnFollowYawSpeed * DeltaTime);
+	const float ReferenceDelta = FMath::FindDeltaAngleDegrees(PreviousReferenceYaw, CurrentReferenceYaw);
+
+	FRotator ControlRotation = PC->GetControlRotation();
+	ControlRotation.Yaw = FRotator::NormalizeAxis(ControlRotation.Yaw + ReferenceDelta);
+
+	const bool bFollowingTurn = !FMath::IsNearlyEqual(CurrentReferenceYaw, TargetReferenceYaw, 0.01f);
+	if (bEnableYawRecentering
+		&& !bReceivedLookInput
+		&& !bFollowingTurn
+		&& YawRecenteringSpeed > 0.0f)
+	{
+		const FRotator TargetRotation(ControlRotation.Pitch, CurrentReferenceYaw, ControlRotation.Roll);
+		ControlRotation = FMath::RInterpTo(ControlRotation, TargetRotation, DeltaTime, YawRecenteringSpeed);
+	}
+
+	const float YawOffset = FMath::Clamp(
+		FMath::FindDeltaAngleDegrees(CurrentReferenceYaw, ControlRotation.Yaw),
+		-MaxYawOffset,
+		MaxYawOffset);
+	ControlRotation.Yaw = FRotator::NormalizeAxis(CurrentReferenceYaw + YawOffset);
+	PC->SetControlRotation(ControlRotation);
+}
+
+void URunGameCameraComponent::SyncRunDirection(bool bResetViewYaw)
+{
+	if (!MovementComponent)
+	{
+		return;
+	}
+
+	CurrentReferenceYaw = FRotator::NormalizeAxis(MovementComponent->GetDesireRotation().Yaw);
+	TargetReferenceYaw = CurrentReferenceYaw;
+	bRunDirectionInitialized = true;
+
+	if (bResetViewYaw)
+	{
+		if (APlayerController* PC = GetPC())
+		{
+			FRotator ControlRotation = PC->GetControlRotation();
+			ControlRotation.Yaw = CurrentReferenceYaw;
+			PC->SetControlRotation(ControlRotation);
+		}
+	}
+}
+
+void URunGameCameraComponent::HandleRunDirectionChanged(float OldYaw, float NewYaw)
+{
+	if (!bRunDirectionInitialized)
+	{
+		CurrentReferenceYaw = FRotator::NormalizeAxis(OldYaw);
+		bRunDirectionInitialized = true;
+	}
+
+	TargetReferenceYaw = FRotator::NormalizeAxis(NewYaw);
+}
+
 // ---- 状态机 State machine ----
 
 void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERunGameGameState NewState)
@@ -122,6 +226,7 @@ void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERu
 	switch (NewState)
 	{
 	case ERunGameGameState::MainMenu:
+		SyncRunDirection(false);
 		SwitchToMainMenuCamera();
 		ReattachCameraToOwner();
 		break;
@@ -133,6 +238,10 @@ void URunGameCameraComponent::OnGameStateChanged(ERunGameGameState OldState, ERu
 			SwitchToMainMenuCamera();
 		}
 		ReattachCameraToOwner();
+		if (OldState != ERunGameGameState::Pause)
+		{
+			SyncRunDirection(true);
+		}
 		break;
 	case ERunGameGameState::InGame:
 		SwitchToFollowCamera();
@@ -220,6 +329,7 @@ void URunGameCameraComponent::ReattachCameraToOwner()
 	CachedCameraBoom->TargetArmLength = DefaultArmLength;
 	bCameraDetached = false;
 	CurrentSmoothedArmLength = DefaultArmLength;
+	SyncRunDirection(true);
 
 	UE_LOG(LogRunGame, Warning, TEXT("CameraComponent: Reattached (position reset)"));
 }

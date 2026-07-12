@@ -10,6 +10,7 @@ class UCurveFloat;
 class URunGameTimerSubsystem;
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FRunGameMovementModeChanged, EMovementMode, EMovementMode);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FRunGameRunDirectionChanged, float, float);
 
 /**
  * 角色运动物理组件，负责 CMC 层速度、摩擦、转向和 MovementMode 事件
@@ -25,6 +26,9 @@ public:
 
 	/** MovementMode 变化事件，供 Locomotion 规则层响应 MovementMode change event for locomotion rules */
 	FRunGameMovementModeChanged OnRunGameMovementModeChanged;
+
+	/** 跑酷前进方向变化事件 / Run direction changed event */
+	FRunGameRunDirectionChanged OnRunDirectionChanged;
 
 	/** 运行时间到最大行走速度的曲线 Curve that maps elapsed game time to max walk speed */
 	UPROPERTY(EditDefaultsOnly, Category = "Movement|Speed")
@@ -51,9 +55,6 @@ public:
 
 	/** 执行横向移动输入 / Execute lateral movement input */
 	void ExecuteMoveInput(float Right);
-
-	/** 执行控制侧视角输入 / Execute control-side look input */
-	void ExecuteLookInput(const FVector2D& LookAxis);
 
 	/** 向 Character 提交跳跃命令 / Submit a jump command to the Character */
 	bool ExecuteJump();

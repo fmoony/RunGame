@@ -55,29 +55,11 @@ void URunGameMovementComponent::ExecuteMoveInput(float Right)
 		return;
 	}
 
-	AController* Controller = Owner->GetController();
-	if (!Controller)
-	{
-		return;
-	}
-
 	if (!ApplyTurnRotation(Right))
 	{
-		const FRotator YawRotation(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+		const FRotator YawRotation(0.0f, DesireRotation.Yaw, 0.0f);
 		Owner->AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Right);
 	}
-}
-
-void URunGameMovementComponent::ExecuteLookInput(const FVector2D& LookAxis)
-{
-	ACharacter* Owner = CharacterOwner.Get();
-	if (!Owner || !Owner->GetController())
-	{
-		return;
-	}
-
-	Owner->AddControllerYawInput(LookAxis.X);
-	Owner->AddControllerPitchInput(LookAxis.Y);
 }
 
 bool URunGameMovementComponent::ExecuteJump()
@@ -153,19 +135,6 @@ void URunGameMovementComponent::TickComponent(float DeltaTime, ELevelTick TickTy
 	const FVector ForwardDir = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	Owner->AddMovementInput(ForwardDir, 1.0f);
 
-	UPlayerRuntimeState* PRS = GetWorld()->GetSubsystem<UPlayerRuntimeState>();
-	if (!PRS)
-	{
-		return;
-	}
-
-	const ERunGameCharacterState State = PRS->GetCharacterState();
-	if (State != ERunGameCharacterState::Sliding)
-	{
-		const FRotator CurrentRotation = Controller->GetControlRotation();
-		const FRotator SmoothRotation = FMath::RInterpTo(CurrentRotation, DesireRotation, DeltaTime, 10.f);
-		Controller->SetControlRotation(SmoothRotation);
-	}
 }
 
 void URunGameMovementComponent::OnCharacterStateChanged(ERunGameCharacterState OldState, ERunGameCharacterState NewState)
@@ -250,11 +219,14 @@ bool URunGameMovementComponent::ApplyTurnRotation(float Right)
 {
 	if (!bTurn) return false;
 
+	const float OldYaw = DesireRotation.Yaw;
 	const FRotator NewRotation(0.f, 90.f * Right, 0.f);
 	const FQuat QuatB(NewRotation);
 	DesireRotation = FRotator(FQuat(DesireRotation) * QuatB);
+	DesireRotation.Normalize();
 	Velocity = QuatB.RotateVector(Velocity);
 	bTurn = false;
+	OnRunDirectionChanged.Broadcast(OldYaw, DesireRotation.Yaw);
 
 	return bInTurnBox;
 }
